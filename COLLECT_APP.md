@@ -47,11 +47,11 @@ Rough screen list (to be fleshed out as we design):
 4. Every subsequent request sends `Authorization: Bearer <stored_token>`
 5. On `401`, drop the token and bounce back to login
 
-Send the token in the `Authorization` header, not as a `?token=` query param. The backend accepts the query param as a fallback (`ApiController#resolve_current_session!`), but URLs end up in logs and history; a new client should use the header.
+Send the token in the `Authorization` header, not as a `?token=` query param. The backend accepts the query param as a fallback (`ApiController#resolve_current_session`), but URLs end up in logs and history; a new client should use the header.
 
 The token has no expiry. Revocation happens when the resident's password changes, which bumps `residents.keys_valid_since` and invalidates every token issued before it (`app/services/jwt_auth.rb`).
 
-**Do not build on the legacy `Key` model.** `Key.find_by(token:)` still exists as a fallback for sessions issued before the JWT deploy, and issue #42 tracks removing it. A new client that used it would be building on the path scheduled for deletion.
+**Do not build on the legacy `Key` model.** `Key.find_by(token:)` stays as a fallback for sessions issued before the JWT deploy, and it will not be removed (decided 2026-09-21, #42 and #67). A new client should still not use it.
 
 **No OAuth, no separate mobile auth system.** One auth mechanism, two clients.
 
@@ -112,7 +112,14 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
       "unit_cost": "7.08",
       "attendee_count": 15,
       "guest_count": 3,
-      "cooks": [{ "resident_id": 42, "name": "Alice", "bill_amount": "127.50" }]
+      "cooks": [
+        {
+          "resident_id": 42,
+          "name": "Alice",
+          "bill_amount": "127.50",
+          "no_cost": false
+        }
+      ]
     }
   ],
   "balances": {
@@ -204,6 +211,7 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 - `attendance_without_bill`
 - `cost_not_entered` (added 2026-10-13)
 - `zero_bill_not_flagged`
+- `dinner_cancelled`
 
 **The iOS client MUST render unknown kinds gracefully**, falling back to `title`/`body`. This is the forward-compatibility hinge — it lets us add `cost_outlier`, `date_outlier`, `cook_attending_zero_multiplier`, etc. in future iterations without breaking deployed binaries.
 
@@ -219,8 +227,8 @@ On the iOS side, all money is `Decimal`. A thin `Money` wrapper type may be just
 
 Contracts below are placeholders — each gets its own sketch when we get to it.
 
-- ~~`POST /api/v1/reconciliations`~~ — done 2026-08-23: `{ "cutoff": "YYYY-MM-DD" }`, calls `SettleAndNotify` (settle, refresh running balances, email cooks — the same service the nightly rake task calls), returns `201` with `id`, `date`, `cutoff_date`, `meal_count`; `400` for a cutoff less than 14 days before today or nothing to settle; `409` when another writer got there first. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
-- `POST /api/v1/reconciliations/:id/balances/:balance_id/mark_paid` — sets `paid_at` on a `reconciliation_balance`, automatically triggers derived `settled_at` on the reconciliation if all balances are now paid. Both columns are still unbuilt; see `COLLECTION_WORKFLOW.md` items 1 and 2.
+- ~~`POST /api/v1/reconciliations`~~ — done 2026-08-23: `{ "cutoff": "YYYY-MM-DD" }`, calls `SettleAndNotify` (settle, refresh running balances, email cooks — the same service the admin Create button and `rake reconciliations:create` call), returns `201` with `id`, `date`, `cutoff_date`, `meal_count`; `400` for a cutoff less than 14 days before today or nothing to settle; `409` when another writer got there first. Creating it is the lock: the row refuses update and destroy from that moment, and its meals' bills, attendance, and guests are frozen by database triggers. There is no separate finalize step and no unfinalize — see `RECONCILIATION_WORKFLOW.md` item 4.
+- `POST /api/v1/reconciliations/:id/balances/:balance_id/mark_paid` — admins can already mark lines Paid or Let go in admin, as append-only `settlement_line_marks` rows (`SettlementLineMark`), not a `paid_at` column. An API endpoint for this does not exist yet. A derived `settled_at` on the reconciliation is still unbuilt; see `COLLECTION_WORKFLOW.md` items 1 and 2.
 - `GET /api/v1/reconciliations/:id` — historical view for a created reconciliation. What Collect's collection screen will consume.
 
 ## Backend implementation strategy
@@ -230,6 +238,8 @@ Contracts below are placeholders — each gets its own sketch when we get to it.
 Settlement used to be an `after_create` callback on `Reconciliation`, so there was no way to compute a period's balances without writing them. On 2026-08-23 the pipeline moved into `app/services/settlement.rb` (approach D, step 1). `Settlement.run!(cutoff:)` creates the row, claims the meals, and writes `meal_charges` and `reconciliation_balances` in one transaction; `Reconciliation.create!` on its own is refused. The cutoff is already a parameter, so the rake task and the future `POST` endpoint call the same thing.
 
 ### Plan: `Settlement.preview(cutoff:)`
+
+_Done: see `Settlement.preview` in `app/services/settlement.rb`. The sketch below is the plan as written._
 
 Add a pure entry point next to `run!`:
 
@@ -248,6 +258,8 @@ Settlement.preview(cutoff:)
 - Returns a structured result — zero persistence, zero side effects; a spec pins that the four ledger tables do not change and that `preview` equals what `run!` then stores on the same data
 
 ### Plan: `ReconciliationWarnings` module
+
+_Done: see `app/services/reconciliation_warnings.rb`, which now has six kinds (`dinner_cancelled` too) and is called as `ReconciliationWarnings.for(meals, skipped:, held:, waiting:)`. The sketch below is the plan as written._
 
 Separate concern from the calculator. Takes the same meal collection and returns an array of warning hashes:
 
@@ -270,6 +282,8 @@ v1 checks:
 The preview controller composes both: calculator for the money, warnings for the data quality, then renders a single JSON response.
 
 ### Preview controller sketch
+
+_Done: see `app/controllers/api/v1/reconciliations_controller.rb`. The real one parses dates with `YearMonthDay.parse` and answers errors as `{ message: ... }`, not `{ error: ... }`._
 
 ```ruby
 # app/controllers/api/v1/reconciliations_controller.rb
@@ -329,7 +343,7 @@ Before designing any real UI, the first iOS milestone is "hit the preview endpoi
 
 Build the Rails work fully before opening Xcode. **This is the single most important decision in this document.** If we start writing Swift against a shifting API, we will spend half the iOS time reworking code every time a JSON shape changes. Worse, the iOS work is more fun than the backend work, and the backend work is where the value is.
 
-1. ~~Extract the settlement pipeline into a service~~ — done 2026-08-23 (`Settlement`); then add `Settlement.preview(cutoff:)`
+1. ~~Extract the settlement pipeline into a service, then add `Settlement.preview(cutoff:)`~~ — done 2026-08-23 (`Settlement`, `Settlement.preview`)
 2. ~~Write `ReconciliationWarnings`~~ — done 2026-08-23 (`app/services/reconciliation_warnings.rb`)
 3. ~~Write `Api::V1::ReconciliationsController#preview`~~ — done 2026-08-23, with `ReconciliationPreviewSerializer`
 4. ~~Request specs for the preview endpoint~~ — done 2026-08-23 (`spec/requests/api/v1/reconciliations_preview_spec.rb`)
@@ -345,4 +359,3 @@ Build the Rails work fully before opening Xcode. **This is the single most impor
 - **Does Collect also support the resident view** (checking your own balance, seeing what you owe for the current cycle)? Or is that strictly the `comeals-monorepo` SPA's job? This is a scope decision that should be made before the login flow is built — it decides whether the app needs to know "who am I as a logged-in user" for anything beyond auth.
 - **Offline support.** For walking-around-the-community use, partial connectivity is realistic. Should `paid_at` marks be queued locally and synced, or require live connection? Defer until the collection screens are being designed, but decide early enough that the data layer can still change.
 - **Push notifications.** "Reminder: reconciliation X has 3 unpaid balances" would be useful. Requires APNs setup, which is non-trivial. Not v1.
-- **Permissioning:** any authenticated resident can preview, or restricted? See auth section. Flagging for future discussion if the community grows or the role becomes more formal.

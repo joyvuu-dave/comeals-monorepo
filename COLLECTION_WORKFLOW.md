@@ -10,7 +10,13 @@ The word "collection" is used loosely here to cover both directions — collecti
 
 ## Background
 
-Right now the app has no support for collection at all. Once a reconciliation is created, the person responsible for collection (often an admin, but not necessarily) is on their own. They print out the balances, walk around with a notebook, collect checks/cash from people who owe, write checks to people who are owed, and check things off as they go.
+When this was written, the app had no support for collection at all. Once a reconciliation was created, the person responsible for collection (often an admin, but not necessarily) was on their own. They printed out the balances, walked around with a notebook, collected checks/cash from people who owe, wrote checks to people who are owed, and checked things off as they went.
+
+> **Now built (ADR 0011 rules 8 and 9).** Admins can mark each settlement line
+> Paid or Let go, with a note, and the app keeps every mark as history
+> (`SettlementLineMark`). After each settlement, the common house gets an email
+> with every balance, by unit (`CollectionList`). Payments still happen outside
+> the app.
 
 > **A note on "finalized."** This document was written expecting a separate
 > `finalized_at` step. That is not what shipped. A reconciliation is locked the
@@ -24,7 +30,7 @@ Some collection cycles take days. Some never fully complete (someone forgets, mo
 ## The workflow as practiced
 
 1. Reconciliation is run. Creating it locks it.
-2. Balances are published to residents by email (`ReconciliationMailer`), with a read-only admin link to the itemized view.
+2. Each cook gets an email with a link to the dinners they cooked. The common house gets an email with every balance, by unit, and a read-only admin link to the settlement (`ReconciliationMailer`).
 3. The collector walks the published list, contacts each person who owes, collects payment.
 4. The collector walks the published list of people owed, pays them out.
 5. Throughout the process, the collector mentally tracks who's been handled (or scribbles on paper).
@@ -33,15 +39,19 @@ Some collection cycles take days. Some never fully complete (someone forgets, mo
 
 ## Pain points
 
-- **No tracking state.** Everything is in the collector's head (or on a piece of paper).
+- **No tracking state.** Everything is in the collector's head (or on a piece of paper). _Now built: the Paid and Let go marks._
 - **No partial completion.** A reconciliation is done the instant it is created — there is no state for "calculations done, still collecting money."
 - **No reminders.** People who haven't paid get no automated nudge.
 - **No payment automation.** Every payment is a manual cash/check/Venmo transaction handled out-of-band.
-- **No history of payments.** When and how each person paid isn't recorded.
+- **No history of payments.** When and how each person paid isn't recorded. _Now built: each mark keeps who made it, when, and a note._
 
 ## Improvement ideas
 
 ### 1. MVP: Manual paid/paid-out tracking
+
+> **Now built, in a different form.** There is no `paid_at` column. Each mark
+> is a new `settlement_line_marks` row (Paid, Let go, or No mark, with a
+> note), so a line keeps its whole history. Any admin may mark a line Paid.
 
 The simplest valuable thing: add a checkbox or "Mark Paid" button next to each row in the Settlement Balances panel. The collector clicks it as they collect from (or pay out to) each person.
 
@@ -282,6 +292,10 @@ Used to populate the email instructions automatically. **Required** for any of t
 
 ### 7. Audit trail
 
+> **Now built.** Each `settlement_line_marks` row records the admin who made
+> it, when, the note, and the status. A changed mark is a new row, so the
+> history stays.
+
 Important for shared finances. Record:
 
 - Who marked each balance as paid (collector? resident self-service?)
@@ -312,6 +326,10 @@ Currently the admin sees a reconciliation as a static thing. With collection tra
 Lets the collector see at a glance where things stand without scanning the whole balance table.
 
 ### 10. Write-offs
+
+> **Now built as "Let go" (ADR 0011 rule 8).** Only a superuser may set it. A
+> Let go mark changes no balance; it records that nobody will collect the
+> amount.
 
 Edge case but real: someone moves out without settling, or a small balance just isn't worth chasing. Need a way to mark a balance as "written off" — distinct from "paid" — with a reason.
 

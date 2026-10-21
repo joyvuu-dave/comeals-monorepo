@@ -44,7 +44,9 @@ heartbeat from the last two minutes, and then
 `rake deploy:verify_recurring_job`, which queues the hourly
 `delete_expired_guest_add_keys` task the way the scheduler does and
 fails unless the worker has run it within two minutes. `bin/deploy`
-stops on either; the workflow rolls back. `bin/staging-rehearsal` runs
+stops on either. The workflow rolls back the code only if the release
+ran no migration; if it ran one, the run fails and production stays as
+it is (`docs/runbooks/undo-a-deploy.md`). `bin/staging-rehearsal` runs
 the worker dyno during the rehearsal too (staging is neutered, so its
 jobs send nothing out), runs the same two checks, and parks both dynos
 at the end. The steps

@@ -27,7 +27,7 @@ findings were fixed in #176 and the others in #175.
   104 rows over ADR 0011, the ADR 0004 cancel and Let go parts, ADR 0009,
   ADR 0010, every sentence added since, the undo runbook and the deploy plan.
   **One finding:** a cancel and a cost with money written from psql at the
-  same moment both commit (`cancel_while_a_cost_is_written_spec.rb`, same
+  same moment both commit (`cancel_against_a_cost_race_spec.rb`, same
   cause as the lock finding below). Also noticed: the preview code does
   not change for a change that moves no cent; MODELS names two ledger checks
   of three; maintenance mode does not stop jobs during a restore.
@@ -128,7 +128,7 @@ branch, none fixed in the hunt. The branches:
   column with every clearing write; every live-update path and every
   SPA handler listed; the job timing questions answered by running code.
   **One finding.** `SetMultipliersJob` moves a resident into the adult
-  band with `update_columns` (`app/jobs/set_multipliers_job.rb:23`), so
+  band with `update_columns` (`app/jobs/set_multipliers_job.rb:23`, removed in #88), so
   no callback notes the residents channel and every open screen keeps
   its old hosts list until it reloads:
   `spec/requests/api/v1/live_update_contract_spec.rb:207`. Fixed

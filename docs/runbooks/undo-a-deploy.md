@@ -27,7 +27,7 @@ a migration, it leaves production as it is and fails the run.
 
 Run the **Rollback** workflow on GitHub (Actions, Rollback, Run workflow)
 with a one-line reason. Leave `release` empty for the release before the
-current one. It rolls back, runs the smoke test, pauses the daily deploy
+current one. It rolls back, runs the smoke test, pauses the weekly deploy
 (`DEPLOY_HOLD`), marks the release note, and files an issue to fix main.
 
 The worker dyno follows the release it goes back to. When that release
@@ -198,6 +198,7 @@ step 2.)
 4. Check that the smoke test passed on the old code, then scale staging
    to 0.
 
-On staging the workflow only rolls back and smokes; it leaves
-`DEPLOY_HOLD`, the release notes and the issues alone
+On staging the workflow runs the same rollback steps as on production,
+including maintenance mode and the restore when it is given a backup. It
+leaves `DEPLOY_HOLD`, the release notes and the issues alone
 (`spec/bin/rollback_workflow_spec.rb` checks this).

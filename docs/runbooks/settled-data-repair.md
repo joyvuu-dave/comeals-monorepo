@@ -1,13 +1,13 @@
 # Runbook: repairing settled data
 
 Database triggers refuse every write to a reconciled meal's data: its bills,
-attendance, guests, and the meal's own settlement inputs (`cap`, `date`,
-`reconciliation_id`). This applies even to writes that skip Rails callbacks —
-`update_all`, raw SQL, a psql session. The triggers were added in
-`db/migrate/20260707100000_add_settled_meal_immutability_triggers.rb`, and
-`20260727120000_lock_meal_in_settled_child_write_trigger.rb` replaced the
-child-write function body with the current, locking one. Read the second for
-what runs today.
+attendance, guests, and the meal's own settlement inputs (`cancelled_at`,
+`cap`, `date`, `reconciliation_id`). This applies even to writes that skip
+Rails callbacks — `update_all`, raw SQL, a psql session. The triggers were
+added in `db/migrate/20260707100000_add_settled_meal_immutability_triggers.rb`.
+`20260727120000_lock_meal_in_settled_child_write_trigger.rb` and then
+`20261016120000_update_the_meal_row_on_every_child_write.rb` replaced the
+child-write function body. Read the last one for what runs today.
 
 > **A gap that was open until 2026-07-27, and how to find what it left
 > behind.** The triggers used to decide by reading the meal without taking a

@@ -54,8 +54,10 @@ Every model whose rows a screen shows notes itself in `LiveUpdate`
 (`app/services/live_update.rb`) from its save and destroy callbacks:
 Meal, Bill, MealResident, Guest, Event, CommonHouseReservation,
 GuestRoomReservation, Rotation (and `after_remove` for meals dropped
-from it), Resident, Unit. `Settlement` and `Rotation#set_place_value`
-(both `update_all`) note themselves by hand. (`SetMultipliersJob` did
+from it), Resident, Unit. Community notes the residents channel when
+its time zone changes, because every time on screen moves. `Settlement`
+and `Rotation#set_place_value` (both `update_all`) note themselves by
+hand. (`SetMultipliersJob` did
 too from 2026-09-24 until it was removed on 2026-09-26: a birthday now
 moves someone into the adult band with no write at all, so the SPA
 refetches its hosts list at midnight instead.) A controller does not
@@ -121,8 +123,8 @@ the Pusher call right after the write (`spec/rails_helper.rb`).
 
 `Community#calendar_cache_version(start_date, end_date)` is one query:
 the row count and newest `updated_at` of every table the month is drawn
-from (residents, units, meals — whose children touch them —, rotations,
-events, both reservation tables), plus today's date. The controller
+from (communities, residents, units, meals — whose children touch them —,
+rotations, events, both reservation tables), plus today's date. The controller
 reads it before it reads the rows and stores the month under it. A
 stale copy stored under an old version is a miss for every later
 reader. That is what closes the mid-build window; the delete stays for

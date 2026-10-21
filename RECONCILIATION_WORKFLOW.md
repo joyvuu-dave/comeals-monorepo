@@ -8,8 +8,10 @@ This document captures the desired workflow for performing a reconciliation, the
 > state) was solved a different and stronger way: a reconciliation row refuses
 > update and destroy from the moment it is created, and a reconciled meal's
 > bills, attendance, and guests are refused by database triggers on every path,
-> including `update_all` and psql. There is no unfinalize. Corrections settle
-> as new entries in the next period — see `docs/runbooks/settled-data-repair.md`.
+> including `update_all` and psql. There is no unfinalize. Only two things can
+> change a settled dinner's rows: a correction a superuser makes in admin,
+> which the next settlement carries (ADR 0011 rule 6), and the repair setting
+> in `docs/runbooks/settled-data-repair.md`.
 >
 > The `audited` gem also now records every write on the financial models, which
 > covers most of the "audit trail" idea.
@@ -109,9 +111,9 @@ The plan here was a nullable `finalized_at` timestamp: create the reconciliation
 **We did not build that.** What shipped instead is simpler and harder:
 
 - A reconciliation is locked from the moment it exists. `before_update` and `before_destroy` both refuse, always. There is no unfinalized state, so there is no unfinalize.
-- Bill, MealResident, and Guest refuse create, update, and destroy on a reconciled meal (`ReconciledMealImmutability`), and `cap`, `date`, and `reconciliation_id` on the meal row are frozen too.
+- Bill, MealResident, and Guest refuse create, update, and destroy on a reconciled meal (`ReconciledMealImmutability`), and `cancelled_at`, `cap`, `date`, and `reconciliation_id` on the meal row are frozen too.
 - Those refusals are also database triggers, so `update_all`, a rake task, and psql all hit them. The plan above only covered Rails validation hooks, which `update_all` walks straight past.
-- The one bypass is `SET LOCAL comeals.allow_settled_writes = 'on'` inside a single transaction, for genuine data corruption. `docs/runbooks/settled-data-repair.md` is the procedure.
+- Two things get past them. A correction made in admin (`MealCorrecting`) names one dinner in the database setting `comeals.correcting` for its own transaction, and the next settlement carries the change. For real data corruption, `SET LOCAL comeals.allow_settled_writes = 'on'` inside a single transaction lets every write through; `docs/runbooks/settled-data-repair.md` is the procedure.
 
 Two pieces of the reasoning above turned out to be right and are worth keeping:
 

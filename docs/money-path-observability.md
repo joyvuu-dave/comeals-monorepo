@@ -16,15 +16,18 @@ Worth writing down so nobody rebuilds it.
   `request_uuid`.
 - **Correlating one request's changes.** `audits.request_uuid` groups every row
   change made by a single request.
-- **Settled data cannot change through normal paths.** The seven protect and
+- **Settled data cannot change through normal paths.** The protect and
   reject triggers in `db/structure.sql` (settled meals, bills, guests,
-  attendance, settled balances, meal charges, and ledger check runs), the
-  two insert triggers on settled balances and meal charges (only the
-  settlement that owns a row may add it, since 2026-10-09), the model
+  attendance, settled balances, meal charges, settlement corrections and
+  their lines and charges, settlement line marks, job runs, mail
+  deliveries, and ledger check runs), the `*_insert_by_settlement`
+  triggers on settled balances, meal charges and settlement corrections
+  and their lines and charges (only the settlement that owns a row may
+  add it, since 2026-10-09), the model
   concerns, and the `AppendOnly` concern
   (`app/models/concerns/append_only.rb`) that `Reconciliation` includes.
-- **Settled balances sum to zero.** `assert_balanced_input!` and
-  `assert_candidates_cover_pennies!` in `Reconciliation`, and since
+- **Settled balances sum to zero.** `Settlement.assert_balanced_input!` and
+  `Settlement.assert_candidates_cover_pennies!`, and since
   `20260731120000` a deferred constraint trigger that makes PostgreSQL check
   it too, at every commit, for writes that never went through Ruby. That one
   has no bypass: `comeals.allow_settled_writes` does not turn it off.
@@ -47,7 +50,9 @@ each teaches per unit of work.
 ### ~~A. Is any settled balance different today from what its source data says?~~ — built 2026-07-31
 
 `LedgerVerification`, run nightly by `rake ledger:verify` at 05:00 UTC, after
-`billing:recalculate`. The Heroku Scheduler entry was added 2026-08-03 — for
+`billing:recalculate`. (Amended: it now runs as `VerifyLedgerJob` at 05:00
+UTC, two hours after `RefreshBalancesJob`, from `config/recurring.yml`. The
+rake task runs the same job, for a person at a terminal.) The Heroku Scheduler entry was added 2026-08-03 — for
 the first day after the 2026-08-02 deploy the code was live but nothing ran
 it, and `ledger_check_runs` shows the gap: one manual run, then nothing until
 the schedule took over. For every reconciliation it recomputes the settlement
@@ -159,10 +164,8 @@ Built on top of this, and the reason it was worth doing:
   each person's statement show the new numbers like any other settlement's;
   the record of the correction is read with the query in
   `docs/runbooks/settled-data-repair.md`.
-  Migration `20261010130000` did this for settlements 3, 7 and 9 (11 bills
-  marked No cost by mistake); settlement 6 still has no lines.
-
-The old proposal follows, for the reasoning about rule 8.
+  Migration `20261010130000` did this for the settlements that had bills
+  marked No cost by mistake. One older settlement still has no lines.
 
 ### Check three: each settled dinner against its rows — built 2026-10-13
 
@@ -181,6 +184,8 @@ corrects a dinner, and refuses one that already disagrees. For a dinner
 of a settlement with no line items it asks what the nightly check asks
 of that settlement (the recompute check), so such a dinner can still be
 corrected.
+
+The old proposal follows, for the reasoning about rule 8.
 
 ### B (original proposal). What is this number made of?
 

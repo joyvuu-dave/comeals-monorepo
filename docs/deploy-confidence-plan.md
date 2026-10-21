@@ -109,8 +109,10 @@ themselves. Roughly 30–40 new tests, all doubled across both engines.
   own; the rotation and history modals' "Loading..." looks have goldens
   (2026-09-28), the other loading looks do not. A component file that no
   visual test loads fails the run.
-- Tests for `data_store_hosts.js` — 6% covered, and it is the in-flight /
-  stale-response cache feeding the reservation forms.
+- Tests for `data_store_hosts.js`, the in-flight / stale-response cache
+  feeding the reservation forms. Done:
+  `tests/unit/stores/data_store_hosts.test.js`, and the JS coverage
+  minimum is now 100%.
 
 ### 6. Post-deploy smoke test — DONE (9367389)
 
@@ -199,11 +201,12 @@ The weekly job:
 3. **Staging rehearsal.** A persistent staging app sits in a Heroku
    pipeline next to production, dynos scaled to zero between runs
    (about $5/month, almost all of it the database). Each run: verify
-   the app is still neutered (no clock dyno, mail off, no
-   healthchecks key, its own Pusher/Bugsnag) — refuse to continue
-   otherwise, because staging holds a copy of real residents' email
-   addresses; restore the latest production backup (the database is
-   ~5 MB); deploy the candidate; run migrations against today's real
+   the app is still neutered (`COMEALS_STAGING` set, which turns mail
+   and Pusher off; no clock dyno; none of the vars in
+   `bin/lib/staging_forbidden_vars.sh`: no mail, healthchecks, Bugsnag
+   or Skylight key) — refuse to continue otherwise, because staging
+   holds a copy of real residents' email addresses; restore the latest
+   production backup (the database is about 33 MB); deploy the candidate; run migrations against today's real
    data. Any release-phase error, boot exception, or deprecation
    warning in the logs stops the run.
 4. **Exercise staging.** Run the aggressive smoke against it: log in,
@@ -214,8 +217,10 @@ The weekly job:
 5. **Promote, don't rebuild.** `heroku pipelines:promote` ships the
    exact compiled slug staging just ran — production never gets a
    second build that could differ from the one that passed.
-6. **Watch production.** The read-only smoke (bin/smoke) plus a few
-   minutes of log watching. A failed smoke or 5xx spew triggers
+6. **Watch production.** The read-only smoke (bin/smoke), the Solid
+   Queue checks (`deploy:verify_solid_queue` and
+   `deploy:verify_recurring_job`), and three minutes of log watching.
+   A failure in any of them triggers
    `heroku rollback`, code only, when the release ran no migration.
    When it ran one, the workflow leaves production as it is and fails:
    the old code may not run on what a migration made, and
@@ -239,7 +244,10 @@ the pipeline itself is the casualty (CI or Actions down); it must be
 hard to use by mistake and easy to see afterward — typed confirmation,
 the same notification the pipeline sends,
 and a mark left behind (an auto-filed issue) so every use gets looked
-at afterward.
+at afterward. (Amended: a release whose migrations the old code cannot
+run beside goes out through `bin/deploy`, which turns maintenance mode
+on first, never through the workflow. The workflow's promote step says
+so.)
 
 **Manual rollbacks** (agreed 2026-08-10): production runs what main
 has, so a raw `heroku rollback` lasts only until the next Monday run,
@@ -251,10 +259,12 @@ staging). It stops before it changes anything when the target release
 runs the commit production runs now, and when `bin/rollback-check`
 finds a migration since the target and it has neither a backup nor
 `code_only_is_safe`. With a backup, it turns maintenance mode on,
-captures a backup of the database as it is, scales web to 0 so no
-background job runs (#179), and restores the given one. Then it runs
-`heroku rollback`, waits for its release phase to succeed, checks that
-the running commit changed, scales web back up, turns maintenance off,
+captures a backup of the database as it is, scales web and the worker
+to 0 so no background job runs (#179), and restores the given one. Then
+it runs `heroku rollback`, waits for its release phase to succeed,
+checks that the running commit changed, scales the worker back to 1 when
+the release it went back to has a worker process type, scales web back
+up, turns maintenance off,
 and runs the read-only smoke. On
 production it then sets `DEPLOY_HOLD` with the reason, adds a "rolled
 back — reason" note to the top of the GitHub release that points at
@@ -265,9 +275,9 @@ the next deploy. Rolling back the code does not undo the data the bad
 version wrote. That needs correcting entries, and the issue the
 workflow files has a box for it. The steps: `docs/runbooks/undo-a-deploy.md`.
 
-Secrets: `HEROKU_API_KEY` and `ANTHROPIC_API_KEY` as environment
-secrets in a GitHub environment named `production`, which only the
-deploy workflow declares. Notification: GitHub's failure email plus a
+Secrets: `HEROKU_API_KEY`, `ANTHROPIC_API_KEY` and
+`HEALTHCHECKS_DEPLOY_URL` as environment secrets in a GitHub environment
+named `production`, which the Deploy and Rollback workflows declare. Notification: GitHub's failure email plus a
 dedicated healthchecks.io check the job pings on completion — a
 morning where the job never ran also alerts.
 

@@ -63,7 +63,14 @@ amount, and a ledger check run is the record of checking one. It also lists
 `MealCorrection` and `MealCorrectionLine`, the correction to a settled dinner
 and each person's change, added with the admin form that writes them, ADR 0011
 rule 6.) Residents, units, events, rotations and both kinds of reservation
-are ordinary community admin, open to any admin.
+are ordinary community admin, open to any admin. One exception: only a
+superuser may delete a rotation, because deleting a rotation deletes its
+meals, and meal writes need a superuser.
+
+Marking a settlement line Let go also needs a superuser
+(`SuperuserAdapter::MONEY_DECISIONS`). It writes no ledger row, but somebody
+covers the amount that was let go (ADR 0011 rule 8). Any admin may mark a
+line Paid.
 
 This matches how a co-housing group actually divides labor: some committee
 adds and retires residents, some other person or committee handles the money.
@@ -211,8 +218,9 @@ which is how the flag came to be unmanageable in the first place.
   path? Forgetting leaves it open to plain admins. `LEDGER_MODELS` is where a
   money-path resource goes, `GOVERNANCE_MODELS` is where a "decides who may
   act" one goes, and `SUPERUSER_ONLY_MODELS` is the two of them joined.
-  `spec/models/superuser_adapter_spec.rb` iterates that list, so a new
-  restricted model is covered automatically once added.
+  `spec/models/superuser_adapter_spec.rb` loops over `LEDGER_MODELS`, so a
+  new money-path model is tested once it is added. It names the
+  `GOVERNANCE_MODELS` one by one, so a new one there needs its own example.
 
 ## What is pinned
 

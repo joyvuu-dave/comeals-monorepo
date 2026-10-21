@@ -120,7 +120,7 @@ The two real failures:
 
 1. `spec/services/snapshot_read_spec.rb:60` asserts the isolation level inside
    the fixture transaction is `read committed`. Working as designed; update it
-   when the flip ships. _Done: the spec (now line 27) asserts `serializable`._
+   when the flip ships. _Done: the spec now checks for `serializable`._
 2. `spec/db/settlement_race_spec.rb:306` (then line 308), "lets exactly one of
    two racing settlements survive". The losing settlement never reaches its
    compare-and-swap. SSI cancels it earlier, where `settlement_balances` reads
@@ -252,7 +252,11 @@ theirs from an `after_action` in `Api::V1::MealsController`, so admin sends
 none at all, while Event, Rotation, CommonHouseReservation and
 GuestRoomReservation send theirs from `after_commit`, which does not run on a
 rollback. The third reason — that a re-run form submit is harmless — was never
-reached, because the re-run itself is what does not work.
+reached, because the re-run itself is what does not work. (Amended: since
+ADR 0007 every push goes through `LiveUpdate`, which sends nothing until the
+commit, from admin too. Mail that a settlement or a reminder sends goes out
+from Solid Queue jobs (`PacedDelivery`), which run after the commit. Neither
+changes the point: no mail and no push go out before a commit.)
 
 The refusal is reported through `Rails.error` with `handled: true`. Nothing
 retries here, so without that a conflict in admin would show up nowhere.

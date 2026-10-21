@@ -87,10 +87,12 @@ is an HTML page too.
 | ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `400`  | The request was understood but refused. The `message` says why. Bad input, a rule of the meal (closed, full, reconciled), or a wrong id in the body. |
 | `401`  | No token or a bad token.                                                                                                                             |
+| `403`  | The token is good, but this resident may not do this. Only the settlement endpoints answer it; see "Reconciliations".                                |
 | `404`  | The record in the URL does not exist, or `/meals/next` found no meal.                                                                                |
 | `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again. A bills save has one more `409`; see "Bills".                  |
 | `422`  | A bills save or a guest add came with an `Idempotency-Key` that was already used for a different one. Nothing was saved. See "Bills" and "Guests".   |
 | `429`  | Rate limit.                                                                                                                                          |
+| `503`  | The server had no free database connection, or a password reset was saved but its email could not be sent. Try again later.                          |
 
 Other than `/meals/next`, a `404` is only for the record named in the URL
 path. A wrong id in the body (say, an unknown `resident_id` in a bill) is
@@ -117,7 +119,8 @@ endpoint returns one resident's feed.
 ## True and false
 
 Every true/false value the API reads follows one rule: `late` and
-`vegetarian` on a sign-up, a change and a guest, `closed` on a meal,
+`vegetarian` on a sign-up, a change and a guest, `closed` and
+`cancelled` on a meal,
 `no_cost` in a bills save, and `all_day` on an event.
 
 - Taken as true: `true`, `1`, `"true"`, `"1"`.
@@ -485,8 +488,9 @@ units of their exact share. The few units left over then go one each to
 the people whose share lost the most, ties to the lowest resident id. So
 a meal's charges and credits add up to exactly zero. Rounding to cents
 happens once, at settlement, by the same method at the cent, so the
-rounded balances add up to exactly zero too. The API does not expose
-balances; those are in the admin site.
+rounded balances add up to exactly zero too. Only the settlement
+preview shows balances, and only to a resident with the reconciler
+role. No endpoint reads a past settlement; those are in the admin site.
 
 ## Calendar
 
@@ -502,8 +506,8 @@ GET /communities/:id/calendar/:date
 which days have a cook. An event or a common house reservation is in
 every grid it overlaps, so one that starts before the first day shown
 and ends inside the grid is in it. A birthday card is dated in the year
-of the weeks shown, not this year, and names the age the person turns
-that day. A person has a card only from their first birthday on: the
+of the weeks shown, not this year. For a person turning 21 or younger,
+the card also names the age. A person has a card only from their first birthday on: the
 day of birth has no card, and nor does any day before it.
 
 The response carries an `ETag`. Send it back as `If-None-Match` to get
@@ -519,23 +523,30 @@ The response carries an `ETag`. Send it back as `If-None-Match` to get
 A rotation is a cooking schedule: a set of residents who share the
 cooking for a run of meals.
 
-| Method | Path             | Returns                                                                                                                                                                                                                                                   |
-| ------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `GET`  | `/rotations/:id` | `{ "id": <database id>, "place_value": <1 for the earliest rotation, 2 for the next, ...>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `signed_up` is true for members who have a bill on one of the rotation's meals. |
+| Method | Path             | Returns                                                                                                                                                                                                                                                                                             |
+| ------ | ---------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `GET`  | `/rotations/:id` | `{ "id": <database id>, "place_value": <1 for the earliest rotation, 2 for the next, ...>, "description": ..., "residents": [ { "id", "display_name", "signed_up" } ] }`. `residents` is every active adult who can cook. `signed_up` is true for those with a bill on one of the rotation's meals. |
 
 ## Settlement preview
+
+Only a resident with the reconciler role may use this endpoint and
+`POST /reconciliations` below. A superuser grants the role in admin.
+Anyone else gets `403`.
 
 ```
 GET /reconciliations/preview
 ```
 
-Takes `?cutoff=YYYY-MM-DD`, a past day. Returns what a settlement at that
+Takes `?cutoff=YYYY-MM-DD`, at least 14 days before today. A later day
+returns `400`. Returns what a settlement at that
 cutoff would claim and store, computed the same way a real settlement is
 and written nowhere. Returns `cutoff_date`, `generated_at`, a `summary` (`meal_count`,
 `total_cost`, `earliest_meal_date`, `latest_meal_date`,
 `residents_affected`, `units_affected`), the `meals` it would claim (each
 with its cost numbers, counts, and `cooks`), `balances` per resident and
-per unit, and `warnings` about data that settles fine but usually means
+per unit, the `corrections` to dinners already settled that this
+settlement would carry (each with its edits as sentences and the change
+to each resident), and `warnings` about data that settles fine but usually means
 someone forgot a step (`kind` is one of `bill_with_no_attendees`,
 `bill_with_only_free_eaters`, `attendance_without_bill`,
 `cost_not_entered`, `zero_bill_not_flagged`, `dinner_cancelled`; show
@@ -563,13 +574,15 @@ POST /reconciliations
 { "cutoff": "YYYY-MM-DD" }
 ```
 
-Settles the period up to and including `cutoff`, a past day: the same
-thing the nightly task does, with the day chosen by you. Claims the
-meals the preview listed, writes the ledger, refreshes every resident's
+Settles the period up to and including `cutoff`, which must be at least
+14 days before today. It does the same thing as the admin Create button
+and the `rake reconciliations:create` task, which a person runs by hand.
+It claims the meals that qualify when it runs. These can differ from an
+earlier preview if someone changed a meal in between. It writes the ledger, refreshes every resident's
 running balance, and emails each cook. Returns `201` with `id`, `date`,
 `cutoff_date`, and `meal_count`. Creating it is the lock: the settlement
 and its meals are frozen from this moment and there is no undo, so
-preview first. `400` when the cutoff is not a past day or there is
+preview first. `400` when the cutoff is later than 14 days before today, or there is
 nothing to settle; when every meal with a bill up to the cutoff is held
 back, the `message` gives those meals' dates. `409` when another
 settlement or a meal write got there first — nothing was saved, send the
@@ -741,8 +754,9 @@ needed. `version` is the Heroku release number.
 ## What the API does not do
 
 - No endpoint creates meals, residents, units, or rotations, and none
-  reads balances or settlements. Those live in the admin site, which
-  needs an admin login and is not an API.
+  reads a past settlement. Balances show only in the settlement preview.
+  The rest lives in the admin site, which needs an admin login and is
+  not an API.
 - No endpoint lists residents on its own. The meal form and `/hosts`
   are the two lists.
 - No endpoint lists meals, bills, rotations, events, or reservations by

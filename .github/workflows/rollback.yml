@@ -156,9 +156,9 @@ jobs:
           npx playwright install --with-deps chromium
           bin/smoke "${{ steps.find.outputs.url }}"
 
-      # The daily deploy refuses while this is set. It clears when a
+      # The weekly deploy refuses while this is set. It clears when a
       # person fixes main (usually git revert) and removes the variable.
-      - name: Hold the daily deploy
+      - name: Hold the weekly deploy
         if: inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}

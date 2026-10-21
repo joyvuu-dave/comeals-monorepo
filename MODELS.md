@@ -74,6 +74,10 @@ Community
   model requires $0.01 to $9,999.99 in whole cents. Database CHECKs:
   `communities_cap_positive_or_null` and `communities_cap_whole_cents`.
 - `timezone` — one of `SUPPORTED_TIMEZONES`, e.g. "America/Los_Angeles"
+- `dinner_start_times` (jsonb) — seven `"HH:MM"` strings, Sunday first,
+  default 19:00. `Community#dinner_start_at(date)` turns one into an
+  instant in the community's zone. The `communities_dinner_start_times_shape`
+  CHECK calls `comeals_valid_dinner_start_times`.
 - `schedule` (jsonb) — the meal schedule: a list of 1 to 6 weeks, each week a
   list of days (0 = Sunday .. 6 = Saturday). Read through `MealSchedule`.
   The `communities_schedule_shape` CHECK calls the
@@ -185,12 +189,16 @@ Resident
   (`index_residents_on_lower_email`). Stored lowercased. An empty string is
   turned into NULL before validation.
 - `password_digest` — scrypt hash. `authenticate(password)` checks it.
-- `multiplier` — an ignored column since 2026-09-26, kept one release for
-  the rollback story and then dropped. A resident's price band is computed
+- `multiplier` — an ignored column since 2026-09-26 (`ignored_columns`). It
+  is still in the table so a rollback can still read it; issue #89 drops it.
+  A resident's price band is computed
   from the birthday (`Resident#multiplier_on(date)`), see "The Multiplier
   System" below.
 - `active` — false for residents who moved away or died
 - `can_cook` — eligible for the cooking rotation
+- `can_reconcile` — may preview and create a settlement through the API
+  (`Api::V1::ReconciliationsController#require_reconciler`). Only a
+  superuser can grant it.
 - `vegetarian` — what a tap on the name on the meal page signs a
   resident up with, when they are not signed up
   (`MealFormSerializer#vegetarian`). Their Veg switch is off until they
@@ -231,8 +239,9 @@ Resident
 - `active` — active = true
 - `eligible_cooks` — active adults with `can_cook`
 
-**Deletion:** bills, attendance rows, guests, reconciliation balances, and
-meal charges are all `restrict_with_error`. A resident with any of them can
+**Deletion:** bills, attendance rows, guests, reconciliation balances, meal
+charges, settlement correction lines and charges, meal correction lines,
+and mail deliveries are all `restrict_with_error`. A resident with any of them can
 never be destroyed — retire them with `active` instead. Keys, the balance
 cache, and reservations are destroyed with the resident.
 
@@ -395,10 +404,9 @@ Bill ----> Community
      release, which keeps serving while the migrations run, cannot write a
      bill with both after step 2 has looked.
   2. `20261010130000` turns No cost off, and keeps the amount, on every
-     bill that has both. In the production copies of September and of
-     2026-10-11 that is 27 bills: some on meals not settled yet, whose
-     amounts now count at the next settlement, and the rest on 9 settled
-     meals (2020 to 2024, settlements 3, 7 and 9). It writes one audit row
+     bill that has both. Some of those bills are on meals not settled yet,
+     whose amounts now count at the next settlement, and some are on
+     settled meals. It writes one audit row
      for each, so the meal history says "Bill for (the cook) no longer
      marked as no cost, so the (amount) now counts in the meal's cost".
      On a settled meal it uses the repair bypass for that one write. Then,
@@ -407,14 +415,14 @@ Bill ----> Community
      (`Settlement#correct!`, under Reconciliation below), so those
      settlements count the amounts too.
   3. `20261010130200` validates the CHECK.
-- **The 3 settlements of those 9 settled meals were worked out again.**
+- **The settlements of those settled meals were worked out again.**
   The owner decided on 2026-10-10 that every settled number must be
   right; nobody recorded what was paid or collected for them. Each keeps
   its row, its meals and its cutoff, and gets new balances and line items
   and a `SettlementCorrection` with each changed balance before and
-  after. In the 2026-10-11 copy that is 57 balances: 18 in settlement 3,
-  12 in 7 and 27 in 9. One of them, in settlement 3, moved by a leftover
-  cent only: that person ate at none of the 9 meals. `MealLedger` still
+  after. A balance can move by a leftover cent even for a person who ate
+  at none of the fixed meals, because the cents are allocated again
+  across the whole settlement. `MealLedger` still
   leaves out a no-cost bill whatever it holds, though no bill in the
   table has both now.
 - Audited (the `audits` table), linked to the meal. The history names the
@@ -682,6 +690,9 @@ Reconciliation ----< ReconciliationBalance ---> Resident
 - `end_date` — the cutoff. Required, and must be at least 14 days before
   today (`Reconciliation::DAYS_TO_WAIT`, ADR 0011 rule 2), so a cook has
   time to fix a cost before the dinner is locked.
+- `units_recorded_on` — the day each line's unit was saved. A settlement
+  made before units were saved has a later day than its `date`
+  (`units_recorded_later?`), and its page says so.
 
 **Validations:**
 
@@ -732,8 +743,9 @@ Reconciliation ----< ReconciliationBalance ---> Resident
      refuse when the claimed meals and corrections or the stored balances
      differ from what that preview showed (`Settlement.fingerprint`,
      `Settlement::Changed`, ADR 0011 rule 4). Everything rolls back.
-  6. after commit, clear the `meal-<id>` cache of every claimed meal and the
-     calendar months they fall in (issue #70).
+  6. after commit, clear the cached calendar months of the claimed meals,
+     and tell each claimed meal's page to reload (`forget_cached_meals`,
+     through `LiveUpdate`).
 - `eligible_meals` — the scope above; the create validation and the claim
   read the same one, so they cannot disagree.
 - `settlement_ledger` — a `MealLedger` over the claimed meals, with bills,
@@ -782,8 +794,6 @@ Reconciliation ----< ReconciliationBalance ---> Resident
   which `Settlement` includes.
 - `unit_balances` — the settled balances grouped by unit, including units at
   $0.00
-- `date_range_description` — the dates of the meals it swept. Neither
-  `date` nor `end_date` is the start of that period.
 
 **Immutability:** `AppendOnly`. The row refuses both update and destroy.
 `end_date` says which meals were swept, so editing it would make the stored
@@ -1078,7 +1088,7 @@ No associations.
 `ledger_check_runs_finished_after_started`), `reconciliations_checked`,
 `mismatch_count` (both CHECKed non-negative), `error` (text, NULL when the run
 finished), `details` (jsonb). Index on `started_at`. Each detail names the
-check that found it, `recompute` or `line_items`; the first runs, from
+check that found it: `recompute`, `line_items` or `dinners`. The first runs, from
 2026-08-02, name none and mean `recompute`, the only check then. The shape
 never changes, because past runs use it (`LedgerVerification#detail`).
 
@@ -1108,7 +1118,7 @@ admin preview, and `db/seeds.rb` all go through it.
   schedules were arranged against it.
 - `week_index(date)`, `meal_day?(date)`
 - `upcoming_dates(from:, count:)` — the next `count` meal dates, skipping the
-  holidays `Meal.is_holiday?` names. Raises instead of looping forever on a
+  holidays `Holidays.holiday?` names. Raises instead of looping forever on a
   broken schedule.
 - `dates_between(from, to)`
 - `MAX_MEALS_PER_ROTATION` = 100, the upper bound of
@@ -1140,7 +1150,7 @@ Rotation ----< Meal
   "new rotation posted" email. `no_email` (not a column) sets it at create
   so the email is skipped.
 
-**Deletion:** `has_many :meals, dependent: :destroy`, guarded by three
+**Deletion:** `has_many :meals, dependent: :destroy`, guarded by two
 prepended `before_destroy` checks. A rotation refuses destroy if any meal is
 "touched" (closed, reconciled, dated today or earlier, or has any bill,
 attendee, or guest), or if any meal exists after its last meal. Deleting the
@@ -1252,7 +1262,7 @@ is revoked at once; a password change does it.
 
 An old API session. Login stopped writing Key rows when JWT auth shipped.
 The table exists only so cookies issued before that deploy keep working:
-`ApiController#resolve_current_session!` tries the JWT first and falls back to
+`ApiController#resolve_current_session` tries the JWT first and falls back to
 `Key.find_by(token:)` when decoding fails. The model, the table and the
 fallback stay for good (decided 2026-09-21, #42 and #67): removing them
 gains nothing and could sign out a person whose device still holds an old
@@ -1397,7 +1407,9 @@ largest-remainder method, so the rounded balances sum to exactly zero.
   in proportion to what they spent. Every share is allocated by
   `LargestRemainderSplit` (`app/services/largest_remainder_split.rb`), so
   a meal's lines sum to exactly zero.
-- `Reconciliation#settlement_balances` — the one place that rounds to cents.
+- `Settlement.allocate_to_cents` — the one place that rounds to cents. A
+  settlement (`Reconciliation#settlement_balances`) and the preview both
+  call it.
 - `MealCostSummary` (`app/services/meal_cost_summary.rb`) — what a meal cost,
   for a screen. An open meal is computed through `MealLedger`. A settled
   meal reads its stored `meal_charges`, so the screen shows what the
@@ -1430,14 +1442,15 @@ AdminUser (see above), or the balance, charge, and check-run tables.
 refuses update and destroy with a readable message, with the destroy guard
 prepended (#26). Included by Reconciliation, ReconciliationBalance,
 MealCharge, LedgerCheckRun, SettlementCorrection,
-SettlementCorrectionLine, SettlementCorrectionCharge, MealCorrection and
-MealCorrectionLine (whose triggers are `meal_corrections_guard` and
+SettlementCorrectionLine, SettlementCorrectionCharge, SettlementLineMark,
+MealCorrection and MealCorrectionLine (whose triggers are `meal_corrections_guard` and
 `meal_correction_lines_guard`). Each has a
 database trigger that refuses the same writes for paths that skip
 callbacks (`update_all`, `delete_all`, psql):
 `reconciliation_balances_protect_settled`, `meal_charges_protect`,
 `ledger_check_runs_protect`, and `settlement_corrections_protect`,
-`settlement_correction_lines_protect`, `settlement_correction_charges_protect`.
+`settlement_correction_lines_protect`, `settlement_correction_charges_protect`,
+`settlement_line_marks_protect`.
 Two deferred constraint triggers check the
 books at commit: `reconciliation_balances_sum_zero`, that every settlement's
 balances sum to zero, and `meal_charges_sum_zero`, that every meal's lines
@@ -1468,7 +1481,7 @@ settlement waits for it and is then refused, and a settlement or a cancel
 that waited for a write that came first finds the meal row changed: at
 SERIALIZABLE it fails as a conflict and is tried again with a fresh
 snapshot, and at READ COMMITTED (psql) it reads the new row. `Meal` freezes
-its own `cap`, `date`, and `reconciliation_id`, backed by
+its own `cancelled_at`, `cap`, `date`, and `reconciliation_id`, backed by
 `meals_protect_settled`. See ADR 0003 and CLAUDE.md.
 
 The protect, reject and insert triggers all step aside when the session

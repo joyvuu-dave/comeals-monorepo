@@ -548,7 +548,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     it 'runs every step that has a GitHub token only for production' do
       with_token = steps.select { it.dig('env', 'GH_TOKEN') }
 
-      expect(with_token.pluck('name')).to eq(['Hold the daily deploy', 'Mark the release notes',
+      expect(with_token.pluck('name')).to eq(['Hold the weekly deploy', 'Mark the release notes',
                                               'File the follow-up issue'])
       expect(with_token.pluck('if')).to all(eq("inputs.app == 'comeals-monorepo'"))
     end

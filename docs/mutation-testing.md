@@ -82,8 +82,8 @@ Every class in `app/` and `lib/`, listed by name in `.mutant.yml`. The
 money classes came first — `MealLedger`, `Settlement` (which holds
 `allocate_to_cents`), `Reconciliation`, `BalanceRecalculation`, the
 ones that turn bills and attendance into an amount a person is told to
-pay — and the rest followed. `Current` is left out: it declares
-attributes and has no method to mutate.
+pay — and the rest followed. `Current` and the three edit-form
+serializers are left out: they have no method to mutate.
 
 Mutant picks its subjects from the classes that are loaded when it has
 run the hook in `config/mutant/hooks.rb`, before it loads any spec
@@ -95,13 +95,16 @@ tables in `app/admin/components`, and every file in `lib/`.
 loaded at that point. Before 2026-10-10 the hook did only `eager_load!`,
 so `SettlementLinesTable` and `DeployConfigCheck` were never mutated.
 
-Two kinds of node are skipped (`ignore_patterns` in `.mutant.yml`):
-`T.must(...)` and `T.let(...)`. Both are no-ops at runtime, so the
-mutation "remove the call" can never fail a test, and every one would
-be a survivor that means nothing. And every model's admin search and
-sort list (`ransackable_attributes`) is ignored by name: the spec for
-those checks the rule, that every name is a column and none is a
-secret, not the list.
+Three kinds of node are skipped (`ignore_patterns` in `.mutant.yml`):
+`T.must(...)`, `T.let(...)` and every `Rails.logger` call. The first
+two are no-ops at runtime, so the mutation "remove the call" can never
+fail a test, and every one would be a survivor that means nothing. A
+log line is not behaviour. Every model's admin search and sort list
+(`ransackable_attributes`, and `Bill.ransackable_associations`) is
+ignored by name: the spec for those checks the rule, that every name
+is a column and none is a secret, not the list. So is
+`AppendOnly::ClassMethods#append_only`. It runs once, when a class
+loads, so no mutation of it can run.
 
 ## Which examples run for a subject
 
@@ -4062,7 +4065,8 @@ A finding, left alive and reported, not fixed (1):
   after every plain letter, so the common house list puts 'Jo Strauss'
   first. `upcase` happens to give the right order. The red example is
   the last commit of the branch. `downcase(:fold)` (Unicode case
-  folding) would give the database's order for 'ß'.
+  folding) would give the database's order for 'ß'. Fixed later:
+  `by_name` now uses `downcase(:fold)`.
 
 Two more, each with an answer:
 

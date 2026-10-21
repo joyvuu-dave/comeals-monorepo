@@ -74,7 +74,8 @@ This was verified, not assumed. It is correct and should not be re-audited:
   on the meal row; `Settlement#assign_meals`' `update_all` takes
   `FOR NO KEY UPDATE` on the same row. Those two conflict, so request and
   settlement serialize in **both** orders, and the loser sees `reconciled?` on
-  a fresh reload and returns a 400. All 9 mutating meal actions go through it.
+  a fresh reload and returns a 400. All 10 meal actions that write go through
+  it (the cancel action was added on 2026-10-12).
 - **Compare-and-swap in `assign_meals`** raises if a rival settlement claimed a
   plucked meal, rolling the whole settlement back.
 - **Balances are derived, never stored** as source of truth, and there are no

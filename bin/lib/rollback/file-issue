@@ -12,7 +12,7 @@ gh issue create \
 
 Reason: $REASON
 
-The Heroku rollback is only the mitigation — main still contains the change. Until it is fixed, the \`DEPLOY_HOLD\` repository variable blocks the daily deploy.
+The Heroku rollback is only the mitigation — main still contains the change. Until it is fixed, the \`DEPLOY_HOLD\` repository variable blocks the weekly deploy.
 
 - [ ] Fix main (usually \`git revert\` of the offending change)
 - [ ] Wait for CI to go green on the fix

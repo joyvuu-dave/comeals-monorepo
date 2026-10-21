@@ -146,7 +146,7 @@ that runs real sockets, real Puma threads, and a forking server.
 
     bin/storm
     STORM_THREADS=32 STORM_WORKERS=4 STORM_CLIENTS=128 STORM_SECONDS=60 bin/storm
-    STORM_POOL=2 bin/storm          # a pool smaller than the threads
+    STORM_POOL=2 bin/storm          # stops at boot: the pool is smaller than the threads + 1
 
 Read `tmp/storm_server.log` after a run; the script prints its error
 lines.

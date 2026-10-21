@@ -77,11 +77,9 @@ undo it — the co-housing way, not the firewall way.
   superuser**. These are the boundaries we actually keep, so they are pinned by
   request specs (`spec/requests/api/v1/authentication_pinning_spec.rb` and
   `spec/requests/admin/superuser_authorization_spec.rb`).
-  _Superseded by ADR 0004 for the second boundary: only ledger writes (Bill,
-  Guest, Meal, MealResident, Reconciliation, the balance tables, MealCharge,
-  LedgerCheckRun) and governance writes (AdminUser, Community) need a
-  superuser now. Any admin can write residents, units, events, rotations and
-  reservations. `SuperuserAdapter` holds the rule._
+  _Superseded by ADR 0004 for the second boundary: only writes on the money
+  path and writes that decide who may act need a superuser now. ADR 0004
+  lists them, and `SuperuserAdapter` holds the rule._
 - The open cross-resident behavior is _also_ pinned
   (`spec/requests/api/v1/high_trust_authorization_spec.rb`), so that a future
   change which adds an ownership check fails a test. Then the model changes

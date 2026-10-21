@@ -131,10 +131,10 @@ oracle agrees.
 
 ### Mutation hunt
 
-Run `bin/mutant` (`docs/mutation-testing.md`). It changes one thing at
-a time in every method of `MealLedger`, `Settlement`, `Reconciliation`
-and `BalanceRecalculation` and reports each change that no example
-failed on. For each survivor, decide which it is: an assertion no spec
+Run `bin/mutant` (`docs/mutation-testing.md`) on the classes the recent
+merges changed, or start the Mutant workflow on GitHub Actions for every
+class in `app/` and `lib/`. It changes one thing at a time in each
+method and reports each change that no example failed on. For each survivor, decide which it is: an assertion no spec
 makes (write the spec), a line the method does not need (remove it),
 or a change no test could ever see (add an `ignore_patterns` entry
 with a reason). A survivor of the first kind is a finding: the spec

@@ -88,6 +88,6 @@ npm run build              # Vite build -> public/
 
 ## Rake Tasks
 
-- `rake billing:recalculate` — recompute resident balances from source data (runs daily in production)
-- `rake ledger:verify` — check every settled balance against its source data (runs daily in production)
+- `rake billing:recalculate` — recompute resident balances from source data now (the daily run is `RefreshBalancesJob`)
+- `rake ledger:verify` — check every settled balance against its source data now (the daily run is `VerifyLedgerJob`)
 - `rake reconciliations:create` — close a billing period with a cutoff 14 days before today, compute settlement balances, and email each cook

@@ -125,7 +125,9 @@ it needed no change either. The status is 409 and the message is:
 > again.
 
 It sets `@skip_pusher`, because nothing was written and there is nothing to
-tell the other screens about.
+tell the other screens about. (Amended: `@skip_pusher` is gone. Since ADR 0007
+the models note each push in `LiveUpdate`, which sends nothing until the
+transaction commits, so a conflict sends no push.)
 
 The SPA needed no change. Every one of these calls already has a `catch` that
 reverts the optimistic change and passes the error to `handleAxiosError`, which
@@ -215,7 +217,11 @@ saves the token first, and a conflict raises inside that save, before the
 mail line runs. And no Pusher event survives a
 rollback — meal, bill, attendance and guest events come from an `after_action`
 in `Api::V1::MealsController`, so admin sends none, and the calendar models use
-`after_commit`, which does not run on a rollback.
+`after_commit`, which does not run on a rollback. (Amended: since ADR 0007
+every push goes through `LiveUpdate`, which sends after the commit, from admin
+too. Mail that a settlement or a reminder sends goes out from Solid Queue jobs
+(`PacedDelivery`), which run after the commit. Neither changes the point: no
+mail and no push go out before a commit.)
 
 The refusal is reported through `Rails.error`. Nothing retries here, so
 otherwise a conflict in admin would show up nowhere.
@@ -348,7 +354,9 @@ cannot happen. A green suite means nothing broke structurally. Everything we
 know about real abort behavior comes from `spec/db/settlement_race_spec.rb`,
 because it is the only file with real threads on real connections. It is the
 only test that can catch a break in this change, so treat a failure there as
-serious even when the rest of the suite is green.
+serious even when the rest of the suite is green. (Amended: there are now
+more of them. Every `spec/db/*_race_spec.rb` file and the storm in
+`spec/concurrency/` run real threads on real connections.)
 
 **The locks and triggers from ADR 0003 are unaffected.** Nine of the ten
 original examples in that file, plus `settled_meal_triggers_spec.rb` and

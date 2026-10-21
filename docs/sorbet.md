@@ -34,37 +34,39 @@ a pending migration. In an agent worktree that database is never
 migrated, so a branch that adds a migration could not run `bin/tapioca
 dsl` at all. The `bin/tapioca` wrapper handles this: when the worktree's
 `.env` sets `TEST_DB_SUFFIX` and `DATABASE_URL` is not already set, a
-`dsl` run gets `DATABASE_URL=postgresql:///comeals_test_<suffix>`, the
+`dsl` run gets `DATABASE_URL=postgresql:///comeals_test<suffix>`, the
 worktree's own test database, which the branch has migrated. The
 environment stays development, so the route helpers come out the same;
 only the connection changes.
 
 ## Which files are typed
 
-Every Ruby file carries a sigil on line 1. Two rubocop cops from
-`rubocop-sorbet` enforce that under `app/`, `lib/`, `config/` and
+Every Ruby file under `app/`, `lib/` and `config/`, and `db/seeds.rb`,
+carries a sigil at the top. Migrations have none, so Sorbet treats them
+as `typed: false`. Two rubocop cops from `rubocop-sorbet` enforce the
+sigil under `app/`, `lib/`, `config/` and
 `db/seeds.rb`: `Sorbet/HasSigil` (a file without one is `typed: false`
 to Sorbet, so a new service could go unchecked) and `Sorbet/ValidSigil`.
 The plugin's other cops stay off (`.rubocop.yml` says why).
 
-| Sigil            | Where                                                                                                                                   | Why                                                                                                                                                                                            |
-| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `# typed: true`  | `app/models` (concerns included), `app/services`, `app/serializers`, `app/controllers`, `app/jobs`, `app/mailers`, `app/helpers`, `lib` | The code that computes money and serves requests. Sorbet reports a method that does not exist, a call on a value that can be nil, and a wrong argument count.                                  |
-| `# typed: false` | `app/admin`, `config`, `db`                                                                                                             | Sorbet only checks syntax and that constants resolve. Admin: the ActiveAdmin DSL runs blocks with a `self` Sorbet cannot see. Config and db: DSL files and migrations.                         |
-| none             | `spec`                                                                                                                                  | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the 125 helpers defined inside describe blocks would leak into every typed file. |
+| Sigil            | Where                                                                                                                                   | Why                                                                                                                                                                                                    |
+| ---------------- | --------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `# typed: true`  | `app/models` (concerns included), `app/services`, `app/serializers`, `app/controllers`, `app/jobs`, `app/mailers`, `app/helpers`, `lib` | The code that computes money and serves requests. Sorbet reports a method that does not exist, a call on a value that can be nil, and a wrong argument count.                                          |
+| `# typed: false` | `app/admin`, `config`, `db`                                                                                                             | Sorbet only checks syntax and that constants resolve. Admin: the ActiveAdmin DSL runs blocks with a `self` Sorbet cannot see. Config and db: DSL files and migrations.                                 |
+| none             | `spec`                                                                                                                                  | Sorbet ignores `spec/` (`sorbet/config`). A `def` inside an RSpec block is a method on `Object` to Sorbet, so the hundreds of helpers defined inside describe blocks would leak into every typed file. |
 
-The money path is `# typed: strict`: `MealLedger`, `Settlement`,
-`BalanceRecalculation`, `SnapshotRead`, `LedgerVerification`, the three
-services that wrap them (`SettleAndNotify`, `RetryOnConflict`,
-`MealCostSummary`), the two API controllers on it
-(`Api::V1::MealsController`, `Api::V1::ReconciliationsController`), the
-three classes that read and write a bills save (`BillsPayload`,
-`IdempotencyKeyHeader`, and `BillsSaveKey`, whose row is written in the
-same transaction as the bills), the two that read and write a guest add
-(`GuestAdd`, and `GuestAddKey`, whose row is written in the same
-transaction as the guest), and the models that hold ledger rows:
-`Meal`, `Resident`, `Bill`, `MealResident`, `Guest`, `MealCharge`,
-`Reconciliation`, `ReconciliationBalance`, `ResidentBalance`. Every hand-written method there has a `sig`, and the
+The money path is `# typed: strict`. The list grows as files are added,
+so `grep -rl '^# typed: strict' app lib` gives the current one. It holds
+the ledger and settlement services (`MealLedger`, `LargestRemainderSplit`,
+`Settlement`, `BalanceRecalculation`, `LedgerVerification`,
+`SettleAndNotify`, `RetryOnConflict`), the two API controllers on the
+money path (`Api::V1::MealsController`, `Api::V1::ReconciliationsController`),
+the classes that read and write a bills save or a guest add (`BillsPayload`,
+`BillsSaveKey`, `GuestAdd`, `GuestAddKey`), the correction and mark
+services, and the models that hold ledger rows (`Meal`, `Resident`,
+`Bill`, `MealResident`, `Guest`, `MealCharge`, `Reconciliation`,
+`ReconciliationBalance`, `ResidentBalance`, the correction rows and
+`SettlementLineMark`). Every hand-written method there has a `sig`, and the
 value objects (`MealLedger::Line`, `MealLedger::Summary`,
 `Settlement::Preview`) are `T::Struct`s, so a nil or a Float in a money
 field raises before any arithmetic runs. The `*_types_spec.rb` files under
