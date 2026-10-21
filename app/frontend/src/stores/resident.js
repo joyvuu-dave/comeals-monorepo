@@ -1,7 +1,11 @@
 import { types, getRoot, isAlive } from "mobx-state-tree";
 import { api } from "../helpers/api";
 import { evictMealCache } from "../helpers/meal_cache";
-import { showSignupFailure, tappedOf } from "../helpers/signup_failure";
+import {
+  noAnswerFromApp,
+  showSignupFailure,
+  tappedOf,
+} from "../helpers/signup_failure";
 
 const Resident = types
   .model("Resident", {
@@ -18,6 +22,15 @@ const Resident = types
     vegetarian: false,
     can_cook: true,
     active: true,
+    // The version of this person's attendance on the meal that the
+    // server will have once every write this page sent on this row is
+    // written: the meal form's version, plus one for each sign-up,
+    // take-off, Late or Veg tap sent since. Each of those taps sends the
+    // value before its own write (takeAttendanceVersion), and the server
+    // refuses a write built on another version (public/api.md, "The
+    // attendance version"). null for a copy of the meal saved on the
+    // device before the meal form had versions: a tap then sends none.
+    attendance_version: types.maybeNull(types.number),
   })
   .volatile(() => ({
     // What this resident had on the meal when the meal was loaded. The
@@ -121,6 +134,24 @@ const Resident = types
       self.vegetarian = val;
       return val;
     },
+    // The version a write sent now expects, counting the write. The
+    // page does not wait for one answer before it sends the next tap, so
+    // the next tap expects the version after this one.
+    takeAttendanceVersion() {
+      const expected = self.attendance_version;
+      if (expected !== null) self.attendance_version = expected + 1;
+      return expected;
+    },
+    // A write the server answered with a refusal wrote nothing, so its
+    // count comes off. A tap sent after it, which counted it, is refused
+    // as stale, and the meal loads again (showSignupFailure). With no
+    // answer the meal loads again anyway, which sets the version from
+    // the server.
+    attendanceWriteFailed(error) {
+      if (self.attendance_version !== null && !noAnswerFromApp(error)) {
+        self.attendance_version -= 1;
+      }
+    },
     toggleAttending(options = { late: false, veg: false }) {
       // A settled or cancelled meal's sign-ups can't change. The screen
       // locks the name cell only with pointer-events: none, which a click
@@ -200,6 +231,7 @@ const Resident = types
               late: currentLate,
               vegetarian: currentVeg,
               socketId: window.Comeals.socketId,
+              attendanceVersion: self.takeAttendanceVersion(),
             }),
           )
           .then(function (response) {
@@ -220,6 +252,7 @@ const Resident = types
             // A row built again since the tap shows what the server has,
             // so only the row that was tapped is put back.
             if (isAlive(self)) {
+              self.attendanceWriteFailed(error);
               self.setAttending(false);
               self.setAttendingAt(null);
               self.root.meal.incrementExtras();
@@ -248,6 +281,7 @@ const Resident = types
             self.id,
             api.meals.residents.remove(self.meal_id, self.id, {
               socketId: window.Comeals.socketId,
+              attendanceVersion: self.takeAttendanceVersion(),
             }),
           )
           .then(function () {
@@ -260,6 +294,7 @@ const Resident = types
           })
           .catch(function (error) {
             if (isAlive(self)) {
+              self.attendanceWriteFailed(error);
               self.setAttending(true);
               self.setLate(previousLate);
               self.root.meal.decrementExtras();
@@ -291,6 +326,7 @@ const Resident = types
           api.meals.residents.update(self.meal_id, self.id, {
             late: val,
             socketId: window.Comeals.socketId,
+            attendanceVersion: self.takeAttendanceVersion(),
           }),
         )
         .then(function () {
@@ -298,7 +334,10 @@ const Resident = types
           if (!isAlive(self)) store.reloadAfterSignupRequest(mealId);
         })
         .catch(function (error) {
-          if (isAlive(self)) self.setLate(!val);
+          if (isAlive(self)) {
+            self.attendanceWriteFailed(error);
+            self.setLate(!val);
+          }
 
           showSignupFailure(store, tapped, error);
         });
@@ -325,6 +364,7 @@ const Resident = types
           api.meals.residents.update(self.meal_id, self.id, {
             vegetarian: val,
             socketId: window.Comeals.socketId,
+            attendanceVersion: self.takeAttendanceVersion(),
           }),
         )
         .then(function () {
@@ -332,7 +372,10 @@ const Resident = types
           if (!isAlive(self)) store.reloadAfterSignupRequest(mealId);
         })
         .catch(function (error) {
-          if (isAlive(self)) self.setVeg(!val);
+          if (isAlive(self)) {
+            self.attendanceWriteFailed(error);
+            self.setVeg(!val);
+          }
 
           showSignupFailure(store, tapped, error);
         });

@@ -38,6 +38,7 @@
   "MealFormGuest": ["created_at", "id", "meal_id", "resident_id", "vegetarian"],
   "MealFormResident": [
     "active",
+    "attendance_version",
     "attending",
     "attending_at",
     "can_cook",
@@ -49,6 +50,7 @@
     "vegetarian"
   ],
   "MealResident": [
+    "attendance_version",
     "created_at",
     "id",
     "late",

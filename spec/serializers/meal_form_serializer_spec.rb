@@ -260,7 +260,8 @@ RSpec.describe MealFormSerializer do
 
       expect(row(meal, resident)).to eq(
         id: resident.id, meal_id: meal.id, name: 'B7 - Ann Lee', short_name: 'Ann Lee', attending: true,
-        attending_at: attendance.created_at, late: true, vegetarian: true, can_cook: true, active: true
+        attending_at: attendance.created_at, late: true, vegetarian: true, can_cook: true, active: true,
+        attendance_version: 1
       )
     end
 
@@ -269,7 +270,8 @@ RSpec.describe MealFormSerializer do
       resident = create(:resident, community: community, unit: home, name: 'Bea Ortiz', multiplier: 2,
                                    vegetarian: true)
 
-      expect(row(meal, resident)).to include(attending: false, attending_at: nil, late: false, vegetarian: true)
+      expect(row(meal, resident)).to include(attending: false, attending_at: nil, late: false, vegetarian: true,
+                                             attendance_version: 0)
     end
   end
 end

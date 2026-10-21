@@ -50,7 +50,7 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
       create(:meal_resident, meal: meal, resident: resident, community: community)
       create(:guest, meal: meal, resident: resident)
 
-      MealFormSerializer.new(meal).to_h
+      MealFormSerializer.new(meal, params: { attendance_versions: AttendanceVersion.by_resident_id(meal.id) }).to_h
     end
 
     it 'matches MealForm' do
@@ -79,7 +79,7 @@ RSpec.describe 'API contract (tests/fixtures/api_contract.json)', type: :seriali
   describe 'POST /api/v1/meals/:meal_id/residents/:resident_id' do
     it 'matches MealResident' do
       meal_resident = create(:meal_resident, meal: meal, resident: resident, community: community)
-      result = MealResidentSerializer.new(meal_resident).to_h
+      result = MealResidentSerializer.new(meal_resident, params: { attendance_version: 1 }).to_h
 
       expect(keys_of(result)).to eq(contract.fetch('MealResident').sort)
     end

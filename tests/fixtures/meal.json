@@ -27,7 +27,8 @@
       "late": false,
       "vegetarian": false,
       "can_cook": true,
-      "active": true
+      "active": true,
+      "attendance_version": 1
     },
     {
       "id": 2,
@@ -39,7 +40,8 @@
       "late": false,
       "vegetarian": true,
       "can_cook": true,
-      "active": true
+      "active": true,
+      "attendance_version": 0
     },
     {
       "id": 3,
@@ -51,7 +53,8 @@
       "late": true,
       "vegetarian": false,
       "can_cook": false,
-      "active": true
+      "active": true,
+      "attendance_version": 1
     }
   ],
   "guests": [

@@ -24,6 +24,8 @@ module Api
       private_constant :NO_MEAL_SCHEDULED
 
       before_action :authenticate
+      # Before set_meal, which reads the attendance rows.
+      before_action :read_attendance_versions, only: [:show_cooks]
       before_action :set_meal, except: [:next]
       # Before the settled check, so a bills save or a guest add sent again
       # after its first try was written is not told that nothing was saved.
@@ -35,10 +37,16 @@ module Api
       ]
       before_action :verify_resident_exists, only: %i[create_meal_resident create_guest]
       before_action :set_guest, only: [:destroy_guest]
-      before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident]
+      # A take-off or a change that sends attendance_version finds the row
+      # under the meal lock, after the version check (attendance_write).
+      before_action :set_meal_resident, only: %i[destroy_meal_resident update_meal_resident],
+                                        unless: :attendance_version_sent?
       # PATCH closed and PATCH cancelled. After the lines above, so its own
       # settled check runs after the meal is found.
       include MealStatusActions
+      # The attendance_version of a sign-up, a take-off, and a Late or Veg
+      # change.
+      include AttendanceVersionCheck
 
       # GET /api/v1/meals/next
       sig { void }
@@ -62,7 +70,7 @@ module Api
         }
       end
 
-      # POST /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian }
+      # POST /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian, attendance_version }
       # Uses pessimistic locking (SELECT ... FOR UPDATE) to prevent concurrent
       # signups from exceeding meal.max. The lock serializes writes to the same
       # meal row; other meals are unaffected.
@@ -75,30 +83,35 @@ module Api
       # Both flags are required, on a re-signup too (#121), and each must
       # be a value TrueOrFalse takes (#138). Otherwise the answer is a 400,
       # and the stored row is unchanged.
+      #
+      # attendance_version, here and in the two actions below, is checked
+      # by attendance_write.
       sig { void }
       def create_meal_resident
         flags = TrueOrFalse.from_params(params, %i[late vegetarian], required: true)
         return render_refused(flags) if flags.is_a?(String)
 
-        render_write_under_lock do
+        attendance_write do
           meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
           meal_resident.update!(flags)
-          { json: MealResidentSerializer.new(meal_resident) }
+          { json: MealResidentSerializer.new(meal_resident, params: { attendance_version: attendance_version_now }) }
         end
       end
 
-      # DELETE /api/v1/meals/:meal_id/residents/:resident_id
+      # DELETE /api/v1/meals/:meal_id/residents/:resident_id { attendance_version }
       # The model guards (ClosedMealAttendanceFreeze, ReconciledMealImmutability)
       # are the source of truth; a blocked destroy surfaces here as a 400.
       sig { void }
       def destroy_meal_resident
-        render_write_under_lock do
-          meal_resident.destroy!
-          { json: { message: 'MealResident destroyed.' } }
+        attendance_write do |row|
+          next not_found_rendering if row.nil?
+
+          row.destroy!
+          { json: { message: 'MealResident destroyed.', attendance_version: attendance_version_now } }
         end
       end
 
-      # PATCH /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian }
+      # PATCH /api/v1/meals/:meal_id/residents/:resident_id { late, vegetarian, attendance_version }
       # A flag left out keeps its stored value (the SPA sends one at a
       # time). A flag sent must be a value TrueOrFalse takes (#121, #138).
       sig { void }
@@ -106,9 +119,11 @@ module Api
         flags = TrueOrFalse.from_params(params, %i[late vegetarian], required: false)
         return render_refused(flags) if flags.is_a?(String)
 
-        render_write_under_lock do
-          meal_resident.update!(flags)
-          { json: { message: 'MealResident updated.' } }
+        attendance_write do |row|
+          next not_found_rendering if row.nil?
+
+          row.update!(flags)
+          { json: { message: 'MealResident updated.', attendance_version: attendance_version_now } }
         end
       end
 
@@ -176,7 +191,7 @@ module Api
       # bounds them.
       sig { void }
       def show_cooks
-        render json: MealFormSerializer.new(meal)
+        render json: MealFormSerializer.new(meal, params: { attendance_versions: T.must(@attendance_versions) })
       end
 
       # PATCH /api/v1/meals/:meal_id/description { description }

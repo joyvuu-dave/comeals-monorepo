@@ -36,6 +36,10 @@ export interface MealFormResident {
   vegetarian: boolean;
   can_cook: boolean;
   active: boolean;
+  // How many writes there have been to this person's attendance on this
+  // meal. The page sends it with each sign-up, take-off, Late and Veg
+  // tap (public/api.md, "The attendance version").
+  attendance_version: number;
 }
 
 export interface MealFormGuest {
@@ -75,6 +79,8 @@ export interface MealResident {
   late: boolean;
   vegetarian: boolean;
   created_at: string;
+  // The version of this person's attendance after this write.
+  attendance_version: number;
 }
 
 // Response of POST /api/v1/meals/:meal_id/residents/:resident_id/guests
@@ -143,6 +149,13 @@ export interface GuestRoomReservationForm {
 
 export interface Ack {
   message: string;
+}
+
+// The answer to a take-off (DELETE) or a Late or Veg change (PATCH) of
+// /api/v1/meals/:meal_id/residents/:resident_id: the version of the
+// person's attendance after the write.
+export interface AttendanceAck extends Ack {
+  attendance_version: number;
 }
 
 // The answer to PATCH /api/v1/meals/:id/bills (MealsController#update_bills,

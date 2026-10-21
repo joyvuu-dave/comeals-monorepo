@@ -76,6 +76,7 @@ prev_id
 reconciled
 attending
 attending_at
+attendance_version
 display_name
 signed_up
 display_time
@@ -104,3 +105,6 @@ correct!
 # Resident#password is the plain-text password just assigned.
 rewrite!
 password
+# Rails calls it before every save and destroy: AttendanceVersion is
+# read-only, because only a database trigger writes its rows.
+readonly?

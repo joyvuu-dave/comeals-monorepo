@@ -165,6 +165,10 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/guest_idempotency_key_spec.rb' =>
     %w[IdempotencyKeyHeader GuestAdd GuestAddKey GuestReplayedSerializer Api::V1::MealsController],
   'spec/requests/api/v1/guest_idempotency_key_race_spec.rb' => %w[GuestAdd Api::V1::MealsController],
+  # The attendance_version of a sign-up, a take-off and a change.
+  'spec/requests/api/v1/attendance_out_of_order_spec.rb' =>
+    %w[Api::V1::MealsController AttendanceVersionCheck AttendanceVersionParam AttendanceVersion
+       MealFormSerializer MealResidentSerializer],
   'spec/requests/api/v1/meals_controller_spec.rb' =>
     %w[Api::V1::MealsController MealStatusActions AuditDescription MealFormSerializer MealCostSummary Meal
        MealResident Guest TrueOrFalse GuestAdd],

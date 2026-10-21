@@ -145,13 +145,17 @@ test.describe("Meal Editing", () => {
 
     // API: POST to add attendance (not DELETE), with late/vegetarian in payload
     await expect.poll(() => apiMethod, { timeout: 3000 }).toBe("POST");
+    // attendance_version is the version the meal form showed for Bob:
+    // the server refuses a sign-up built on another one.
     expect(Object.keys(apiPayload).sort()).toEqual([
+      "attendance_version",
       "late",
       "socket_id",
       "vegetarian",
     ]);
     expect(apiPayload.vegetarian).toBe(true);
     expect(apiPayload.late).toBe(false);
+    expect(apiPayload.attendance_version).toBe(0);
   });
 
   // A switch shows what is saved, and a tap turns it to the other
@@ -224,10 +228,16 @@ test.describe("Meal Editing", () => {
 
     // The store flips the switch before it sends the request, so the
     // request can reach the route after the checks above pass: wait
-    // for it. The body carries late and the socket id, nothing else.
+    // for it. The body carries late, the socket id, and the version of
+    // Jane's attendance the meal form showed, nothing else.
     await expect.poll(() => patchData, { timeout: 3000 }).toBeTruthy();
-    expect(Object.keys(patchData).sort()).toEqual(["late", "socket_id"]);
+    expect(Object.keys(patchData).sort()).toEqual([
+      "attendance_version",
+      "late",
+      "socket_id",
+    ]);
     expect(patchData.late).toBe(true);
+    expect(patchData.attendance_version).toBe(1);
   });
 
   test("toggle veg switch updates checked state and veg count", async ({
@@ -260,10 +270,16 @@ test.describe("Meal Editing", () => {
     await expect(circleNumber(page, "Veg")).toHaveText("1");
 
     // Wait for the request (the switch flips before it is sent). The
-    // body carries vegetarian and the socket id, nothing else.
+    // body carries vegetarian, the socket id, and the version of Jane's
+    // attendance the meal form showed, nothing else.
     await expect.poll(() => patchData, { timeout: 3000 }).toBeTruthy();
-    expect(Object.keys(patchData).sort()).toEqual(["socket_id", "vegetarian"]);
+    expect(Object.keys(patchData).sort()).toEqual([
+      "attendance_version",
+      "socket_id",
+      "vegetarian",
+    ]);
     expect(patchData.vegetarian).toBe(true);
+    expect(patchData.attendance_version).toBe(1);
   });
 
   test("edit meal description fires debounced API call", async ({ page }) => {

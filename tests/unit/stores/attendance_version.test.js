@@ -18,7 +18,12 @@ vi.mock("pusher-js", () => import("../mocks/pusher.js"));
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import axios from "axios";
-import { createDataStore, stubAction } from "../helpers/create_data_store.js";
+import * as idbKeyval from "idb-keyval";
+import {
+  createDataStore,
+  stage,
+  stubAction,
+} from "../helpers/create_data_store.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
 const STALE_WORDS =
@@ -130,6 +135,46 @@ describe("the attendance version a tap sends", () => {
 
     expect(loadDataAsyncSpy).toHaveBeenCalledTimes(1);
     expect(shown()).toEqual([[`Alice Smith: ${STALE_WORDS}`, "error"]]);
+  });
+
+  // The person went on to another meal while the request was out. That
+  // meal is not loaded again; the copy of the tapped meal on the device
+  // goes, so it is fetched when the person opens it again.
+  it("drops the copy of the meal on the device when the person has moved on", async () => {
+    const answers = answerEachLater();
+    const store = aliceStore({ attending: false, attendance_version: 1 });
+
+    store.residents.get("10").toggleAttending();
+    stage(store, () => {
+      store.meals.push({ id: 2, date: "2023-06-16" });
+      store.meal = 2;
+      store.residents.clear();
+    });
+    answers[0].reject(STALE);
+    await settle();
+
+    expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    expect(idbKeyval.del).toHaveBeenCalledWith("1");
+    expect(shown()).toEqual([
+      [`Alice Smith (Thu, Jun 15th): ${STALE_WORDS}`, "error"],
+    ]);
+  });
+
+  // A conflict that is not "stale" (two writes at once, or the meal lock
+  // was busy) wrote nothing either, and is sent again by a new tap. The
+  // screen was put back already, so the meal does not load again.
+  it("does not load the meal again for a conflict that is not stale", async () => {
+    const answers = answerEachLater();
+    const store = aliceStore({ attending: false, attendance_version: 1 });
+
+    store.residents.get("10").toggleAttending();
+    answers[0].reject({
+      response: { status: 409, data: { message: "Try again." } },
+    });
+    await settle();
+
+    expect(loadDataAsyncSpy).not.toHaveBeenCalled();
+    expect(store.residents.get("10").attendance_version).toBe(1);
   });
 
   // A refusal wrote nothing, so the server's version did not move. The

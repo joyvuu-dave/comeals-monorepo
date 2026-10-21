@@ -124,4 +124,96 @@ RSpec.describe 'Attendance writes that reach the server out of order' do
     expect(response).to have_http_status(:ok)
     expect(meal.meal_residents.find_by(resident_id: alice.id).late).to be(true)
   end
+
+  it 'answers each write with the version after it' do
+    sign_up(0)
+    expect(response.parsed_body['attendance_version']).to eq(1)
+    set_late(true, 1)
+    expect(response.parsed_body['attendance_version']).to eq(2)
+    take_off(2)
+    expect(response.parsed_body['attendance_version']).to eq(3)
+  end
+
+  it 'answers stale with the stored version, and writes nothing' do
+    sign_up(0)
+
+    take_off(5)
+
+    expect(response).to have_http_status(:conflict)
+    expect(response.parsed_body).to eq(
+      'message' => 'This sign-up changed after the page showed it, so nothing was saved. ' \
+                   'Check it and tap again if needed.',
+      'type' => 'stale', 'attendance_version' => 1
+    )
+    expect(attending?).to be(true)
+  end
+
+  it 'refuses a version that is not a whole number, and writes nothing' do
+    sign_up('4.0')
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body['message']).to eq('Attendance version must be a whole number, 0 or more.')
+    expect(attending?).to be(false)
+  end
+
+  # Sending the request again can never work, so the settled words come
+  # first, as for a bills save (ADR 0009).
+  it 'gives the settled words, not stale, on a settled meal' do
+    sign_up(0)
+    meal.update!(reconciliation: create(:reconciliation, community: community))
+    take_off(0)
+
+    expect(response).to have_http_status(:bad_request)
+    expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
+  end
+
+  it 'answers 404 for a take-off or a change with the right version and no sign-up' do
+    take_off(0)
+    expect(response).to have_http_status(:not_found)
+
+    set_late(true, 0)
+    expect(response).to have_http_status(:not_found)
+  end
+
+  # A page loaded before this release sends no version. It must keep
+  # working as it did until it is loaded again, so its requests are not
+  # checked, even when they are out of order.
+  describe 'a request with no attendance_version' do
+    def old_sign_up
+      post path, params: { token: token, late: true, vegetarian: false }, as: :json
+    end
+
+    it 'signs up a person who is already signed up again, as before' do
+      sign_up(0)
+
+      old_sign_up
+
+      expect(response).to have_http_status(:ok)
+      expect(meal.meal_residents.find_by(resident_id: alice.id).late).to be(true)
+    end
+
+    it 'takes off and changes as before' do
+      sign_up(0)
+
+      patch path, params: { token: token, vegetarian: true }, as: :json
+      expect(response).to have_http_status(:ok)
+      delete path, params: { token: token }, as: :json
+      expect(response).to have_http_status(:ok)
+      expect(attending?).to be(false)
+    end
+
+    it 'answers 404 for a take-off with no sign-up, as before' do
+      delete path, params: { token: token }, as: :json
+
+      expect(response).to have_http_status(:not_found)
+    end
+
+    it 'is not checked with null either' do
+      sign_up(0)
+
+      take_off(nil)
+
+      expect(response).to have_http_status(:ok)
+    end
+  end
 end

@@ -188,7 +188,8 @@ GET /meals/:meal_id/cooks
   "residents": [
     { "id": 12, "meal_id": 42, "name": "3 - Ann", "short_name": "Ann",
       "attending": true, "attending_at": "2026-08-20T18:02:11.000-07:00",
-      "late": false, "vegetarian": true, "can_cook": true, "active": true }
+      "late": false, "vegetarian": true, "can_cook": true, "active": true,
+      "attendance_version": 3 }
   ],
   "guests": [
     { "id": 9, "meal_id": 42, "resident_id": 12, "vegetarian": false,
@@ -210,6 +211,10 @@ GET /meals/:meal_id/cooks
   not let anyone sign up a resident who is not `active`, except to undo
   taking them off this meal. It should let a resident who is not `active`
   be chosen as a cook only for the bill they already have.
+- `attendance_version` counts the writes to that resident's sign-up on
+  this meal: each sign-up, take-off and change of `late` or
+  `vegetarian`, from any client or from admin. It is 0 when there has
+  been none. See "The attendance version" below.
 - `guests` lists guests. Each guest belongs to a resident, the host. A
   host does not have to be signed up for the meal.
 - `closed`, `max`, `reconciled` and `cancelled` are the meal's state. See
@@ -221,13 +226,13 @@ GET /meals/:meal_id/cooks
 
 ### Sign up and cancel
 
-| Method   | Path                                                      | Body                                     | What it does                                                                                                                                                   |
-| -------- | --------------------------------------------------------- | ---------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `POST`   | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": false, "vegetarian": false }` | Signs the resident up. Both flags are required. If already signed up, updates `late` and `vegetarian` instead. Returns the row.                                |
-| `PATCH`  | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": ..., "vegetarian": ... }`     | Changes `late` or `vegetarian` for a signup.                                                                                                                   |
-| `DELETE` | `/meals/:meal_id/residents/:resident_id`                  |                                          | Cancels the signup.                                                                                                                                            |
-| `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                | Adds one guest hosted by that resident. `vegetarian` and an `Idempotency-Key` header are required (see "Guests" below). Returns the guest, including its `id`. |
-| `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                          | Removes that guest.                                                                                                                                            |
+| Method   | Path                                                      | Body                                                              | What it does                                                                                                                                                                    |
+| -------- | --------------------------------------------------------- | ----------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `POST`   | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": false, "vegetarian": false, "attendance_version": 3 }` | Signs the resident up. Both flags are required. If already signed up, updates `late` and `vegetarian` instead. Returns the row, with the `attendance_version` after this write. |
+| `PATCH`  | `/meals/:meal_id/residents/:resident_id`                  | `{ "late": ..., "vegetarian": ..., "attendance_version": 3 }`     | Changes `late` or `vegetarian` for a signup. Returns `message` and the `attendance_version` after this write.                                                                   |
+| `DELETE` | `/meals/:meal_id/residents/:resident_id`                  | `{ "attendance_version": 3 }`                                     | Cancels the signup. Returns `message` and the `attendance_version` after this write.                                                                                            |
+| `POST`   | `/meals/:meal_id/residents/:resident_id/guests`           | `{ "vegetarian": false }`                                         | Adds one guest hosted by that resident. `vegetarian` and an `Idempotency-Key` header are required (see "Guests" below). Returns the guest, including its `id`.                  |
+| `DELETE` | `/meals/:meal_id/residents/:resident_id/guests/:guest_id` |                                                                   | Removes that guest.                                                                                                                                                             |
 
 Each flag is true or false, as "True and false" above says. A refused
 flag answers `400`, and nothing is saved. The `message` names each
@@ -239,6 +244,32 @@ refused flag, one per line: `"Late must be true or false"`,
 - On a `PATCH`, a missing flag is fine: it changes only the flags it
   sends, and the other keeps its stored value. A flag that is sent is
   checked the same way.
+
+#### The attendance version
+
+A sign-up, a change and a cancel can each send `attendance_version`: the
+version of this resident's sign-up on this meal that the client expects
+the server to have before this write. That is the `attendance_version`
+the meal form showed, plus one for each write the client sent on this
+resident since then.
+
+When the stored version is another number, nothing is written, and the
+answer is `409` with `"type": "stale"`, a `message`, and the stored
+`attendance_version`. Read the meal form again before you send another
+write. This refuses a request that reaches the server after a newer one,
+or after the client stopped waiting for it, and a request built before
+someone else changed the same sign-up. Checking only "signed up or not"
+would not catch all of these: a sign-up that arrives after a newer
+sign-up and cancel finds the resident not signed up, which is what it
+expects.
+
+The version must be a whole number, 0 or more, as a JSON number or as
+text of digits. Anything else is a `400`. A settled meal answers with
+its own `400` first.
+
+A request with no `attendance_version`, or `null`, is not checked. It
+works as it did before the version existed, so pages and scripts written
+before it keep working.
 
 Any resident can sign up, cancel, or add guests for any other resident.
 The app is a shared screen in the common house, and the API is the same.

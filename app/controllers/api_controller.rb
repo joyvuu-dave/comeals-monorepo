@@ -81,10 +81,11 @@ class ApiController < ActionController::API
            status: :unauthorized
   end
 
+  NOT_FOUND = "The page you were looking for doesn't exist. You may have " \
+              'mistyped the address or the page may have moved.'
+
   def not_found_api
-    msg = "The page you were looking for doesn't exist. You may have " \
-          'mistyped the address or the page may have moved.'
-    render json: { message: msg }, status: :not_found
+    render json: { message: NOT_FOUND }, status: :not_found
   end
 
   private

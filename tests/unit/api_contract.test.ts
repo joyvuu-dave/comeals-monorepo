@@ -115,6 +115,7 @@ const manifests: Record<string, string[]> = {
     vegetarian: true,
     can_cook: true,
     active: true,
+    attendance_version: true,
   }),
   MealResident: keysOf<MealResident>({
     id: true,
@@ -123,6 +124,7 @@ const manifests: Record<string, string[]> = {
     late: true,
     vegetarian: true,
     created_at: true,
+    attendance_version: true,
   }),
 };
 

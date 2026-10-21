@@ -141,6 +141,18 @@ GuestAddKey:
     NullConstraintChecker:
       enabled: false
 
+# Only the trigger comeals_count_attendance_version writes a row; the
+# model is read-only (AttendanceVersion#readonly?). The NOT NULL and
+# CHECK constraints and the unique index are the rules, and no
+# validation would ever run.
+AttendanceVersion:
+  index_attendance_versions_on_meal_id_and_resident_id:
+    UniqueIndexChecker:
+      enabled: false
+  version:
+    NullConstraintChecker:
+      enabled: false
+
 # Charges are written only by Settlement, inside the meal lock, one credit
 # per cook and one debit per attendee. The unique indexes are the rule;
 # the writes skip validations on purpose (docs/adr/0003).

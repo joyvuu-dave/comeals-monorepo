@@ -30,6 +30,7 @@ const MEAL_RESIDENT = {
   late: false,
   vegetarian: false,
   created_at: "2023-06-15T18:30:00.000Z",
+  attendance_version: 1,
 };
 axios.mockImplementation(() =>
   Promise.resolve({ status: 200, data: MEAL_RESIDENT }),

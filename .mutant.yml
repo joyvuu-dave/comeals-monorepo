@@ -76,6 +76,7 @@ matcher:
     - SnapshotRead*
     - ThirdCookWarning*
     - TrueOrFalse*
+    - AttendanceVersionParam*
     - YearMonthDay*
     - ZoneChange*
     # jobs, mailers, helpers, lib
@@ -109,6 +110,7 @@ matcher:
     - BugsnagErrorSubscriber*
     # models and concerns
     - ApplicationRecord*
+    - AttendanceVersion*
     - AdminUser*
     - Bill*
     - BillsSaveKey*
@@ -155,6 +157,7 @@ matcher:
     - ApplicationController*
     - FallbackController*
     - MealStatusActions*
+    - AttendanceVersionCheck*
     - RefusedDestroyMessage*
     - SuperuserAdapter*
     - Api::V1::CommonHouseReservationsController*

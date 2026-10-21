@@ -96,6 +96,34 @@ $$;
 
 
 --
+-- Name: comeals_count_attendance_version(); Type: FUNCTION; Schema: public; Owner: -
+--
+
+CREATE FUNCTION public.comeals_count_attendance_version() RETURNS trigger
+    LANGUAGE plpgsql
+    AS $$
+BEGIN
+  IF TG_OP IN ('UPDATE', 'DELETE') THEN
+    INSERT INTO attendance_versions (meal_id, resident_id, version)
+    VALUES (OLD.meal_id, OLD.resident_id, 1)
+    ON CONFLICT (meal_id, resident_id)
+    DO UPDATE SET version = attendance_versions.version + 1;
+  END IF;
+
+  IF TG_OP = 'INSERT' OR (TG_OP = 'UPDATE' AND
+      (NEW.meal_id, NEW.resident_id) IS DISTINCT FROM (OLD.meal_id, OLD.resident_id)) THEN
+    INSERT INTO attendance_versions (meal_id, resident_id, version)
+    VALUES (NEW.meal_id, NEW.resident_id, 1)
+    ON CONFLICT (meal_id, resident_id)
+    DO UPDATE SET version = attendance_versions.version + 1;
+  END IF;
+
+  RETURN NULL;
+END;
+$$;
+
+
+--
 -- Name: comeals_local_day(timestamp without time zone, text); Type: FUNCTION; Schema: public; Owner: -
 --
 
@@ -760,6 +788,38 @@ CREATE TABLE public.ar_internal_metadata (
     created_at timestamp(6) without time zone NOT NULL,
     updated_at timestamp(6) without time zone NOT NULL
 );
+
+
+--
+-- Name: attendance_versions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.attendance_versions (
+    id bigint NOT NULL,
+    meal_id bigint NOT NULL,
+    resident_id bigint NOT NULL,
+    version bigint NOT NULL,
+    CONSTRAINT attendance_versions_version_positive CHECK ((version > 0))
+);
+
+
+--
+-- Name: attendance_versions_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.attendance_versions_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: attendance_versions_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.attendance_versions_id_seq OWNED BY public.attendance_versions.id;
 
 
 --
@@ -2292,6 +2352,13 @@ ALTER TABLE ONLY public.admin_users ALTER COLUMN id SET DEFAULT nextval('public.
 
 
 --
+-- Name: attendance_versions id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_versions ALTER COLUMN id SET DEFAULT nextval('public.attendance_versions_id_seq'::regclass);
+
+
+--
 -- Name: audits id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2599,6 +2666,14 @@ ALTER TABLE ONLY public.admin_users
 
 ALTER TABLE ONLY public.ar_internal_metadata
     ADD CONSTRAINT ar_internal_metadata_pkey PRIMARY KEY (key);
+
+
+--
+-- Name: attendance_versions attendance_versions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_versions
+    ADD CONSTRAINT attendance_versions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2986,6 +3061,20 @@ CREATE UNIQUE INDEX index_admin_users_on_email ON public.admin_users USING btree
 --
 
 CREATE UNIQUE INDEX index_admin_users_on_reset_password_token ON public.admin_users USING btree (reset_password_token);
+
+
+--
+-- Name: index_attendance_versions_on_meal_id_and_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_attendance_versions_on_meal_id_and_resident_id ON public.attendance_versions USING btree (meal_id, resident_id);
+
+
+--
+-- Name: index_attendance_versions_on_resident_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_attendance_versions_on_resident_id ON public.attendance_versions USING btree (resident_id);
 
 
 --
@@ -3717,6 +3806,13 @@ CREATE TRIGGER meal_corrections_guard BEFORE INSERT OR DELETE OR UPDATE ON publi
 
 
 --
+-- Name: meal_residents meal_residents_count_attendance_version; Type: TRIGGER; Schema: public; Owner: -
+--
+
+CREATE TRIGGER meal_residents_count_attendance_version AFTER INSERT OR DELETE OR UPDATE ON public.meal_residents FOR EACH ROW EXECUTE FUNCTION public.comeals_count_attendance_version();
+
+
+--
 -- Name: meal_residents meal_residents_reject_settled_write; Type: TRIGGER; Schema: public; Owner: -
 --
 
@@ -4048,6 +4144,14 @@ ALTER TABLE ONLY public.bills
 
 
 --
+-- Name: attendance_versions fk_rails_7b807cc036; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_versions
+    ADD CONSTRAINT fk_rails_7b807cc036 FOREIGN KEY (resident_id) REFERENCES public.residents(id) ON DELETE CASCADE;
+
+
+--
 -- Name: meal_residents fk_rails_7bb4e17f2a; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4200,6 +4304,14 @@ ALTER TABLE ONLY public.rotations
 
 
 --
+-- Name: attendance_versions fk_rails_d5c314d1a4; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.attendance_versions
+    ADD CONSTRAINT fk_rails_d5c314d1a4 FOREIGN KEY (meal_id) REFERENCES public.meals(id) ON DELETE CASCADE;
+
+
+--
 -- Name: bills fk_rails_d7e3fd1337; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4247,6 +4359,7 @@ SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
 ('20261023120000'),
+('20261021130000'),
 ('20261021120000'),
 ('20261016130000'),
 ('20261016120000'),

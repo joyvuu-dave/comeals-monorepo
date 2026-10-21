@@ -4,6 +4,13 @@
 # The meal form: GET /api/v1/meals/:meal_id/cooks. One meal, its bills,
 # its guests, and the residents (see #residents), each marked with
 # whether they are attending this meal.
+#
+# Built with `params: { attendance_versions: }`, the versions of the
+# meal's attendance by resident id (AttendanceVersion.by_resident_id).
+# The controller reads them before the meal's attendance rows
+# (AttendanceVersionCheck#read_attendance_versions says why). Left out,
+# they are read here, after the rows; that order is fine for a test or
+# the console, not for the page.
 class MealFormSerializer
   include Alba::Resource
 
@@ -15,8 +22,9 @@ class MealFormSerializer
                :no_cost
   end
 
-  # Built with `params: { meal: meal }`: each row needs the meal to say
-  # whether this resident is attending it.
+  # Built with `params: { meal:, attendance_versions: }`: each row needs
+  # the meal to say whether this resident is attending it, and the
+  # versions of the meal's attendance (AttendanceVersion.by_resident_id).
   class ResidentSerializer
     include Alba::Resource
 
@@ -29,7 +37,8 @@ class MealFormSerializer
                :late,
                :vegetarian,
                :can_cook,
-               :active
+               :active,
+               :attendance_version
 
     def meal_id(_resident)
       meal.id
@@ -53,6 +62,14 @@ class MealFormSerializer
     # cost yet", not "102 - Jane hasn't entered a cost yet".
     def short_name(resident)
       resident.name
+    end
+
+    # How many writes there have been to this person's attendance on
+    # this meal (AttendanceVersion). The page sends it with each sign-up,
+    # take-off, Late and Veg tap, so the server can refuse a request built
+    # on an older state.
+    def attendance_version(resident)
+      attendance_versions.fetch(resident.id, AttendanceVersion::NONE)
     end
 
     def late(resident)
@@ -79,6 +96,12 @@ class MealFormSerializer
     # controller preloads meal.meal_residents, so it is no extra query.
     def meal_residents_by_resident_id
       @meal_residents_by_resident_id ||= meal.meal_residents.index_by(&:resident_id)
+    end
+
+    # By resident id, read by the controller before the attendance rows
+    # (MealsController#read_attendance_versions says why).
+    def attendance_versions
+      params.fetch(:attendance_versions)
     end
   end
 
@@ -107,7 +130,8 @@ class MealFormSerializer
 
   attribute :residents do |meal|
     T.bind(self, MealFormSerializer)
-    ResidentSerializer.new(residents(meal), params: { meal: meal }).to_h
+    versions = params.fetch(:attendance_versions) { AttendanceVersion.by_resident_id(meal.id) }
+    ResidentSerializer.new(residents(meal), params: { meal: meal, attendance_versions: versions }).to_h
   end
 
   many :guests, resource: GuestSerializer

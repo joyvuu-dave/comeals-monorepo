@@ -14,6 +14,7 @@ import axios, { AxiosResponse } from "axios";
 
 import {
   Ack,
+  AttendanceAck,
   BillsAck,
   Guest,
   GuestReplayed,
@@ -47,6 +48,19 @@ export const BILLS_SAVE_TIMEOUT_MS = 35000;
 
 interface SocketBound {
   socketId: string | null;
+}
+
+// The version of the person's attendance on the meal that the page
+// expects the server to have before this write (public/api.md, "The
+// attendance version"). null when the page does not know it: a copy of
+// the meal saved on the device before the meal form had versions. The
+// request then carries none, and the server does not check it.
+interface AttendanceVersioned {
+  attendanceVersion: number | null;
+}
+
+function attendanceVersionField(version: number | null) {
+  return version === null ? {} : { attendance_version: version };
 }
 
 // How long the page waits for the answer to a tap on a row of the
@@ -161,28 +175,38 @@ export const api = {
           late,
           vegetarian,
           socketId,
-        }: { late: boolean; vegetarian: boolean } & SocketBound,
+          attendanceVersion,
+        }: { late: boolean; vegetarian: boolean } & SocketBound &
+          AttendanceVersioned,
       ): Promise<AxiosResponse<MealResident>> {
         return axios({
           method: "post",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
           withCredentials: true,
           timeout: SIGNUP_TIMEOUT_MS,
-          data: { late, vegetarian, socket_id: socketId },
+          data: {
+            late,
+            vegetarian,
+            socket_id: socketId,
+            ...attendanceVersionField(attendanceVersion),
+          },
         });
       },
 
       remove(
         mealId: number,
         residentId: number,
-        { socketId }: SocketBound,
-      ): Promise<AxiosResponse<Ack>> {
+        { socketId, attendanceVersion }: SocketBound & AttendanceVersioned,
+      ): Promise<AxiosResponse<AttendanceAck>> {
         return axios({
           method: "delete",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
           withCredentials: true,
           timeout: SIGNUP_TIMEOUT_MS,
-          data: { socket_id: socketId },
+          data: {
+            socket_id: socketId,
+            ...attendanceVersionField(attendanceVersion),
+          },
         });
       },
 
@@ -191,15 +215,21 @@ export const api = {
       update(
         mealId: number,
         residentId: number,
-        patch: ({ late: boolean } | { vegetarian: boolean }) & SocketBound,
-      ): Promise<AxiosResponse<Ack>> {
-        const { socketId, ...rest } = patch;
+        patch: ({ late: boolean } | { vegetarian: boolean }) &
+          SocketBound &
+          AttendanceVersioned,
+      ): Promise<AxiosResponse<AttendanceAck>> {
+        const { socketId, attendanceVersion, ...rest } = patch;
         return axios({
           method: "patch",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
           withCredentials: true,
           timeout: SIGNUP_TIMEOUT_MS,
-          data: { ...rest, socket_id: socketId },
+          data: {
+            ...rest,
+            socket_id: socketId,
+            ...attendanceVersionField(attendanceVersion),
+          },
         });
       },
 

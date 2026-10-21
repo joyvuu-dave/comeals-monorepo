@@ -134,3 +134,19 @@ module MealStatusActions
   end
   def render_write_under_lock(before_settled_check: nil, &blk); end
 end
+
+module AttendanceVersionCheck
+  sig { returns(ActionController::Parameters) }
+  def params; end
+
+  sig { returns(Meal) }
+  def meal; end
+
+  sig { params(message: String).void }
+  def render_refused(message); end
+
+  sig do
+    params(before_settled_check: T.untyped, blk: T.proc.returns(T::Hash[Symbol, T.untyped])).void
+  end
+  def render_write_under_lock(before_settled_check: nil, &blk); end
+end

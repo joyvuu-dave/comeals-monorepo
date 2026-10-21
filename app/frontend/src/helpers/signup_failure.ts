@@ -99,4 +99,26 @@ export function showSignupFailure(
     show: (message: string, type: ToastType) =>
       toastStore.show(`${who}: ${message}`, type),
   });
+  // An attendance write built on an old version of the person's
+  // attendance wrote nothing (public/api.md, "The attendance version").
+  // The screen shows what the page thought, not what the server has, so
+  // the meal loads again.
+  if (staleAnswer(error)) {
+    evictMealCache(tapped.mealId);
+    if (onScreen) store.reloadAfterSignupRequest(tapped.mealId);
+  }
+}
+
+// True for the server's 409 of type "stale".
+function staleAnswer(error: unknown): boolean {
+  const response = (
+    error as { response?: { status?: number; data?: unknown } } | null
+  )?.response;
+  const data = response?.data;
+  return (
+    response?.status === 409 &&
+    typeof data === "object" &&
+    data !== null &&
+    (data as { type?: unknown }).type === "stale"
+  );
 }

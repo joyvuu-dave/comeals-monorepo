@@ -21,7 +21,8 @@ RSpec.describe 'Meal show_cooks endpoint performance' do
   # Nothing on this page is cached (MealsController#show_cooks says why),
   # so this bound holds for every request, not only the first. The budget:
   # token auth (2), the meal with its bills, attendance and guests (4), the
-  # sign-up list with units (2), and the previous and next meal ids (2).
+  # sign-up list with units (2), the previous and next meal ids (2), and
+  # the versions of the meal's attendance (1).
   it 'loads the meal form in a bounded number of queries on every request' do
     token # force memoization before the counted block so lazy .keys load doesn't pollute
     get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
@@ -31,6 +32,6 @@ RSpec.describe 'Meal show_cooks endpoint performance' do
     end
 
     expect(response).to have_http_status(:ok)
-    expect(query_count).to be <= 11
+    expect(query_count).to be <= 12
   end
 end

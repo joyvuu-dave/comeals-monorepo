@@ -19,10 +19,10 @@ RSpec.describe 'API write responses' do
       expect(response).to have_http_status(:ok)
 
       patch "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token, late: true, vegetarian: false }
-      expect(response.parsed_body).to eq('message' => 'MealResident updated.')
+      expect(response.parsed_body).to eq('message' => 'MealResident updated.', 'attendance_version' => 2)
 
       delete "/api/v1/meals/#{meal.id}/residents/#{resident.id}", params: { token: token }
-      expect(response.parsed_body).to eq('message' => 'MealResident destroyed.')
+      expect(response.parsed_body).to eq('message' => 'MealResident destroyed.', 'attendance_version' => 3)
 
       post "/api/v1/meals/#{meal.id}/residents/#{resident.id}/guests", params: { token: token, vegetarian: false },
                                                                        headers: IdempotencyKey.header
