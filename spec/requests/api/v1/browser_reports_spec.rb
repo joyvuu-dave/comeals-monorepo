@@ -13,6 +13,8 @@ require 'rails_helper'
 RSpec.describe 'POST /api/v1/browser-reports' do
   include ActiveJob::TestHelper
 
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:path) { '/api/v1/browser-reports' }
 
   let(:iphone_safari) do
@@ -29,6 +31,8 @@ RSpec.describe 'POST /api/v1/browser-reports' do
       '(KHTML, like Gecko) Version/18.6 Safari/605.1.15'
   end
   let(:googlebot) { 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)' }
+
+  before { create(:community, timezone: 'America/Los_Angeles') }
 
   def send_report(query, user_agent: iphone_safari, headers: {}, **)
     post("#{path}?#{query}", headers: { 'User-Agent' => user_agent, 'REMOTE_ADDR' => '203.0.113.9' }.merge(headers), **)
@@ -62,6 +66,15 @@ RSpec.describe 'POST /api/v1/browser-reports' do
 
     expect(response).to have_http_status(:no_content)
     expect(BrowserReportJob).to have_been_enqueued.with(hash_including(result: 'error', error: 'TypeError: boom'))
+  end
+
+  # The day the page loaded, in the community's zone (Community#today),
+  # and not the day the job happens to run. 03:00 UTC on October 22 is
+  # still October 21 in the community.
+  it 'dates the report by the community\'s day when it arrives' do
+    travel_to(Time.utc(2026, 10, 22, 3, 0, 0)) { send_report('result=passed&touch=0') }
+
+    expect(BrowserReportJob).to have_been_enqueued.with(hash_including(date: Date.new(2026, 10, 21)))
   end
 
   it 'never passes the IP address on' do

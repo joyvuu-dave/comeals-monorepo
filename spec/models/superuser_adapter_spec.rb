@@ -5,6 +5,12 @@ require 'rails_helper'
 # Adapter logic in isolation. spec/requests/admin/superuser_authorization_spec.rb
 # proves ActiveAdmin actually invokes it end-to-end through routing.
 RSpec.describe SuperuserAdapter do
+  # A page registered with ActiveAdmin.register_page, by its name.
+  def admin_page(name)
+    ActiveAdmin.application.namespaces.flat_map { |namespace| namespace.resources.grep(ActiveAdmin::Page) }
+               .find { |page| page.name == name } || raise("no admin page named #{name}")
+  end
+
   let(:community) { create(:community) }
   let(:superuser) { create(:admin_user, community: community, superuser: true) }
   let(:admin) { create(:admin_user, community: community, superuser: false) }
@@ -191,6 +197,19 @@ RSpec.describe SuperuserAdapter do
     # refusing the dashboard would make every denial a redirect loop.
     it 'may still read the dashboard, which is the redirect target for denials' do
       expect(adapter_for(admin).authorized?(:read)).to be true
+      expect(adapter_for(admin).authorized?(:read, admin_page('Dashboard'))).to be true
+    end
+
+    # Pages, like models, are read from an allowlist: the dashboard only.
+    # The browser counts are not linked from any email.
+    it 'may not read any other admin page, such as the browser counts' do
+      expect(adapter_for(admin).authorized?(:read, admin_page('Browsers'))).to be false
+    end
+  end
+
+  describe 'an admin page' do
+    it 'is read by any admin' do
+      expect(adapter_for(admin).authorized?(:read, admin_page('Browsers'))).to be true
     end
   end
 end

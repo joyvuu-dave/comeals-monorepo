@@ -24,6 +24,8 @@ const SIGNED_OUT_PAGES = [
 
 const SIGNED_IN_PAGES = [
   ["dashboard-index", "/dashboard"],
+  // The seed counts two months of page loads (tests/admin/seed.rb).
+  ["browsers-index", "/browsers"],
   ["admin_users-index", "/admin_users"],
   ["admin_users-show", "/admin_users/1"],
   ["admin_users-new", "/admin_users/new"],

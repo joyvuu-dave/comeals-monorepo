@@ -3,7 +3,8 @@
 require 'rails_helper'
 
 # One report from the browser check (Api::V1::BrowserReportsController).
-# A failed check, or a check that broke, alerts the owner through
+# Every report counts one page load in browser_counts. A failed check, or
+# a check that broke, also alerts the owner through
 # Rails.error, which Bugsnag emails. The alert is sent from the job, not
 # from the request, so it carries no request data: Bugsnag's Rack
 # middleware would add the IP address to anything reported during a
@@ -12,7 +13,7 @@ RSpec.describe BrowserReportJob do
   include ActiveJob::TestHelper
 
   let(:report) do
-    { result: 'passed', tests: [], error: nil,
+    { date: Date.new(2026, 10, 21), result: 'passed', tests: [], error: nil,
       browser: 'Safari', major: 15, os: 'iOS', device: 'phone',
       user_agent: 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X)' }
   end
@@ -70,6 +71,44 @@ RSpec.describe BrowserReportJob do
       expect(error.message).to eq('The browser check broke in Safari 15 on iOS (phone): TypeError: boom')
       expect(severity).to eq(:error)
       expect(context[:grouping_hash]).to eq('BrowserCheckBroke')
+    end
+  end
+
+  describe 'the count' do
+    it 'counts the page load, by the day it was loaded' do
+      described_class.perform_now(**report)
+
+      expect(BrowserCount.sole).to have_attributes(date: Date.new(2026, 10, 21), browser: 'Safari', major: 15,
+                                                   os: 'iOS', device: 'phone', result: 'passed', count: 1)
+    end
+
+    it 'counts a failed check as failed' do
+      described_class.perform_now(**report, result: 'failed', tests: %w[cookies])
+
+      expect(BrowserCount.sole.result).to eq('failed')
+    end
+
+    it 'keeps no User-Agent string, no test names and no error' do
+      described_class.perform_now(**report, result: 'error', error: 'TypeError: boom')
+
+      expect(BrowserCount.column_names).not_to include('user_agent', 'tests', 'error', 'ip')
+      expect(BrowserCount.sole.attributes.values.map(&:to_s)).not_to include(report[:user_agent], 'TypeError: boom')
+    end
+
+    # A count that cannot be written is tried again a few seconds later,
+    # and in the end reported, never raised. The alert goes once, not once
+    # per try.
+    it 'reports a count it cannot write, and sends the alert once' do
+      allow(BrowserCount).to receive(:add_one!).and_raise(ActiveRecord::ConnectionNotEstablished, 'no database')
+
+      perform_enqueued_jobs do
+        described_class.perform_later(**report, result: 'failed', tests: %w[lookbehind])
+      end
+
+      expect(BrowserCount).to have_received(:add_one!).exactly(described_class::ATTEMPTS).times
+      expect(Rails.error).to have_received(:report).with(an_instance_of(UnsupportedBrowserSeen), anything).once
+      expect(Rails.error).to have_received(:report)
+        .with(an_instance_of(ActiveRecord::ConnectionNotEstablished), hash_including(handled: true)).once
     end
   end
 end
