@@ -333,26 +333,47 @@ snapshot (`settlement_after_a_raw_write_race_spec.rb`,
 ## What the Solid Queue storm found (2026-10-20)
 
 The first runs of `STORM_SOLID_QUEUE=1`, on the jobs-dyno branch, on
-PostgreSQL 16 and 18. Each one has a failing spec and is not fixed yet.
+PostgreSQL 16 and 18. Each one got a failing spec, and all three were
+fixed the same evening.
 
-- Four steps that `config/initializers/solid_queue_isolation.rb` wraps
-  at READ COMMITTED raise `TransactionIsolationError` whenever they open
-  a savepoint, because the level is given to every transaction opened
-  inside the wrapper, savepoints too: the scheduler queueing a
-  recurring task (on every tick), a worker deregistering with a job
-  claimed, the worker recording a job that raised (the job stays
-  claimed and holds its semaphore), and the dispatcher moving a due job
+- Four steps that `config/initializers/solid_queue_isolation.rb` wrapped
+  at READ COMMITTED raised `TransactionIsolationError` whenever they
+  opened a savepoint, because the wrapper gave its level to every
+  transaction opened inside it, savepoints too: the scheduler queueing a
+  recurring task (on every tick; staging showed the same error at every
+  tick while every heartbeat was fresh), a worker deregistering with a
+  job claimed, the worker recording a job that raised (the job stayed
+  claimed and held its semaphore), and the dispatcher moving a due job
   with a concurrency limit to ready
   (`spec/config/initializers/solid_queue_isolation_savepoint_spec.rb`).
-- The UPDATE that gives a finished job's semaphore back runs outside
-  any transaction, so at the session's SERIALIZABLE, and PostgreSQL
-  refuses it under load. The job is finished, but the semaphore is not
-  given back, so the next run of that job waits up to an hour. At 128
-  clients on PostgreSQL 18 this left 350 to 430 recurring jobs blocked
-  (same spec file).
-- `RecurringCatchUp` does not try a conflict again. Two supervisors
-  starting at once conflict on each job's semaphore row, and neither
-  queues the job (`spec/services/recurring_catch_up_spec.rb`).
+- The UPDATE that gives a finished job's semaphore back ran outside any
+  transaction, so at the session's SERIALIZABLE, and PostgreSQL refused
+  it under load. The job was finished, but the semaphore was not given
+  back, so the next run of that job waited up to an hour. At 128 clients
+  on PostgreSQL 18 this left 350 to 430 recurring jobs blocked (same
+  spec file).
+- `RecurringCatchUp` did not try a conflict again. Two supervisors
+  starting at once conflicted on each job's semaphore row, and neither
+  queued the job (`spec/services/recurring_catch_up_spec.rb`).
+
+The fix for the first two: each step on the initializer's list, when
+called with no transaction open, now runs in one explicit READ
+COMMITTED transaction, and the semaphore give-back is on the list (ADR
+0005 decision 10 has the details and what stays at SERIALIZABLE).
+`RecurringCatchUp` now retries with `RetryOnConflict`. And because the
+heartbeat check passed on staging while the scheduler failed,
+`rake deploy:verify_recurring_job` now queues a recurring task the way
+the scheduler does and waits for the worker to run it, in `bin/deploy`,
+the staging rehearsal and the weekly workflow.
+
+Runs after the fix, 2026-10-20: the default shape, a 1 s heartbeat,
+and two jobs processes, three times each on PostgreSQL 16 and 18, then
+128 clients for 60 s twice on each. No `TransactionIsolationError`, no
+conflict line from Solid Queue's own work in any jobs log, and every
+queue drained with no claim left. The runs that failed, failed only on
+the limits below, and on one more line: with two jobs processes, the
+first try of a catch-up enqueue conflicts and Active Job logs "Failed
+enqueuing" for it, though the retry then queues the job.
 
 Two things the storm shows that are limits, not failing specs: a push
 whose enqueue conflicts three times in a row is lost (0 to 4 in a

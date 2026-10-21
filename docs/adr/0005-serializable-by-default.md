@@ -359,28 +359,75 @@ What it gives up. PostgreSQL checks for conflicts only among
 SERIALIZABLE transactions, so these writes are outside that check. They
 touch only Solid Queue's own tables, which no app transaction reads to
 make a decision, and Solid Queue is written for READ COMMITTED (its
-README says it runs that way itself). Two parts stay at SERIALIZABLE
-anyway: a call made inside a transaction that is already open joins it,
-and a statement Solid Queue runs outside a transaction (giving back a
-semaphore, deleting expired ones) runs at the session's level, because
-Rails sets the level only for transactions it opens. Neither failed in
-the runs above. One conflict this does not remove: an app transaction
-that queues a `limits_concurrency` job can still fail if a job with the
-same key finished after it started, because it locks that key's
-semaphore row. `RetryOnConflict` retries that, as it retries any
-conflict.
+README says it runs that way itself). Some of its work stays at
+SERIALIZABLE anyway. A step called inside a transaction that is already
+open joins it at its level. And a few single reads that Solid Queue makes
+outside any transaction, in loops whose other steps each have their own
+transaction, still run at the session's level: the supervisor's reads of
+dead processes and of the jobs they held, and the dispatcher's two reads
+before it lets blocked jobs go. Wrapping those loops would join their
+steps into one transaction (below). One conflict this does not remove:
+an app transaction that queues a `limits_concurrency` job can still fail
+if a job with the same key finished after it started, because it locks
+that key's semaphore row. `RetryOnConflict` retries that, as it retries
+any conflict.
 
-How. `config/initializers/solid_queue_isolation.rb` wraps the ten gem
-methods that open those transactions in
-`ActiveRecord.with_transaction_isolation_level(:read_committed)`. Boot
-fails if one of them is gone after an upgrade. The specs:
-`spec/db/solid_queue_process_rows_race_spec.rb` and
+How. `config/initializers/solid_queue_isolation.rb` lists the gem
+methods that do this work. When one of them is called with no
+transaction open, it runs inside one explicit
+`SolidQueue::Record.transaction(isolation: :read_committed)`. The
+transactions Solid Queue opens inside it join it, or become savepoints,
+and neither asks for a level of its own. A statement Solid Queue used to
+run outside any transaction (giving a semaphore back, deleting expired
+semaphores, saving the scheduler's task list) now runs inside one.
+
+Putting a method inside one transaction joins every transaction it used
+to run into one. A failure late in the method then undoes work from
+early in it, and locks are held longer. The initializer says, for each
+method, how many it ran before and why one is safe. Where one is not
+safe, a smaller piece is wrapped instead:
+
+- When the worker finishes a job, Solid Queue marks it finished or
+  failed, and only after that commits does it give the semaphore back
+  and let the next blocked job go. It keeps them apart so that a failure
+  in the second part cannot undo a job that already ran. So these are
+  three wrapped steps, each its own transaction, not one.
+- The scheduler's `RecurringTask#enqueue` rescues the error a second
+  scheduler gets when the same run is already recorded. Inside an outer
+  transaction that rescue would come before the rollback, and the
+  duplicate job would be committed. So `RecurringExecution.record`, the
+  part that queues and records, is wrapped instead.
+- The dispatcher lets one blocked job go for each key in its own
+  transaction. In one transaction it would hold every key's semaphore
+  lock, in key order, while the app queues a settlement's two mail jobs
+  in the other order: a deadlock. Each release is wrapped instead.
+
+What came before, and why it changed. Until the evening of 2026-10-20
+the wrapper used `ActiveRecord.with_transaction_isolation_level`, a
+setting for the thread. Rails gives that level to every transaction it
+opens, savepoints included, and refuses a level on a savepoint
+(`TransactionIsolationError`). So every step that opens a savepoint
+raised: the scheduler queued no recurring job on any tick (on staging
+too, where every heartbeat was still fresh), a job that raised stayed
+claimed, and a stopped worker could not remove itself. And the statement
+that gives a semaphore back, outside any transaction, stayed at
+SERIALIZABLE and was refused under load. `bin/storm` with
+`STORM_SOLID_QUEUE=1` found all of it the same day. After a deploy,
+`rake deploy:verify_recurring_job` now queues a recurring task the way
+the scheduler does and fails unless the worker runs it.
+
+The specs: `spec/db/solid_queue_process_rows_race_spec.rb` and
 `spec/db/solid_queue_bookkeeping_race_spec.rb` (the conflicts),
 `spec/config/initializers/solid_queue_isolation_spec.rb` (every method
-wrapped; a real worker runs a job's `perform` at SERIALIZABLE and its
-own steps at READ COMMITTED; an app enqueue stays SERIALIZABLE and rolls
-back), and `spec/services/settle_and_notify_spec.rb` (both mail jobs
-roll back with a refused settlement).
+wrapped; the methods that must stay apart are not on the list; a real
+worker runs a job's `perform` at SERIALIZABLE and its own steps at READ
+COMMITTED, finish, semaphore and release each in its own transaction; a
+failed release leaves the finished job finished; an app enqueue, inside
+a transaction or not, stays SERIALIZABLE; a second enqueue of the same
+recurring run is rolled back),
+`spec/config/initializers/solid_queue_isolation_savepoint_spec.rb` (the
+steps that open a savepoint), and `spec/services/settle_and_notify_spec.rb`
+(both mail jobs roll back with a refused settlement).
 
 ## Consequences
 
