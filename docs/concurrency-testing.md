@@ -384,3 +384,23 @@ seconds, the server runs out of shared memory for its SSI locks
 (`max_pred_locks_per_transaction`); without Solid Queue the same 256
 clients do not, but the laptop is already past its limit there (p95
 5.6 s).
+
+Both limits were kept as they are on purpose (decided 2026-10-20), so a
+storm run that fails only on them is not a new bug:
+
+- The nightly jobs try 5 times (`RecurringJob::CONFLICT_ATTEMPTS`),
+  about 4 to 7.5 seconds of waiting in all. A job that runs out is
+  marked failed, Bugsnag and healthchecks.io report it, and it runs
+  again the next night. Every job is safe to run twice, so nothing is
+  lost, only a day late. More tries would cost something: the worker
+  runs one job at a time, so every job queued behind it, live pushes
+  included, would wait while it sleeps between tries (about a minute at
+  8 tries, about 4 minutes at 10).
+- A push tries 3 times. The save it reports is already committed and
+  the person who saved sees it. Other open screens miss that one update
+  and show the old state until their next update or a reload. More
+  tries would make the saving request wait longer, and the web dyno
+  serves one request at a time.
+
+Each limit needs many writes to the same rows in the same moment. The
+storm makes hundreds a second; the community makes a few an hour.
