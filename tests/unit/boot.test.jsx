@@ -425,3 +425,35 @@ describe("the detached-node warning", () => {
     expect(await setLivelinessChecking()).not.toHaveBeenCalled();
   });
 });
+
+// The browser check in index.html (app/frontend/browser_check.js) runs
+// before this file. When it turns the browser away, it has already
+// drawn its message in the root, and the app must not draw over it, or
+// send errors from a browser it knows cannot run the app.
+describe("a browser the browser check turned away", () => {
+  afterEach(() => {
+    delete window.comealsBrowserCheck;
+  });
+
+  async function startBugsnag() {
+    return (await import(`${SRC}/helpers/bugsnag`)).startBugsnag;
+  }
+
+  it("does not start the app or the error reports", async () => {
+    vi.mocked(await startBugsnag()).mockClear();
+    window.comealsBrowserCheck = { result: "failed", failed: ["lookbehind"] };
+    await bootApp("/", { signedOut: true });
+    expect(document.getElementById("root")).toBeEmptyDOMElement();
+    expect(bootedStore).toBeNull();
+    expect(await startBugsnag()).not.toHaveBeenCalled();
+  });
+
+  // "error" means the check itself broke. That says nothing about the
+  // browser, so the app starts.
+  it("starts the app when the check itself broke", async () => {
+    window.comealsBrowserCheck = { result: "error", failed: [] };
+    await bootApp("/", { signedOut: true });
+    expect(await screen.findByLabelText("email")).toBeInTheDocument();
+    expect(await startBugsnag()).toHaveBeenCalled();
+  });
+});
