@@ -52,7 +52,8 @@ RSpec.describe 'test:storm', prosopite: false, type: :task do
   # What bin/storm would set, for a short, small storm.
   let(:storm_env) do
     { 'STORM_URL' => 'http://storm.test:3001', 'STORM_SECONDS' => '2', 'STORM_CLIENTS' => '2', 'STORM_SEED' => '1',
-      'STORM_MAX_P95' => nil }
+      'STORM_MAX_P95' => nil, 'STORM_SOLID_QUEUE' => nil, 'STORM_JOBS_PROCESSES' => nil, 'STORM_SQ_DRAIN' => nil,
+      'STORM_ERROR_LOG' => nil }
   end
   # What the task printed, kept when it stops with abort too.
   let(:printed) { StringIO.new }
@@ -142,5 +143,116 @@ RSpec.describe 'test:storm', prosopite: false, type: :task do
 
     expect { task.execute }.to raise_error(SystemExit).and output(/Must run in the test environment/).to_stderr
     expect(connections).to be_empty
+  end
+
+  # With STORM_SOLID_QUEUE=1 the task starts real bin/jobs processes
+  # (Storm::JobsProcess) and checks the queue after the storm
+  # (Storm::QueueChecks); both have specs of their own. Here they are
+  # stand-ins, and what is checked is how the task uses them.
+  describe 'with STORM_SOLID_QUEUE' do
+    # Records what the task does with it. Not an RSpec double: the task
+    # also stops it from an at_exit hook, after this example is over.
+    let(:jobs_process_class) do
+      Class.new do
+        attr_reader :log, :pid, :events
+
+        def initialize(log:, pid:)
+          @log = log
+          @pid = pid
+          @events = []
+        end
+
+        def start
+          @events << [:start, Community.exists?]
+          self
+        end
+
+        def wait_until_registered = @events << :registered
+        def stop = @events << :stop
+      end
+    end
+    let(:started) { [] }
+    let(:pid_file) { Rails.root.join('tmp/storm_jobs.pid') }
+    let(:checked) { [] }
+
+    around do |example|
+      kept = pid_file.exist? ? pid_file.read : nil
+      example.run
+    ensure
+      kept ? pid_file.write(kept) : FileUtils.rm_f(pid_file)
+    end
+
+    before do
+      ENV['STORM_SOLID_QUEUE'] = '1'
+      allow(Storm::JobsProcess).to receive(:new) do |log:|
+        jobs_process_class.new(log: log, pid: 101 + started.size).tap { started << it }
+      end
+      allow(Storm::QueueChecks).to receive(:after_storm) do |jobs:, error_log:, drain_timeout:, **|
+        checked << { jobs: jobs, error_log: error_log, drain_timeout: drain_timeout,
+                     events: jobs.map { it.events.dup } }
+        []
+      end
+      allow(Storm::QueueChecks).to receive(:summary).and_return({ finished: 3, failed: 0 })
+    end
+
+    it 'starts each jobs process after the seed, waits for it, and checks the queue with it still running' do
+      ENV.update('STORM_JOBS_PROCESSES' => '2', 'STORM_SQ_DRAIN' => '5', 'STORM_ERROR_LOG' => '/tmp/storm-errors.log')
+
+      storm
+
+      expect(started.map(&:log)).to eq([Rails.root.join('tmp/storm_jobs.log'), Rails.root.join('tmp/storm_jobs_2.log')])
+      expect(pid_file.read).to eq("101\n102")
+      expect(checked.size).to eq(1)
+      expect(checked.first).to include(jobs: started, error_log: '/tmp/storm-errors.log', drain_timeout: 5.0)
+      # Started once the community is planted, registered before the
+      # storm, and not stopped yet when the queue is checked.
+      expect(checked.first[:events]).to all(eq([[:start, true], :registered]))
+      expect(printed.string).to include('==> 2 bin/jobs process(es) running: pid 101, 102, heartbeat ',
+                                        'queue: {finished: 3, failed: 0}', 'No problems.')
+    end
+
+    it 'starts one jobs process and waits five minutes for the queue when nothing says otherwise' do
+      storm
+
+      expect(started.map(&:log)).to eq([Rails.root.join('tmp/storm_jobs.log')])
+      expect(checked.first).to include(error_log: '', drain_timeout: 300.0)
+    end
+
+    it 'fails, and names the problem, when the queue checks find one' do
+      allow(Storm::QueueChecks).to receive(:after_storm).and_return(['the queue did not drain in 300 s'])
+
+      expect { storm }.to raise_error(SystemExit)
+
+      expect(printed.string).to include("1 problem(s):\n  the queue did not drain in 300 s")
+    end
+  end
+
+  # Without STORM_SOLID_QUEUE the jobs run in this process, and the error
+  # log is still read: the server and this task write to it.
+  describe 'with STORM_ERROR_LOG and no Solid Queue' do
+    let(:error_log) { Tempfile.new(['storm_errors', '.log']) }
+
+    after { error_log.close! }
+
+    def report(entry)
+      error_log.write("#{JSON.generate(entry)}\n")
+      error_log.flush
+    end
+
+    it 'fails on a report the storm does not allow, and passes over one it does' do
+      retried = { 'process' => 'server', 'handled' => true, 'error' => 'ActiveRecord::SerializationFailure',
+                  'message' => 'could not serialize access', 'conflict' => true,
+                  'context' => { 'attempt' => '1', 'max_attempts' => '3' } }
+      swallowed = { 'process' => 'driver', 'handled' => true, 'error' => 'RuntimeError', 'message' => 'boom',
+                    'conflict' => false, 'context' => {} }
+      report(retried)
+      report(swallowed)
+      ENV['STORM_ERROR_LOG'] = error_log.path
+
+      expect { storm }.to raise_error(SystemExit)
+
+      expect(printed.string).to include("1 problem(s):\n  driver reported and swallowed: RuntimeError: boom")
+      expect(printed.string).not_to include('SerializationFailure')
+    end
   end
 end
