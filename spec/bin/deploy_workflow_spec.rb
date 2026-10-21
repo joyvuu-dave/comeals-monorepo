@@ -268,6 +268,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       sandbox.rule('heroku', "ps:scale worker=0 #{prod}")
       sandbox.rule('git', "show #{live}:Procfile", out: "web: puma\nworker: bin/jobs\n")
       sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}")
+      sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_recurring_job #{prod}")
       sandbox.rule('heroku', "logs -n 1500 #{prod}", out: "2026-10-19T12:35:00.1+00:00 app[web.1]: Started GET /\n")
       sandbox.rule('heroku', "rollback #{prod}")
       sandbox.rule('heroku', "releases #{prod} -n 3", out: "v614 Deploy failed\n")
@@ -424,6 +425,28 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include('Not rolling back only the code. Follow docs/runbooks/undo-a-deploy.md.')
       expect(rollbacks).to be_empty
+    end
+
+    # A process can have a heartbeat while its work fails. After the
+    # heartbeats, a recurring task is queued the way the scheduler does it,
+    # and the worker must run it.
+    it 'checks that the worker runs a queued recurring task, after the heartbeats' do
+      result = watch
+
+      expect(result.exitstatus).to eq(0)
+      checks = heroku_calls.grep(/deploy:verify/).map { it[/deploy:\w+/] }
+      expect(checks).to eq(%w[deploy:verify_solid_queue deploy:verify_recurring_job])
+    end
+
+    it 'rolls back when the worker did not run a queued recurring task' do
+      sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_recurring_job #{prod}", exit: 1)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('A recurring task queued on production did not run. Rolling back.')
+      expect(heroku_calls.grep(/verify_recurring_job/).size).to eq(1)
+      expect(rollbacks).to eq(["heroku rollback #{prod}"])
     end
 
     it 'rolls back when Solid Queue did not come up after two tries' do

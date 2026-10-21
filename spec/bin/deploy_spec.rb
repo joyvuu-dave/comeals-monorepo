@@ -56,8 +56,11 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
         'heroku run --exit-code bin/rails runner Rails.cache.clear -a comeals-monorepo',
         'heroku run --exit-code bin/rake billing:recalculate -a comeals-monorepo',
         'heroku run --exit-code bin/rake deploy:verify_solid_queue -a comeals-monorepo',
+        'heroku run --exit-code bin/rake deploy:verify_recurring_job -a comeals-monorepo',
         'smoke https://comeals.com'
       )
+      runs = deploy.calls_to('heroku').grep(/deploy:verify/)
+      expect(runs.map { it[/deploy:\w+/] }).to eq(%w[deploy:verify_solid_queue deploy:verify_recurring_job])
       expect(deploy.calls_to('curl').map { it.split.last }).to eq(
         %w[https://comeals.com https://comeals.com/api/v1/version https://www.comeals.com
            https://admin.comeals.com https://api.comeals.com https://comeals-monorepo-b68ce4e5c3d4.herokuapp.com]
@@ -842,6 +845,28 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
         'and docs/runbooks/scheduler-cutover.md'
       )
       expect(deploy.calls_to('heroku').grep(/verify_solid_queue/).size).to eq(2)
+      expect(deploy.calls_to('smoke')).to eq([])
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+  end
+
+  # Every process can have a heartbeat while its work fails: on staging
+  # on 2026-10-20 the scheduler queued nothing at any tick. The check
+  # waits for the worker itself (up to two minutes), so it runs once.
+  # State left: no maintenance, web at 1, new code live, its jobs not
+  # working. Next step: the log the script names, then roll back.
+  describe 'the recurring job check' do
+    it 'fails when the worker did not run a queued recurring task' do
+      deploy.rule('heroku', 'deploy:verify_recurring_job', exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        'Solid Queue is up, but a recurring task did not run. The nightly jobs and live updates may not run.',
+        'Read the error above, then: heroku logs -a comeals-monorepo --dyno worker | grep -i error'
+      )
+      expect(deploy.calls_to('heroku').grep(/verify_recurring_job/).size).to eq(1)
       expect(deploy.calls_to('smoke')).to eq([])
       expect_production(maintenance: false, web: 1, pushed: true)
     end

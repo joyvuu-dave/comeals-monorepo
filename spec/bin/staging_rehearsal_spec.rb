@@ -109,6 +109,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         'date -u +%Y-%m-%dT%H:%M:%S',
         "heroku config:get HEROKU_SLUG_COMMIT #{staging}",
         "heroku run --exit-code #{staging} -- bin/rake deploy:verify_solid_queue",
+        "heroku run --exit-code #{staging} -- bin/rake deploy:verify_recurring_job",
         "heroku logs -n 1500 #{staging}",
         'node tests/smoke/smoke.js',
         'node tests/smoke/aggressive.js',
@@ -158,6 +159,22 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     expect(result.out).to include('Solid Queue did not come up on staging. Read: heroku logs -a comeals-staging ' \
                                   '--dyno worker')
     expect(heroku_calls.grep(/verify_solid_queue/).size).to eq(2)
+    expect(sandbox.calls_to('node')).to be_empty
+    expect(last_worker_scale).to eq('1')
+  end
+
+  # On 2026-10-20 every heartbeat was fresh on staging while the scheduler
+  # failed at every tick. This check queues a recurring task the way the
+  # scheduler does and waits for the worker to run it.
+  it 'stops when the worker does not run a queued recurring task' do
+    sandbox.rule('heroku', "run --exit-code #{staging} -- bin/rake deploy:verify_recurring_job", exit: 1)
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(1)
+    expect(result.out).to include('A recurring task queued on staging did not run. ' \
+                                  'Read the error above and: heroku logs -a comeals-staging --dyno worker')
+    expect(heroku_calls.grep(/verify_recurring_job/).size).to eq(1)
     expect(sandbox.calls_to('node')).to be_empty
     expect(last_worker_scale).to eq('1')
   end

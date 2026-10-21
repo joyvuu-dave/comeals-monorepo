@@ -23,4 +23,13 @@ RSpec.describe 'deploy:verify_solid_queue' do
     expect { Rake::Task['deploy:verify_solid_queue'].invoke }
       .to output(/Supervisor, Dispatcher, Worker, Scheduler are running/).to_stdout
   end
+
+  describe 'deploy:verify_recurring_job' do
+    after { Rake::Task['deploy:verify_recurring_job'].reenable }
+
+    it 'raises when the scheduler has saved no task' do
+      expect { Rake::Task['deploy:verify_recurring_job'].invoke }
+        .to raise_error(/the scheduler has not saved its tasks/)
+    end
+  end
 end
