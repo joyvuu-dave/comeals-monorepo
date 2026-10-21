@@ -273,6 +273,35 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
 
   # Staging state: web at 0, the database whatever the failed restore
   # left. A new rehearsal restores it again.
+  # A dyno takes up to 30 seconds to stop after ps:scale returns. A
+  # worker still running when production's backup replaces the database
+  # finds no solid_queue tables there, and its shutdown fails.
+  it 'waits until no web or worker dyno runs before it restores' do
+    sandbox.rule('heroku', "ps #{staging} --json", out: '[{"type":"worker","state":"up"}]', once: true)
+    sandbox.rule('heroku', "ps #{staging} --json", out: '[]', once: true)
+
+    expect(rehearse.exitstatus).to eq(0)
+
+    lines = heroku_calls
+    ps_calls = lines.each_index.select { |i| lines[i] == "heroku ps #{staging} --json" }
+    restore = lines.index { it.start_with?('heroku pg:backups:restore') }
+    expect(ps_calls.length).to be >= 3
+    expect(restore).to be > ps_calls[2]
+    expect(lines.index("heroku ps:scale worker=0 #{staging}")).to be < ps_calls[1]
+  end
+
+  it 'stops without restoring when a dyno still runs 3 minutes after the scale to 0' do
+    sandbox.rule('heroku', "ps #{staging} --json", out: '[{"type":"worker","state":"up"}]')
+    sandbox.rule('heroku', "ps #{staging} --json", out: '[]', once: true)
+
+    result = rehearse
+
+    expect(result.exitstatus).not_to eq(0)
+    expect(result.output).to include('still runs 3 minutes after')
+    expect(heroku_calls.grep(/pg:backups:restore/)).to be_empty
+    expect(sandbox.calls_to('git').map(&:args)).to be_empty
+  end
+
   it 'stops with web and the worker at 0 when the restore fails' do
     sandbox.rule('heroku', 'pg:backups:restore *', err: 'restore failed', exit: 1)
 
