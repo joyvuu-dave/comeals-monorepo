@@ -26,8 +26,20 @@ RSpec.describe 'config/initializers/solid_queue_isolation.rb' do
   end
 
   it 'keeps a private method private' do
-    expect(SolidQueue::ClaimedExecution.private_method_defined?(:finalize)).to be(true)
+    expect(SolidQueue::ClaimedExecution.private_method_defined?(:unless_already_finalized)).to be(true)
+    expect(SolidQueue::Scheduler::RecurringSchedule.private_method_defined?(:persist_static_tasks)).to be(true)
     expect(SolidQueue::Process.method_defined?(:heartbeat)).to be(true)
+  end
+
+  # Solid Queue keeps the finish of a job apart from what comes after it
+  # (ClaimedExecution#finalize), so it is not on the list; its parts are.
+  it 'leaves out the methods whose transactions must stay apart' do
+    listed = SolidQueueIsolation::BOOKKEEPING.map { |(class_name, name, _kind)| [class_name, name] }
+
+    expect(listed).not_to include(['SolidQueue::ClaimedExecution', :finalize],
+                                  ['SolidQueue::RecurringTask', :enqueue],
+                                  ['SolidQueue::BlockedExecution', :unblock],
+                                  ['SolidQueue::Dispatcher::Maintenance', :sweep_stalled_batches])
   end
 
   it 'refuses to boot when a method on its list is gone from the gem' do
@@ -117,6 +129,112 @@ RSpec.describe 'config/initializers/solid_queue_isolation.rb' do
       expect(levels).to eq([['INSERT INTO "solid_queue_claimed_executions"', 'read committed'],
                             ['UPDATE "solid_queue_jobs"', 'read committed']])
       expect(SolidQueue::Job.sole.finished_at).to be_present
+    end
+
+    # A job with limits_concurrency. When the worker finishes it, three
+    # things happen, each in its own transaction (ClaimedExecution#finalize):
+    # the job is marked finished, its semaphore is given back, and the next
+    # blocked job of its key is let go. Each must be READ COMMITTED, and
+    # none may share a transaction with another.
+    def limited_job_pair
+      stub_const('RefreshBalancesJob', Class.new(RecurringJob) do
+        def self.name = 'RefreshBalancesJob'
+        def perform = nil
+      end)
+      RefreshBalancesJob.perform_later
+      RefreshBalancesJob.perform_later
+      expect(SolidQueue::BlockedExecution.count).to eq(1)
+    end
+
+    def run_worker
+      worker = SolidQueue::Worker.new(queues: '*', threads: 1, polling_interval: 0.01)
+      worker.mode = :inline
+      worker.start
+    end
+
+    it 'finishes a limited job, gives back its semaphore and lets the next one go, each in its own transaction' do
+      limited_job_pair
+      seen = Concurrent::Array.new
+      finalize_statements = /\A(UPDATE "solid_queue_(jobs|semaphores)"|DELETE FROM "solid_queue_blocked_executions")/
+      record = lambda do |*, payload|
+        statement = payload[:sql][finalize_statements]
+        next unless statement
+
+        connection = ActiveRecord::Base.connection
+        seen << [statement, connection.select_value('SHOW transaction_isolation'),
+                 connection.select_value('SELECT txid_current()')]
+      end
+
+      ActiveSupport::Notifications.subscribed(record, 'sql.active_record') { run_worker }
+
+      # Finish, give back, then take the semaphore again for the blocked
+      # job and remove its blocked row: the last two are one transaction.
+      first_finish = seen.take(4)
+      expect(first_finish.map(&:first)).to eq(['UPDATE "solid_queue_jobs"', 'UPDATE "solid_queue_semaphores"',
+                                               'UPDATE "solid_queue_semaphores"',
+                                               'DELETE FROM "solid_queue_blocked_executions"'])
+      expect(first_finish.map(&:second)).to all(eq('read committed'))
+      finish, give_back, release, release_again = first_finish.map(&:third)
+      expect([finish, give_back, release].uniq.size).to eq(3)
+      expect(release_again).to eq(release)
+      expect(SolidQueue::Job.where(finished_at: nil).count).to eq(0)
+    end
+
+    # Solid Queue's own reason for keeping them apart: a failure while
+    # letting the next job go must not undo a job that already ran. The
+    # job stays finished, its semaphore is given back, and the blocked job
+    # waits for the dispatcher, which lets it go once the semaphore is free.
+    it 'keeps a finished job finished, and its semaphore given back, when letting the next job go fails' do
+      limited_job_pair
+      allow(SolidQueue::BlockedExecution).to receive(:ordered)
+        .and_raise(ActiveRecord::StatementInvalid, 'release failed')
+      allow(SolidQueue.on_thread_error).to receive(:call)
+
+      run_worker
+
+      expect(SolidQueue::Job.where.not(finished_at: nil).count).to eq(1)
+      expect(SolidQueue::ClaimedExecution.count).to eq(0)
+      expect(SolidQueue::Semaphore.sole.value).to eq(1)
+      expect(SolidQueue::BlockedExecution.count).to eq(1)
+      expect(SolidQueue.on_thread_error).to have_received(:call)
+        .with(an_instance_of(ActiveRecord::StatementInvalid).and(having_attributes(message: 'release failed')))
+    end
+
+    # LiveUpdate's push after a commit and RecurringCatchUp queue jobs with
+    # no transaction open. Rails opens one for the job's row at the
+    # session's level, and the semaphore of a limited job is taken in it
+    # (Semaphore.wait, which is not wrapped). App code stays SERIALIZABLE.
+    it 'queues a limited job from app code with no transaction open at SERIALIZABLE, semaphore included' do
+      stub_const('RefreshBalancesJob', Class.new(RecurringJob) { def self.name = 'RefreshBalancesJob' })
+
+      enqueue_writes = /\A(INSERT INTO|UPDATE) "solid_queue_(jobs|semaphores|ready_executions|blocked_executions)"/
+      levels = levels_at(enqueue_writes) do
+        2.times { RefreshBalancesJob.perform_later }
+      end
+
+      expect(levels.map(&:first)).to include('INSERT INTO "solid_queue_semaphores"',
+                                             'INSERT INTO "solid_queue_ready_executions"',
+                                             'INSERT INTO "solid_queue_blocked_executions"')
+      expect(levels.map(&:second).uniq).to eq(['serializable'])
+    end
+
+    # Why RecurringTask#enqueue is not wrapped. A second scheduler queueing
+    # the same run finds it already recorded, and Solid Queue rescues that
+    # inside #enqueue. In an outer transaction the rescue would come first
+    # and the duplicate job would be committed.
+    it 'queues a recurring run once at READ COMMITTED, and rolls back a second try at the same run' do
+      task = SolidQueue::RecurringTask.create!(key: 'refresh_balances', class_name: 'RefreshBalancesJob',
+                                               schedule: '0 3 * * * UTC')
+      at = Time.current.change(usec: 0)
+
+      levels = levels_at(/\AINSERT INTO "solid_queue_jobs"/) do
+        task.enqueue(at: at)
+        expect(task.enqueue(at: at)).to be(false)
+      end
+
+      expect(levels.map(&:second)).to eq(['read committed', 'read committed'])
+      expect(SolidQueue::Job.count).to eq(1)
+      expect(SolidQueue::RecurringExecution.count).to eq(1)
     end
 
     it 'queues a job from app code in the open transaction, at SERIALIZABLE, and rolls it back with it' do

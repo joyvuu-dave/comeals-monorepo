@@ -3,31 +3,31 @@
 require 'rails_helper'
 
 # Found by bin/storm with STORM_SOLID_QUEUE=1, 2026-10-20: the first run
-# with a real bin/jobs process. Steps that
-# config/initializers/solid_queue_isolation.rb wraps at READ COMMITTED
-# raise ActiveRecord::TransactionIsolationError ("cannot set
-# transaction isolation in a nested transaction") whenever they open a
-# savepoint:
+# with a real bin/jobs process. Until the fix the same day,
+# config/initializers/solid_queue_isolation.rb set READ COMMITTED with
+# ActiveRecord.with_transaction_isolation_level, which gives the level to
+# every transaction opened inside it, a savepoint too. Rails refuses a
+# level on a savepoint (ActiveRecord::TransactionIsolationError, "cannot
+# set transaction isolation in a nested transaction"), so these steps
+# raised whenever they opened one:
 #
-#   - the scheduler queueing a recurring task (RecurringTask#enqueue):
-#     Job#ready calls create_or_find_by!. The schedule queues no job;
+#   - the scheduler queueing a recurring task: Job#ready calls
+#     create_or_find_by!. The schedule queued no job, on staging too;
 #   - a worker removing itself while it holds a claimed job
 #     (Process#deregister): giving the job back to the queue goes through
-#     create_or_find_by!, inside the destroy. A stopped jobs process
-#     leaves its row and its claim;
-#   - the worker finishing a job that raised (ClaimedExecution#finalize):
-#     the same requires_new, inside finalize's transaction. The job stays
-#     claimed instead of failed;
+#     create_or_find_by!, inside the destroy. A stopped jobs process left
+#     its row and its claim;
+#   - the worker finishing a job that raised: the same requires_new,
+#     inside the finish. The job stayed claimed instead of failed;
 #   - the dispatcher moving a due job that has a concurrency limit from
 #     scheduled to ready (ScheduledExecution.dispatch_next_batch): such a
 #     job is moved one at a time, through create_or_find_by!. A
 #     NotifyCooksJob retry waits there.
 #
-# ActiveRecord.with_transaction_isolation_level gives its level to every
-# transaction opened inside it, a savepoint too, and Rails refuses a
-# level on a savepoint. The examples in solid_queue_isolation_spec.rb
-# never open one. The dispatcher letting a blocked job go is wrapped too
-# and opens no savepoint; it is here so that stays true.
+# Now the wrapper opens one explicit READ COMMITTED transaction, and the
+# ones inside it join it or become savepoints with no level of their own.
+# The dispatcher letting a blocked job go opens no savepoint; it is here
+# so that stays true.
 RSpec.describe 'config/initializers/solid_queue_isolation.rb, on steps that open a savepoint' do
   include_context 'with no test transaction'
   include_context 'with Solid Queue as the job adapter'
@@ -108,8 +108,8 @@ RSpec.describe 'config/initializers/solid_queue_isolation.rb, on steps that open
   # thread reported "Error in thread"; the job was already finished, but
   # its semaphore was not given back, so the next run of that job waits
   # until the semaphore expires: an hour for every RecurringJob and for
-  # NotifyCooksJob. The initializer's header lists this statement as a
-  # limit; this example asks for it to run at READ COMMITTED.
+  # NotifyCooksJob. Now Semaphore::Proxy#signal is on the initializer's
+  # list, so the UPDATE has a READ COMMITTED transaction of its own.
   it 'gives back a finished job\'s semaphore at READ COMMITTED' do
     RefreshBalancesJob.perform_later
     stub_const('RefreshBalancesJob', Class.new(RecurringJob) do
