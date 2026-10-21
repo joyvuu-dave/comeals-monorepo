@@ -56,8 +56,14 @@ class RecurringCatchUp
 
   # Active Job answers false, with no error, when the adapter refuses a
   # job (ActiveJob::Enqueuing#enqueue), so that is reported too.
+  #
+  # Two supervisors that start at once (a deploy) both run this, and the
+  # two enqueues of one job can conflict on the job's limits_concurrency
+  # semaphore row. That conflict is tried again, like every other enqueue
+  # in the app; Solid Queue raises it wrapped in EnqueueError, which
+  # RetryOnConflict knows.
   def enqueue(job_class)
-    return true if job_class.perform_later
+    return true if RetryOnConflict.call { job_class.perform_later }
 
     report(RuntimeError.new("#{job_class.name} was not queued"), job_class.name)
     false
