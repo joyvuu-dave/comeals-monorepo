@@ -5,6 +5,7 @@ import path from "node:path";
 import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import istanbulSource from "./tests/helpers/vite_istanbul.mjs";
+import { BUILD_TARGET } from "./app/frontend/browser_target.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -78,6 +79,26 @@ function preloadCalendarPlugin() {
   };
 }
 
+// Writes the browser check (app/frontend/browser_check.js) into
+// index.html as a plain script, in place of the <!-- browser-check -->
+// line. In the page, not in a file of its own: a plain script in the
+// page runs as soon as the browser reads it, with no extra request,
+// and always before the app's module script. It is read from disk on
+// every page in dev, so an edit shows on the next reload.
+function browserCheckPlugin() {
+  const source = path.resolve(__dirname, "app/frontend/browser_check.js");
+  return {
+    name: "browser-check",
+    transformIndexHtml: {
+      order: "pre",
+      handler(html) {
+        const script = `<script>\n${fs.readFileSync(source, "utf8")}</script>`;
+        return html.replace("<!-- browser-check -->", () => script);
+      },
+    },
+  };
+}
+
 // One id per production build, baked into the bundle as __BUILD_ID__.
 // index.jsx compares it to localStorage and clears the IndexedDB
 // caches when it changes, so cached payloads never outlive the deploy
@@ -114,6 +135,7 @@ export default defineConfig(({ command }) => ({
   publicDir: command === "serve" ? "../../public" : false,
   plugins: [
     react(),
+    browserCheckPlugin(),
     perfLogPlugin(),
     preloadCalendarPlugin(),
     ...(visualCoverage
@@ -152,5 +174,9 @@ export default defineConfig(({ command }) => ({
     sourcemap: true,
     manifest: true,
     chunkSizeWarningLimit: 700,
+    // Vite's default target, written out (app/frontend/browser_target.mjs),
+    // so the browser check in index.html and the build cannot drift apart.
+    target: BUILD_TARGET,
+    cssTarget: BUILD_TARGET,
   },
 }));

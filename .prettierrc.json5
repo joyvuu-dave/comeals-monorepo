@@ -1,0 +1,14 @@
+// Prettier's defaults, except for one file.
+{
+  overrides: [
+    {
+      // The browser check runs in old browsers, so it is written in ES5
+      // (eslint.config.js holds it there). A comma after the last
+      // argument of a call is newer than ES5, and an old browser
+      // refuses the whole script for it. "es5" keeps commas only where
+      // ES5 allows them.
+      files: "app/frontend/browser_check.js",
+      options: { trailingComma: "es5" },
+    },
+  ],
+}

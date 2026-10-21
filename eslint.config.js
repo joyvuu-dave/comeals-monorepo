@@ -177,6 +177,38 @@ module.exports = [
   },
 
   // -----------------------------------------------------------
+  // The browser check, written into index.html by vite.config.mjs.
+  // It must run in the old browsers it turns away, so it is held to
+  // ES5: no let, const, arrow functions, template strings, or comma
+  // after a call's last argument. Any of those is a parse error here.
+  // -----------------------------------------------------------
+  {
+    files: ["app/frontend/browser_check.js"],
+    languageOptions: {
+      ecmaVersion: 5,
+      sourceType: "script",
+      globals: {
+        window: "readonly",
+        encodeURIComponent: "readonly",
+      },
+    },
+    rules: {
+      // ES5 has no catch without a name, so an error that is not used
+      // still needs one.
+      "no-unused-vars": ["error", { caughtErrors: "none" }],
+    },
+  },
+
+  // The build target, read by vite.config.mjs and the unit tests.
+  {
+    files: ["app/frontend/browser_target.mjs"],
+    languageOptions: {
+      ecmaVersion: 2022,
+      sourceType: "module",
+    },
+  },
+
+  // -----------------------------------------------------------
   // Hand-written browser scripts served from public/
   // -----------------------------------------------------------
   {

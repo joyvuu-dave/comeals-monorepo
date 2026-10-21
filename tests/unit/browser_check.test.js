@@ -368,12 +368,13 @@ describe("the build", () => {
       path.resolve(__dirname, "../../app/frontend/index.html"),
       "utf8",
     );
-    expect(html).toContain("Comeals needs JavaScript");
-    expect(html).toContain(
+    const text = html.replace(/\s+/g, " ");
+    expect(text).toContain("Comeals needs JavaScript");
+    expect(text).toContain(
       "open Settings, then Safari, then Advanced, and turn on JavaScript",
     );
     expect(html).toMatch(
-      /<noscript>\s*<style>#root \{ display: none; \}<\/style>/,
+      /<noscript>\s*<style>\s*#root\s*\{\s*display: none;\s*\}\s*<\/style>/,
     );
   });
 });

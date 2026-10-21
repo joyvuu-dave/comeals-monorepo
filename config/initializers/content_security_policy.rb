@@ -3,6 +3,13 @@
 
 # Be sure to restart your server when you modify this file.
 
+# No policy is set: everything below is commented out. If one is turned
+# on, the SPA's index.html needs two things allowed by hash, because it
+# has inline code that runs before the app: the browser check script
+# (app/frontend/browser_check.js, written into the page by
+# vite.config.mjs) and the shell's <style> blocks. FallbackController
+# serves that file as it is, so a nonce cannot be added to it per request.
+
 # Define an application-wide content security policy
 # For further information see the following documentation
 # https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/Content-Security-Policy

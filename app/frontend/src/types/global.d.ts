@@ -22,6 +22,12 @@ declare global {
     // tests/helpers/browser_setup.js) before the app loads, to turn off
     // the idle timer in components/app/back_to_today.tsx.
     __COMEALS_NO_IDLE_TIMER__?: boolean;
+    // Set by the browser check in index.html (app/frontend/
+    // browser_check.js) before the app's code runs.
+    comealsBrowserCheck?: {
+      result: "passed" | "failed" | "error";
+      failed: string[];
+    };
     Comeals: {
       pusher: PusherClient;
       socketId: string | null;

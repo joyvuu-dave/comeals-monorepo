@@ -1,11 +1,13 @@
 import "./styles.css";
+import { browserTurnedAway } from "./helpers/browser_check";
 // Installs the window.onerror and unhandledrejection handlers. This runs
 // after every import in this file has been evaluated, because imports are
 // hoisted — so an error thrown while a module is still being evaluated is
 // not caught. Everything after startup is, which is where the errors we
-// care about happen.
+// care about happen. Not in a browser the browser check turned away: its
+// errors are expected, and the check has already reported it.
 import { startBugsnag } from "./helpers/bugsnag";
-startBugsnag();
+if (!browserTurnedAway()) startBugsnag();
 
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
@@ -127,6 +129,8 @@ function clearCachesForNewBuild() {
 }
 
 document.addEventListener("DOMContentLoaded", () => {
+  // The browser check's message is in the root. Leave it there.
+  if (browserTurnedAway()) return;
   try {
     startApp();
   } catch (error) {

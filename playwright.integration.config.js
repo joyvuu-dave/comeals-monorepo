@@ -29,6 +29,9 @@ export default defineConfig({
 
   use: {
     baseURL: `http://localhost:${ports.INTEGRATION_PORT}`,
+    // The real server answers the browser check's report
+    // (tests/helpers/test.js answers it in the mocked suite).
+    browserReports: "server",
     screenshot: "only-on-failure",
     // There are no retries, so "on-first-retry" never kept a trace:
     // a failure left only a screenshot (#132).

@@ -29,7 +29,24 @@ const { failsTheTest } = require("./console_errors");
 
 const test = base.test.extend({
   allowedConsoleErrors: [null, { option: true }],
-  page: async ({ page, allowedConsoleErrors }, use, testInfo) => {
+  // Every page load sends the browser check's report to
+  // POST /api/v1/browser-reports (app/frontend/browser_check.js). The
+  // mocked suite has no server to answer it, and the browser logs the
+  // 404 as an error, so the report is answered here. A test that reads
+  // the report routes it itself, and its route wins. The integration
+  // suite sets "server" (playwright.integration.config.js): there the
+  // real server answers it.
+  browserReports: ["answer", { option: true }],
+  page: async (
+    { page, allowedConsoleErrors, browserReports },
+    use,
+    testInfo,
+  ) => {
+    if (browserReports === "answer") {
+      await page.route("**/api/v1/browser-reports*", (route) =>
+        route.fulfill({ status: 204 }),
+      );
+    }
     const pageErrors = [];
     const consoleErrors = [];
     // The screen-state measure (bin/visual-coverage): the instrumented
