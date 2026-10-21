@@ -29,6 +29,26 @@ module Rack
       req.ip if req.path.start_with?('/api/')
     end
 
+    # The browser check's report (Api::V1::BrowserReportsController): one
+    # per page load, no login. 60 per IP per 10 minutes is far above what a
+    # household, or the whole community behind one address, loads in that
+    # time. Over it, a page load is not counted, and nothing else changes.
+    throttle('browser-reports/ip', limit: 60, period: 10.minutes) do |req|
+      req.ip if browser_report?(req)
+    end
+
+    # A failed or broken check emails the owner, through Bugsnag. 10 per IP
+    # per hour: one person on one old browser reloads a few times, and a
+    # script cannot fill the inbox from one address. The query string is
+    # read, not the body, so a large body is never parsed here.
+    throttle('browser-report-alerts/ip', limit: 10, period: 1.hour) do |req|
+      req.ip if browser_report?(req) && %w[failed error].include?(req.GET['result'])
+    end
+
+    def self.browser_report?(req)
+      req.path == '/api/v1/browser-reports' && req.post?
+    end
+
     # Custom 429 response — JSON for the API, with a Retry-After header so
     # well-behaved clients back off politely.
     self.throttled_responder = lambda do |req|

@@ -15,7 +15,8 @@ RSpec.describe '.mutant.yml subjects' do # -- a config file
   # class here that gains a method fails this spec instead of staying
   # out of every run.
   let(:only_attributes) do
-    %w[Current EventFormSerializer CommonHouseReservationFormSerializer GuestRoomReservationFormSerializer]
+    %w[Current EventFormSerializer CommonHouseReservationFormSerializer GuestRoomReservationFormSerializer
+       UnsupportedBrowserSeen BrowserCheckBroke]
   end
   let(:subjects) do
     Rails.root.join('.mutant.yml').read.scan(/^\s+- ([A-Z][A-Za-z0-9:]*)\*$/).flatten

@@ -163,6 +163,12 @@ sentence.
 | Any write refused for a conflict                       | (`retry_on_conflict_spec`); a refusal after the commit cannot answer "Nothing was saved": `no_query_after_commit_spec` | `conflict_rescue_spec`; a refusal after the commit cannot answer "Nothing was saved": `no_query_after_commit_spec` (every admin write)                                                                 | —                                                       | — (a conflict needs a second writer mid-request, which a browser test cannot stage)                                     |
 | Filter an admin list (residents, meals, cooking slots) | —                                                                                                                      | `filters_spec` (every filter there is: the rows listed, and the option the form shows)                                                                                                                 | —                                                       | **EMPTY**                                                                                                               |
 
+## Browsers
+
+| Action                                                  | API                                                                                 | Admin | Task/job                  | Browser                                                                                                                                                  |
+| ------------------------------------------------------- | ----------------------------------------------------------------------------------- | ----- | ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Report a page load's browser check (alert if it failed) | `browser_reports_spec`; limits: `rack_attack_spec` (`POST /api/v1/browser-reports`) | —     | `browser_report_job_spec` | `browser-check.spec.js` ("turns away a browser without regular expression lookbehind", "... that blocks cookies", "lets a normal browser start the app") |
+
 ## The list of empty and thin cells
 
 One empty cell, as of 2026-10-10: no browser test clicks Filter on an

@@ -50,6 +50,7 @@ Rails.application.routes.draw do
       get '/residents/:id/ical', to: 'residents#ical', as: :resident_ical
       get '/communities/:id/ical', to: 'communities#ical', as: :community_ical
       get '/version', to: 'site#version'
+      post '/browser-reports', to: 'browser_reports#create', format: false
       get '/events/:id', to: 'events#show'
       patch '/events/:id/update', to: 'events#update'
       delete '/events/:id/delete', to: 'events#destroy'

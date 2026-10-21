@@ -101,11 +101,14 @@ RSpec.describe 'POST /api/v1/browser-reports' do
       expect(queued_browser).to eq('browser' => 'Unknown', 'major' => nil, 'os' => 'Unknown', 'device' => 'unknown')
     end
 
-    it 'takes a report with no User-Agent header at all, as unknown' do
-      send_report('result=passed&touch=0', user_agent: '')
+    # Every browser sends a User-Agent header. A request with none, or
+    # with curl's, is a script.
+    it 'answers a request with no User-Agent, or a script\'s, and queues nothing' do
+      send_report('result=failed&tests=lookbehind&touch=0', user_agent: '')
+      send_report('result=failed&tests=lookbehind&touch=0', user_agent: 'curl/8.4.0')
 
       expect(response).to have_http_status(:no_content)
-      expect(queued_browser['browser']).to eq('Unknown')
+      expect(enqueued_reports).to be_empty
     end
 
     it 'reads only the start of a very long User-Agent string' do
@@ -151,6 +154,15 @@ RSpec.describe 'POST /api/v1/browser-reports' do
         expect(response.parsed_body['message']).to be_present
         expect(enqueued_reports).to be_empty
       end
+    end
+
+    # Rack::Attack limits alerts by the result in the query string. A
+    # result sent in a form body would get past that limit.
+    it 'reads the report from the query string only, not from a form body' do
+      send_report('touch=0', params: { result: 'failed', tests: 'lookbehind' })
+
+      expect(response).to have_http_status(:bad_request)
+      expect(enqueued_reports).to be_empty
     end
 
     # The check sends no body. A body is someone else's request.

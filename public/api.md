@@ -64,6 +64,8 @@ Per IP address:
 - `POST /residents/token`: 20 per 5 minutes.
 - `POST /residents/password-reset`: 10 per hour.
 - Everything under `/api/`: 600 per minute.
+- `POST /browser-reports`: 60 per 10 minutes, and of those, 10 per hour
+  with `result=failed` or `result=error`.
 
 Over the limit you get `429` with a `Retry-After` header (seconds) and a
 `message`.
@@ -792,6 +794,39 @@ GET /version
 
 `{ "version": 613, "commit": "<git sha>", "staging": false }`. No token
 needed. `version` is the Heroku release number.
+
+## Browser reports
+
+```
+POST /browser-reports
+```
+
+Three examples of the query string:
+
+```
+?result=passed&touch=0
+?result=failed&tests=lookbehind,color_mix&touch=1
+?result=error&error=TypeError%3A%20boom&touch=0
+```
+
+The page sends one of these each time it loads, from a small check that
+runs before the app (`app/frontend/browser_check.js`). It is not for
+scripts. No token needed, and no body: the report is the query string,
+and the browser is read from the `User-Agent` header.
+
+- `result`: `passed`, `failed` (the page showed a message in place of
+  the app) or `error` (the check itself threw, and the app started).
+- `tests`: with `failed` only. One or more of `modules`, `lookbehind`,
+  `color_mix`, `cookies`, each once.
+- `error`: with `error` only. At most 200 characters.
+- `touch`: `1` when the screen takes more than one touch point, else `0`.
+  Safari on an iPad sends the same `User-Agent` as Safari on a Mac, and
+  this tells them apart.
+
+Answers `204`. A report the check would never send is `400` with a
+`message`. A body over a kilobyte is `413`. A request whose
+`Sec-Fetch-Site` header is not `same-origin` is `403`. A crawler or a
+request with no `User-Agent` gets `204` and is not counted.
 
 ## What the API does not do
 

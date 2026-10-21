@@ -50,6 +50,15 @@ gem 'rack-timeout', require: 'rack/timeout/base'
 # set, which is production only. See config/initializers/bugsnag.rb.
 gem 'bugsnag'
 
+# Reads a User-Agent string: browser, version, platform, device, crawler.
+# For the browser check's reports and counts (BrowserDescription). Chosen
+# over device_detector: MIT, not LGPL; no regular expression database to
+# load; and both read the browsers residents use the same way. Neither
+# can tell an iPad from a Mac, so the check sends a touch flag for that.
+# require: false, because the gem's main file adds a helper to every
+# controller when Rails is loaded, and only BrowserDescription uses it.
+gem 'browser', require: false
+
 gem 'devise'
 gem 'goldiloader'
 gem 'icalendar'

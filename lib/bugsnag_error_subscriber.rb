@@ -42,6 +42,13 @@ class BugsnagErrorSubscriber
       # about how the application treated it, and it belongs in the report
       # rather than being thrown away.
       report.add_tab(:rails_error, { handled: handled, source: source }.merge(context || {}))
+
+      # Bugsnag groups events into one error by class and stack, and emails
+      # once per new error. A reporter that knows a better grouping passes
+      # it in the context (BrowserReportJob: one error per browser and set
+      # of failed tests).
+      grouping_hash = context&.dig(:grouping_hash)
+      report.grouping_hash = grouping_hash if grouping_hash
     end
   end
 end
