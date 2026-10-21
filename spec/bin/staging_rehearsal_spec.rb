@@ -21,7 +21,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     sandbox.note_env('SMOKE_URL', 'SMOKE_EMAIL', 'SMOKE_PASSWORD', 'SMOKE_MEAL_ID')
     sandbox.rule('heroku', "config #{staging} --json", out: config_json(config_keys))
     sandbox.rule('heroku', "config:get COMEALS_STAGING #{staging}", out: "1\n")
-    sandbox.rule('heroku', "ps #{staging} --json", out: '[{"type":"web","state":"down"}]')
+    sandbox.rule('heroku', "ps #{staging} --json", out: '[]')
     sandbox.rule('heroku', 'pg:backups:capture -a comeals-monorepo',
                  out: "Backing up DATABASE to b101... done\n")
     sandbox.rule('heroku', 'pg:backups:url -a comeals-monorepo', out: "https://backups.example.com/b101\n")
@@ -90,6 +90,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         'heroku pg:backups:url -a comeals-monorepo',
         "heroku ps:scale web=0 #{staging}",
         "heroku ps:scale worker=0 #{staging}",
+        "heroku ps #{staging} --json",
         "heroku pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} --confirm comeals-staging",
         'git rev-parse HEAD',
         'git rev-parse --short HEAD',
@@ -297,7 +298,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     result = rehearse
 
     expect(result.exitstatus).not_to eq(0)
-    expect(result.output).to include('still runs 3 minutes after')
+    expect(result.out).to include('still runs 3 minutes after')
     expect(heroku_calls.grep(/pg:backups:restore/)).to be_empty
     expect(sandbox.calls_to('git').map(&:args)).to be_empty
   end
