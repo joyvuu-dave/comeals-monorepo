@@ -28,6 +28,12 @@ class Current
     def live_update_manual_batch=(value); end
 
     sig { returns(T.untyped) }
+    def push_token; end
+
+    sig { params(value: T.untyped).returns(T.untyped) }
+    def push_token=(value); end
+
+    sig { returns(T.untyped) }
     def read_only_admin_token; end
 
     sig { params(value: T.untyped).returns(T.untyped) }
@@ -64,6 +70,12 @@ class Current
 
     sig { params(value: T.untyped).returns(T.untyped) }
     def live_update_manual_batch=(value); end
+
+    sig { returns(T.untyped) }
+    def push_token; end
+
+    sig { params(value: T.untyped).returns(T.untyped) }
+    def push_token=(value); end
 
     sig { returns(T.untyped) }
     def read_only_admin_token; end

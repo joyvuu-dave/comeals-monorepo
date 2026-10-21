@@ -169,6 +169,8 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/attendance_out_of_order_spec.rb' =>
     %w[Api::V1::MealsController AttendanceVersionCheck AttendanceVersionParam AttendanceVersion
        MealFormSerializer MealResidentSerializer],
+  # The push of a sign-up list request goes to its sender too (#237).
+  'spec/requests/api/v1/late_write_push_spec.rb' => %w[Api::V1::MealsController ApiController LiveUpdate PushToken],
   'spec/requests/api/v1/meals_controller_spec.rb' =>
     %w[Api::V1::MealsController MealStatusActions AuditDescription MealFormSerializer MealCostSummary Meal
        MealResident Guest TrueOrFalse GuestAdd],

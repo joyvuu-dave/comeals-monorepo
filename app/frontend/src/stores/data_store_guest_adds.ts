@@ -59,6 +59,7 @@ export interface GuestAddsStore
   appendGuest(guest: Omit<Guest, "created_at"> & { created_at: Date }): void;
   // From data_store_signup_requests.ts.
   waitForSignupRequest<T>(mealId: number, request: Promise<T>): Promise<T>;
+  sendWithPushToken<T>(send: (pushToken: string) => Promise<T>): Promise<T>;
   // This file's own views and actions.
   guestAddWaiting(mealId: number, hostId: number): boolean;
   guestAddsWaitingOn(mealId: number): number;
@@ -143,11 +144,14 @@ export function guestAddsActions(self: GuestAddsStore) {
       return self
         .waitForSignupRequest(
           add.mealId,
-          api.meals.residents.guests.add(add.mealId, add.hostId, {
-            vegetarian: add.vegetarian,
-            key,
-            socketId: window.Comeals.socketId,
-          }),
+          self.sendWithPushToken((pushToken) =>
+            api.meals.residents.guests.add(add.mealId, add.hostId, {
+              vegetarian: add.vegetarian,
+              key,
+              socketId: window.Comeals.socketId,
+              pushToken,
+            }),
+          ),
         )
         .then(
           function (response) {

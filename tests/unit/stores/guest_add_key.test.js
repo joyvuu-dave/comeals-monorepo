@@ -146,7 +146,11 @@ describe("a guest add's Idempotency-Key", () => {
       withCredentials: true,
       timeout: 35000,
       headers: { "Idempotency-Key": expect.stringMatching(KEY_FORMAT) },
-      data: { vegetarian: false, socket_id: "test" },
+      data: {
+        vegetarian: false,
+        socket_id: "test",
+        push_token: expect.any(String),
+      },
     });
     const [first, second] = keysSent();
     expect(second).not.toBe(first);

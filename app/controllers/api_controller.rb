@@ -90,6 +90,17 @@ class ApiController < ActionController::API
 
   private
 
+  # Who sent this request, for the meal page's push (LiveUpdate.meal). The
+  # models push; this says who is told. The sender's Pusher socket is left
+  # out of the push of a request with no push token: that browser updated
+  # its own screen already. A request with a push token is pushed to the
+  # sender too, with the token, so a page that gave up on the request is
+  # told when it is written after all (#237).
+  def note_live_update_sender
+    Current.socket_id = params[:socket_id].presence
+    Current.push_token = PushToken.read(params[:push_token])
+  end
+
   INVALID_DATE = 'Error: Invalid date'
   PICK_BOTH_TIMES = 'Pick both a start and an end time.'
   START_END_KEYS = %i[start_year start_month start_day start_hours start_minutes end_hours end_minutes].freeze

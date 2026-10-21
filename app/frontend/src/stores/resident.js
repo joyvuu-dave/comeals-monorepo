@@ -227,12 +227,15 @@ const Resident = types
         store
           .waitForSignupRequest(
             mealId,
-            api.meals.residents.add(self.meal_id, self.id, {
-              late: currentLate,
-              vegetarian: currentVeg,
-              socketId: window.Comeals.socketId,
-              attendanceVersion: self.takeAttendanceVersion(),
-            }),
+            store.sendWithPushToken((pushToken) =>
+              api.meals.residents.add(mealId, self.id, {
+                late: currentLate,
+                vegetarian: currentVeg,
+                socketId: window.Comeals.socketId,
+                attendanceVersion: self.takeAttendanceVersion(),
+                pushToken,
+              }),
+            ),
           )
           .then(function (response) {
             // The server saved the change, so the cached meal payload is
@@ -279,10 +282,13 @@ const Resident = types
           .waitForTakeOff(
             mealId,
             self.id,
-            api.meals.residents.remove(self.meal_id, self.id, {
-              socketId: window.Comeals.socketId,
-              attendanceVersion: self.takeAttendanceVersion(),
-            }),
+            store.sendWithPushToken((pushToken) =>
+              api.meals.residents.remove(mealId, self.id, {
+                socketId: window.Comeals.socketId,
+                attendanceVersion: self.takeAttendanceVersion(),
+                pushToken,
+              }),
+            ),
           )
           .then(function () {
             evictMealCache(mealId);
@@ -323,11 +329,14 @@ const Resident = types
       store
         .waitForSignupRequest(
           mealId,
-          api.meals.residents.update(self.meal_id, self.id, {
-            late: val,
-            socketId: window.Comeals.socketId,
-            attendanceVersion: self.takeAttendanceVersion(),
-          }),
+          store.sendWithPushToken((pushToken) =>
+            api.meals.residents.update(mealId, self.id, {
+              late: val,
+              socketId: window.Comeals.socketId,
+              attendanceVersion: self.takeAttendanceVersion(),
+              pushToken,
+            }),
+          ),
         )
         .then(function () {
           evictMealCache(mealId);
@@ -361,11 +370,14 @@ const Resident = types
       store
         .waitForSignupRequest(
           mealId,
-          api.meals.residents.update(self.meal_id, self.id, {
-            vegetarian: val,
-            socketId: window.Comeals.socketId,
-            attendanceVersion: self.takeAttendanceVersion(),
-          }),
+          store.sendWithPushToken((pushToken) =>
+            api.meals.residents.update(mealId, self.id, {
+              vegetarian: val,
+              socketId: window.Comeals.socketId,
+              attendanceVersion: self.takeAttendanceVersion(),
+              pushToken,
+            }),
+          ),
         )
         .then(function () {
           evictMealCache(mealId);
@@ -426,9 +438,12 @@ const Resident = types
       const request = store
         .waitForSignupRequest(
           mealId,
-          api.meals.residents.guests.remove(self.meal_id, self.id, guestId, {
-            socketId: window.Comeals.socketId,
-          }),
+          store.sendWithPushToken((pushToken) =>
+            api.meals.residents.guests.remove(mealId, hostId, guestId, {
+              socketId: window.Comeals.socketId,
+              pushToken,
+            }),
+          ),
         )
         .then(function () {
           evictMealCache(mealId);

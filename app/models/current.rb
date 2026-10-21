@@ -25,6 +25,12 @@ class Current < ActiveSupport::CurrentAttributes
   # tap never tells its own screen to refetch. Nil outside the API.
   attribute :socket_id
 
+  # The push token the meal page sends with each request from its
+  # sign-up list, from the push_token param. LiveUpdate puts it in the
+  # meal-page push and sends that push to the sender too (#237). Nil
+  # outside the API, and for a request with no token or a malformed one.
+  attribute :push_token
+
   # LiveUpdate's pending batches: one per open database transaction,
   # keyed by the transaction's uuid, and the manual batch opened by
   # LiveUpdate.batch. See app/services/live_update.rb.

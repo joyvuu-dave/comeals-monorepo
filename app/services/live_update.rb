@@ -10,8 +10,9 @@
 # API, ActiveAdmin, the nightly rotation job, a settlement, a rake task.
 # The models own that: their save and destroy callbacks call the three
 # methods below. A controller does not push; it only supplies the
-# sender's socket id (Current.socket_id) so the sender is not told to
-# refetch a change it made itself.
+# sender's socket id (Current.socket_id) and the request's push token
+# (Current.push_token), which decide who is sent the meal page's push
+# (see #meal).
 #
 # Three channels:
 #
@@ -66,6 +67,11 @@
 module LiveUpdate
   # What one transaction (or one manual batch) has to tell the clients.
   class Batch
+    # What a batch knows about one meal's push: the socket the first note
+    # named, the push tokens of the requests that noted it, and whether a
+    # note came with no token (a change no page can call its own).
+    MealNote = Struct.new(:socket_id, :tokens, :untokened)
+
     attr_reader :dates, :meals
 
     def initialize
@@ -118,16 +124,31 @@ module LiveUpdate
       end
     end
 
-    # A meal's page is stale. The sender's socket (the browser whose
-    # request made the change) is excluded from the push: it updated its
-    # own screen and evicted its own copy (helpers/meal_cache.js).
-    def meal(meal_id, socket_id: Current.socket_id)
+    # A meal's page is stale. Who is sent the push depends on the request
+    # that made the change (ADR 0007, amended 2026-10-21 for #237):
+    #
+    # - With a push token (the six requests of the meal page's sign-up
+    #   list send one): every screen, the sender's too, and the push
+    #   carries the token. The sender skips it while it still waits for
+    #   that request's answer or has it, because the answer shows the
+    #   change. But a request the page gave up on (no answer after 35 s)
+    #   can still be written, and then only this push tells that page.
+    # - Without one (the meal page's other writes, and pages loaded
+    #   before push tokens): every screen but the sender's socket, which
+    #   updated its own screen and evicted its own copy
+    #   (helpers/meal_cache.js).
+    def meal(meal_id, socket_id: Current.socket_id, push_token: Current.push_token)
       note do |batch|
         # A later call for the same meal without a socket id (a callback
         # outside the request) must not un-exclude the sender, and a
         # call with one must not exclude it from a change it did not
         # make. The first caller wins.
-        batch.meals[meal_id] = socket_id unless batch.meals.key?(meal_id)
+        entry = (batch.meals[meal_id] ||= Batch::MealNote.new(socket_id, Set.new, false))
+        if push_token
+          entry.tokens << push_token
+        else
+          entry.untokened = true
+        end
       end
     end
 
@@ -168,9 +189,7 @@ module LiveUpdate
       keys.each { |key| clear(key) }
 
       keys.each { |key| push(key, { message: 'calendar updated' }) } # rubocop:disable Style/CombinableLoops -- every clear must run before any push
-      batch.meals.each do |meal_id, socket_id|
-        push("meal-#{meal_id}", { message: 'meal updated' }, socket_id && { socket_id: socket_id })
-      end
+      batch.meals.each { |meal_id, entry| push_meal(meal_id, entry) }
       push("community-#{community.id}-residents", { message: 'residents updated' }) if batch.residents?
     rescue StandardError => e
       Rails.error.report(e, handled: true, context: { dates: batch.dates.map(&:iso8601) })
@@ -203,6 +222,22 @@ module LiveUpdate
           flush(batch)
         end
         transaction.after_rollback { batches.delete(transaction.uuid) }
+      end
+    end
+
+    # A push with tokens goes to every screen and names them, so the
+    # sender can tell its own request's push from any other (#meal). A
+    # batch that also has a note with no token goes to every screen with
+    # no tokens: no page may skip it, since a change in it is not any
+    # page's own. One request's notes all carry its token, so this
+    # happens only when other code notes the same meal in the same batch.
+    def push_meal(meal_id, entry)
+      if entry.tokens.any?
+        data = { message: 'meal updated' }
+        data[:push_tokens] = entry.tokens.to_a unless entry.untokened
+        push("meal-#{meal_id}", data)
+      else
+        push("meal-#{meal_id}", { message: 'meal updated' }, entry.socket_id && { socket_id: entry.socket_id })
       end
     end
 

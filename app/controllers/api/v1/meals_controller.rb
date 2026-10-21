@@ -572,10 +572,7 @@ module Api
 
         return not_found_api if @meal.nil?
 
-        # The sender's Pusher socket. The models push (LiveUpdate); this
-        # is how the meal-page push skips the browser that made the
-        # change, which updated its own screen already.
-        Current.socket_id = params[:socket_id].presence
+        note_live_update_sender
       end
 
       sig { void }

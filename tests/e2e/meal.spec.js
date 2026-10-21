@@ -150,6 +150,7 @@ test.describe("Meal Editing", () => {
     expect(Object.keys(apiPayload).sort()).toEqual([
       "attendance_version",
       "late",
+      "push_token",
       "socket_id",
       "vegetarian",
     ]);
@@ -228,12 +229,14 @@ test.describe("Meal Editing", () => {
 
     // The store flips the switch before it sends the request, so the
     // request can reach the route after the checks above pass: wait
-    // for it. The body carries late, the socket id, and the version of
-    // Jane's attendance the meal form showed, nothing else.
+    // for it. The body carries late, the socket id, the version of
+    // Jane's attendance the meal form showed, and the request's push
+    // token, nothing else.
     await expect.poll(() => patchData, { timeout: 3000 }).toBeTruthy();
     expect(Object.keys(patchData).sort()).toEqual([
       "attendance_version",
       "late",
+      "push_token",
       "socket_id",
     ]);
     expect(patchData.late).toBe(true);
@@ -270,11 +273,13 @@ test.describe("Meal Editing", () => {
     await expect(circleNumber(page, "Veg")).toHaveText("1");
 
     // Wait for the request (the switch flips before it is sent). The
-    // body carries vegetarian, the socket id, and the version of Jane's
-    // attendance the meal form showed, nothing else.
+    // body carries vegetarian, the socket id, the version of Jane's
+    // attendance the meal form showed, and the request's push token,
+    // nothing else.
     await expect.poll(() => patchData, { timeout: 3000 }).toBeTruthy();
     expect(Object.keys(patchData).sort()).toEqual([
       "attendance_version",
+      "push_token",
       "socket_id",
       "vegetarian",
     ]);
@@ -399,6 +404,7 @@ test.describe("Meal Editing", () => {
     await expect.poll(() => guestPostData, { timeout: 3000 }).toBeTruthy();
     expect(guestPostUrl).toMatch(/\/api\/v1\/meals\/42\/residents\/1\/guests$/);
     expect(Object.keys(guestPostData).sort()).toEqual([
+      "push_token",
       "socket_id",
       "vegetarian",
     ]);

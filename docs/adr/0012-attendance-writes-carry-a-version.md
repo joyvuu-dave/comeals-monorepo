@@ -95,13 +95,15 @@ waits. So a guest add sent twice adds one guest, and a removal cannot
 come before its add. The key does not refuse an add that arrives after
 the page gave up on it.
 
-## What this does not catch
+## A write that arrives after the page gave up on it
 
 A write that arrives after the page gave up on it, when nothing changed
 since the page built it, still matches the version and is written: a
-sign-up, or a guest add. The live push skips the screen that sent it, so
-that screen does not show it until the next load or the next tap on that
-row. This is #237.
+sign-up, or a guest add. Until 2026-10-21 the live push left out the
+screen that sent it, so that screen did not show it until the next load
+(#237). Now each of these requests carries a push token, and its push
+reaches that screen too and loads the meal (ADR 0007, "The sender and
+the push token").
 
 ## Costs
 

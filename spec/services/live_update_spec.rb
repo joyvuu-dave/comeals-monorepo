@@ -205,6 +205,50 @@ RSpec.describe LiveUpdate do
 
       expect(calls).to eq([['meal-7', { message: 'meal updated' }, nil]])
     end
+
+    # #237: a request with a push token is pushed to its sender too, with
+    # the token, so a page that gave up on it can tell.
+    it 'sends a push with tokens to every screen, the sender too, and names the tokens' do
+      Current.socket_id = 'the-sender'
+      Current.push_token = 'tap-1'
+      calls = pushed do
+        described_class.batch do
+          described_class.meal(7)
+          described_class.meal(7)
+        end
+      end
+
+      expect(calls).to eq([['meal-7', { message: 'meal updated', push_tokens: ['tap-1'] }, nil]])
+    ensure
+      Current.reset
+    end
+
+    # One push can stand for several requests' notes: a page skips it
+    # only when every token in it is its own.
+    it 'names every token noted for the meal in one batch, once each' do
+      calls = pushed do
+        described_class.batch do
+          described_class.meal(7, socket_id: 'a', push_token: 'tap-1')
+          described_class.meal(7, socket_id: 'b', push_token: 'tap-2')
+          described_class.meal(7, socket_id: 'a', push_token: 'tap-1')
+        end
+      end
+
+      expect(calls).to eq([['meal-7', { message: 'meal updated', push_tokens: %w[tap-1 tap-2] }, nil]])
+    end
+
+    # A settlement notes its meals with no token. In a batch with a
+    # token, the push must not be skipped by the token's page.
+    it 'names no tokens when a note in the batch had none, and leaves no one out' do
+      calls = pushed do
+        described_class.batch do
+          described_class.meal(7, socket_id: 'a', push_token: 'tap-1')
+          described_class.meal(7, socket_id: nil, push_token: nil)
+        end
+      end
+
+      expect(calls).to eq([['meal-7', { message: 'meal updated' }, nil]])
+    end
   end
 
   describe '.batch' do

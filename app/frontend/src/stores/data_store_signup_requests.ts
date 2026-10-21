@@ -19,7 +19,23 @@
 // skips this screen, because the request carried this screen's socket
 // id. So such an answer is not used, and the meal loads again
 // (signupAnswers, read by holdMealAnswer in data_store_meal_page.ts).
+//
+// Each of the six requests carries a push token (#237). The server
+// sends the meal's push to every screen, this one too, with the tokens
+// of the requests that caused it. This page skips a push only when
+// every token in it is one of its own requests that it has not given up
+// on (ownPush): that request's answer shows the change, or will. A
+// request the page gave up on (no answer from the app) can still be
+// written later, and then its push loads the meal, which is the only way
+// this page learns of it.
 import createVersionGuard from "../helpers/version_guard";
+import { newId } from "../helpers/new_id";
+import { noAnswerFromApp } from "../helpers/signup_failure";
+
+// How many push tokens a page keeps. A shared screen stays open for
+// days, so the list must not grow without end. A push for a token that
+// was dropped only loads the meal once more.
+const PUSH_TOKENS_KEPT = 500;
 
 // What this file reads and writes on the DataStore it is composed into
 // (data_store.js, still JavaScript).
@@ -31,6 +47,7 @@ export interface SignupRequestsStore extends ReturnType<
   guestRemovalAnswered(mealId: number, hostId: number): void;
   takeOffAnswered(mealId: number, residentId: number): void;
   waitForSignupRequest<T>(mealId: number, request: Promise<T>): Promise<T>;
+  forgetPushToken(token: string): void;
 }
 
 // A host, or a person taking themselves off, on a meal.
@@ -69,6 +86,9 @@ export function signupRequestsVolatile() {
     // person is put back in that seat, so no other tap may take it until
     // the server says yes (Meal#openSeats, #158).
     takeOffsWaiting: [] as string[],
+    // The push tokens of this page's requests from the sign-up list,
+    // oldest first, except those it gave up on (sendWithPushToken).
+    pushTokensOwn: [] as string[],
   };
 }
 
@@ -83,6 +103,19 @@ export function signupRequestsViews(self: SignupRequestsStore) {
     guestRemovalWaiting(mealId: number, hostId: number): boolean {
       return self.guestRemovalsWaiting.includes(hostOn(mealId, hostId));
     },
+    // True for the push of this page's own request: every token in it
+    // is one this page sent and did not give up on. A push with no
+    // tokens comes from another screen, admin, a task, or a page loaded
+    // before push tokens, and is not this page's own.
+    ownPush(data: unknown): boolean {
+      const tokens = (data as { push_tokens?: unknown } | null | undefined)
+        ?.push_tokens;
+      return (
+        Array.isArray(tokens) &&
+        tokens.length > 0 &&
+        tokens.every((token) => self.pushTokensOwn.includes(token))
+      );
+    },
     // How many take-offs on the meal wait.
     takeOffsWaitingOn(mealId: number): number {
       return self.takeOffsWaiting.filter((person) =>
@@ -94,6 +127,23 @@ export function signupRequestsViews(self: SignupRequestsStore) {
 
 export function signupRequestsActions(self: SignupRequestsStore) {
   return {
+    // Send a request with a new push token, made here. The page keeps
+    // the token, so the push for this request is skipped, until the
+    // request ends with no answer from the app: it may be written later,
+    // and its push must then load the meal.
+    sendWithPushToken<T>(send: (pushToken: string) => Promise<T>): Promise<T> {
+      const token = newId();
+      self.pushTokensOwn = [...self.pushTokensOwn, token].slice(
+        -PUSH_TOKENS_KEPT,
+      );
+      return send(token).catch(function (error: unknown) {
+        if (noAnswerFromApp(error)) self.forgetPushToken(token);
+        throw error;
+      });
+    },
+    forgetPushToken(token: string) {
+      self.pushTokensOwn = self.pushTokensOwn.filter((own) => own !== token);
+    },
     // Count `request` as waiting on its meal until it settles. Returns a
     // promise that settles the same way, once the count is down and
     // signupAnswers is bumped: the page handles the answer on that one.

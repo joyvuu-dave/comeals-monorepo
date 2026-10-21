@@ -2,6 +2,9 @@
 
 - **Status:** Accepted
 - **Date:** 2026-08-24
+- **Amended:** 2026-10-21: a request from the meal page's sign-up list
+  is pushed to its sender too, with a push token (#237). See "The
+  sender and the push token".
 
 ## Context
 
@@ -62,10 +65,58 @@ too from 2026-09-24 until it was removed on 2026-09-26: a birthday now
 moves someone into the adult band with no write at all, so the SPA
 refetches its hosts list at midnight instead.) A controller does not
 push. `MealsController` sets `Current.socket_id` so the meal-page push
-skips the browser that made the change.
+skips the browser that made the change, unless the request carries a
+push token (see below).
 
 Every write path therefore pushes the same way: the API, ActiveAdmin,
 the nightly job, a settlement, a rake task, the console.
+
+### The sender and the push token (amended 2026-10-21, #237)
+
+Until 2026-10-21 the meal-page push always left out the sender's
+socket, because the sender had updated its own screen. That is false
+for a request the page gave up on. The page stops waiting after 35
+seconds, loads the meal, and the request can still be written after
+that load. Then nothing told that page, and it showed the meal without
+the change: a person could be charged for a dinner their screen said
+they were not signed up for.
+
+So the six requests of the sign-up list (a sign-up, a take-off, Late,
+Veg, a guest add, a guest removal) each send a new `push_token`, a
+UUID. `MealsController` sets `Current.push_token` from it (`PushToken`
+reads it; a malformed one is read as none). `LiveUpdate.meal` collects
+the tokens of a batch:
+
+- With a token: the push goes to every screen, the sender's too, and its
+  data is `{ message: "meal updated", push_tokens: [...] }`.
+- With no token (the meal page's other writes, admin, a task, a page
+  loaded before this change): as before, every screen but the sender's
+  socket.
+- A batch with a token and also a note with no token (a settlement, in
+  the same batch) is pushed to every screen with no tokens, so no page
+  skips it.
+
+The page keeps the tokens of its own requests (the last 500) and drops
+a token when its request ends with no answer from the app, that is, when
+the page gave up on it (`sendWithPushToken`,
+`data_store_signup_requests.ts`). A push is skipped only when every
+token in it is one the page kept. Any other push loads the meal.
+
+- Normal tap: the push names the page's own token, before or after the
+  answer, so the page does not load again. No extra load, no flicker.
+- A request the page gave up on and that is written later: its token was
+  dropped, so the push loads the meal, about a second after the write.
+- Two tabs on one device: each tab has its own tokens, so each loads
+  the other's changes, as two devices do.
+- A full page reload mid-request: the new page has no tokens, so the
+  push for the old request loads the meal.
+- A push never causes a write, and a load never causes a push, so it
+  cannot loop.
+- Old open tabs send no token, so their pushes still leave them out.
+  They read no data from a push, so a push with tokens loads them as
+  any push did.
+- Cost: the sender's socket now gets one more Pusher message for each
+  of these writes.
 
 ### One flush per transaction, after commit.
 
@@ -188,3 +239,5 @@ reaches the screen or the cache. Midnight refetches the month.
 - `spec/models/community_spec.rb` — the Sunday that opens the next
   month's grid.
 - `tests/unit/stores/live_updates.test.js` — the client half.
+- `spec/requests/api/v1/late_write_push_spec.rb` and
+  `tests/unit/stores/late_write_push.test.js` — the push token (#237).

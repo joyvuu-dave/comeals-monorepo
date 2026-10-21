@@ -77,6 +77,7 @@ matcher:
     - ThirdCookWarning*
     - TrueOrFalse*
     - AttendanceVersionParam*
+    - PushToken*
     - YearMonthDay*
     - ZoneChange*
     # jobs, mailers, helpers, lib

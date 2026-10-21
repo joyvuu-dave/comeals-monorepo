@@ -56,6 +56,7 @@ export interface MealPageStore extends ReturnType<typeof mealPageVolatile> {
   // from the sign-up list.
   signupAnswers: ReturnType<typeof createVersionGuard>;
   mealLoadedFromServer(mealId: number): void;
+  ownPush(data: unknown): boolean;
   saveBillsBeforeLeaving(): void;
   dropFixedCookInTwoRows(): void;
   billsPendingFor(mealId: number): boolean;
@@ -662,8 +663,11 @@ export function mealPageActions(self: MealPageStore) {
       }
       const channel = window.Comeals.pusher.subscribe(name);
       window.Comeals.mealChannel = channel;
-      // The meal changed on the server: fetch it again.
-      channel.bind("update", function () {
+      // The meal changed on the server: fetch it again, unless the push
+      // is for this page's own request, whose answer shows the change
+      // (ownPush, data_store_signup_requests.ts, #237).
+      channel.bind("update", function (data: unknown) {
+        if (self.ownPush(data)) return;
         self.loadDataAsync();
       });
       // Pusher confirmed the subscription. A push sent before this

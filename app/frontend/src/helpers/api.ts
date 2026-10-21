@@ -59,6 +59,14 @@ interface AttendanceVersioned {
   attendanceVersion: number | null;
 }
 
+// A new token for each request from a row of the sign-up list
+// (data_store_signup_requests.ts newPushToken). The server puts it in the
+// meal's push and sends that push to this page too, so the page can tell
+// the push for its own request from any other (#237).
+interface PushTokened {
+  pushToken: string;
+}
+
 function attendanceVersionField(version: number | null) {
   return version === null ? {} : { attendance_version: version };
 }
@@ -176,8 +184,10 @@ export const api = {
           vegetarian,
           socketId,
           attendanceVersion,
+          pushToken,
         }: { late: boolean; vegetarian: boolean } & SocketBound &
-          AttendanceVersioned,
+          AttendanceVersioned &
+          PushTokened,
       ): Promise<AxiosResponse<MealResident>> {
         return axios({
           method: "post",
@@ -188,6 +198,7 @@ export const api = {
             late,
             vegetarian,
             socket_id: socketId,
+            push_token: pushToken,
             ...attendanceVersionField(attendanceVersion),
           },
         });
@@ -196,7 +207,11 @@ export const api = {
       remove(
         mealId: number,
         residentId: number,
-        { socketId, attendanceVersion }: SocketBound & AttendanceVersioned,
+        {
+          socketId,
+          attendanceVersion,
+          pushToken,
+        }: SocketBound & AttendanceVersioned & PushTokened,
       ): Promise<AxiosResponse<AttendanceAck>> {
         return axios({
           method: "delete",
@@ -205,6 +220,7 @@ export const api = {
           timeout: SIGNUP_TIMEOUT_MS,
           data: {
             socket_id: socketId,
+            push_token: pushToken,
             ...attendanceVersionField(attendanceVersion),
           },
         });
@@ -217,9 +233,10 @@ export const api = {
         residentId: number,
         patch: ({ late: boolean } | { vegetarian: boolean }) &
           SocketBound &
-          AttendanceVersioned,
+          AttendanceVersioned &
+          PushTokened,
       ): Promise<AxiosResponse<AttendanceAck>> {
-        const { socketId, attendanceVersion, ...rest } = patch;
+        const { socketId, attendanceVersion, pushToken, ...rest } = patch;
         return axios({
           method: "patch",
           url: `/api/v1/meals/${mealId}/residents/${residentId}`,
@@ -228,6 +245,7 @@ export const api = {
           data: {
             ...rest,
             socket_id: socketId,
+            push_token: pushToken,
             ...attendanceVersionField(attendanceVersion),
           },
         });
@@ -246,7 +264,8 @@ export const api = {
             vegetarian,
             key,
             socketId,
-          }: { vegetarian: boolean; key: string } & SocketBound,
+            pushToken,
+          }: { vegetarian: boolean; key: string } & SocketBound & PushTokened,
         ): Promise<AxiosResponse<Guest | GuestReplayed>> {
           return axios({
             method: "post",
@@ -254,7 +273,7 @@ export const api = {
             withCredentials: true,
             timeout: SIGNUP_TIMEOUT_MS,
             headers: { "Idempotency-Key": `"${key}"` },
-            data: { vegetarian, socket_id: socketId },
+            data: { vegetarian, socket_id: socketId, push_token: pushToken },
           });
         },
 
@@ -262,14 +281,14 @@ export const api = {
           mealId: number,
           residentId: number,
           guestId: number,
-          { socketId }: SocketBound,
+          { socketId, pushToken }: SocketBound & PushTokened,
         ): Promise<AxiosResponse<Ack>> {
           return axios({
             method: "delete",
             url: `/api/v1/meals/${mealId}/residents/${residentId}/guests/${guestId}`,
             withCredentials: true,
             timeout: SIGNUP_TIMEOUT_MS,
-            data: { socket_id: socketId },
+            data: { socket_id: socketId, push_token: pushToken },
           });
         },
       },

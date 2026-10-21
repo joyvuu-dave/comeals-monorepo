@@ -103,8 +103,12 @@ describe("the attendance version a tap sends", () => {
     alice.toggleLate();
     alice.toggleVeg();
 
+    const pushToken = expect.any(String);
     expect(sent()).toEqual([
-      ["delete", { socket_id: "test", attendance_version: 4 }],
+      [
+        "delete",
+        { socket_id: "test", attendance_version: 4, push_token: pushToken },
+      ],
       [
         "post",
         {
@@ -112,10 +116,27 @@ describe("the attendance version a tap sends", () => {
           vegetarian: false,
           socket_id: "test",
           attendance_version: 5,
+          push_token: pushToken,
         },
       ],
-      ["patch", { late: true, socket_id: "test", attendance_version: 6 }],
-      ["patch", { vegetarian: true, socket_id: "test", attendance_version: 7 }],
+      [
+        "patch",
+        {
+          late: true,
+          socket_id: "test",
+          attendance_version: 6,
+          push_token: pushToken,
+        },
+      ],
+      [
+        "patch",
+        {
+          vegetarian: true,
+          socket_id: "test",
+          attendance_version: 7,
+          push_token: pushToken,
+        },
+      ],
     ]);
   });
 

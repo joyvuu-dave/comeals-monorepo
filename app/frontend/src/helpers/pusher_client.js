@@ -27,7 +27,12 @@
 //    screen (data_store_app.js handleResidentsUpdate).
 // 5. The browser that caused the change is excluded from the meal-page
 //    push: the server passes the client's socket_id, so a tap never
-//    triggers its own refetch.
+//    triggers its own refetch. The six requests of the sign-up list are
+//    the exception (#237): each sends a push_token, and their push goes
+//    to the sender too and names it. The page skips a push only when
+//    every token in it is its own request that it has not given up on
+//    (data_store_signup_requests.ts ownPush), so a request written after
+//    the page stopped waiting for it still reaches the screen.
 // 6. Pusher does not replay messages missed while the socket was down,
 //    so every reconnect and every browser "online" event refetches
 //    (data_store_app.js handleReconnect). After a Pusher reconnect, what

@@ -62,4 +62,36 @@ RSpec.describe 'The meal page push for a request that carries a push_token' do
       expect(pushes).to eq([["meal-#{meal.id}", 'update', { message: 'meal updated', push_tokens: ['tap-1'] }]])
     end
   end
+
+  # A page loaded before push tokens sends none. Its push leaves its
+  # socket out, as before, so it is not told to load a change it showed
+  # already.
+  it 'leaves the sender out of the push of a request with no push_token, as before' do
+    meal
+    pushes = meal_pushes do
+      post path, params: { token: token, socket_id: 'sender-socket', late: false, vegetarian: false }, as: :json
+    end
+
+    expect(pushes).to eq([["meal-#{meal.id}", 'update', { message: 'meal updated' }, { socket_id: 'sender-socket' }]])
+  end
+
+  it 'reads a malformed push_token as none, and writes the change' do
+    meal
+    pushes = meal_pushes do
+      post path, params: sent.merge(push_token: 'a b', late: false, vegetarian: false), as: :json
+    end
+
+    expect(response).to have_http_status(:ok)
+    expect(pushes).to eq([["meal-#{meal.id}", 'update', { message: 'meal updated' }, { socket_id: 'sender-socket' }]])
+  end
+
+  # A refused request wrote nothing, so nothing is pushed, and the page
+  # keeps no promise about its token.
+  it 'pushes nothing for a refused request' do
+    meal
+    pushes = meal_pushes { post path, params: sent.merge(late: 'maybe', vegetarian: false), as: :json }
+
+    expect(response).to have_http_status(:bad_request)
+    expect(pushes).to eq([])
+  end
 end

@@ -271,6 +271,17 @@ A request with no `attendance_version`, or `null`, is not checked. It
 works as it did before the version existed, so pages and scripts written
 before it keep working.
 
+#### The push token
+
+A sign-up, a change, a cancel, a guest add and a guest removal can each
+send `push_token`: 1 to 64 letters, digits and hyphens, new for each
+request (the app sends a UUID). It changes nothing that is written. It
+changes only the live update for the meal page: with a token, that
+message also goes to the browser whose `socket_id` sent the request, and
+it names the token, so a client can tell the message for its own
+request from any other. Without a token, or with one of another form,
+the message leaves that browser out, as before.
+
 Any resident can sign up, cancel, or add guests for any other resident.
 The app is a shared screen in the common house, and the API is the same.
 The token only records who made the change in the history.

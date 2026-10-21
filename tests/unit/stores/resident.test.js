@@ -485,7 +485,7 @@ describe("Resident model", () => {
         url: "/api/v1/meals/1/residents/10",
         withCredentials: true,
         timeout: 35000,
-        data: { socket_id: "test" },
+        data: { socket_id: "test", push_token: expect.any(String) },
       });
 
       await new Promise((r) => setTimeout(r, 0));
@@ -551,7 +551,12 @@ describe("Resident model", () => {
         url: "/api/v1/meals/1/residents/10",
         withCredentials: true,
         timeout: 35000,
-        data: { late: false, vegetarian: true, socket_id: "test" },
+        data: {
+          late: false,
+          vegetarian: true,
+          socket_id: "test",
+          push_token: expect.any(String),
+        },
       });
     });
 
@@ -583,7 +588,7 @@ describe("Resident model", () => {
         url: "/api/v1/meals/1/residents/10",
         withCredentials: true,
         timeout: 35000,
-        data: { ...flags, socket_id: "test" },
+        data: { ...flags, socket_id: "test", push_token: expect.any(String) },
       });
     });
 
@@ -862,7 +867,11 @@ describe("Resident model", () => {
         withCredentials: true,
         timeout: 35000,
         headers: { "Idempotency-Key": expect.stringMatching(/^".+"$/) },
-        data: { vegetarian: true, socket_id: "test" },
+        data: {
+          vegetarian: true,
+          socket_id: "test",
+          push_token: expect.any(String),
+        },
       });
       await new Promise((r) => setTimeout(r, 0));
 
@@ -1775,7 +1784,7 @@ describe("Resident model", () => {
         url: "/api/v1/meals/1/residents/10/guests/102",
         withCredentials: true,
         timeout: 35000,
-        data: { socket_id: "test" },
+        data: { socket_id: "test", push_token: expect.any(String) },
       });
     });
 

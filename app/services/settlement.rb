@@ -437,7 +437,7 @@ class Settlement
   def forget_cached_meals
     LiveUpdate.batch do
       claimed_meals.each do |id, date|
-        LiveUpdate.meal(id, socket_id: nil)
+        LiveUpdate.meal(id, socket_id: nil, push_token: nil)
         LiveUpdate.calendar(date)
       end
     end
