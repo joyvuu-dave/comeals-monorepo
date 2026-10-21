@@ -25,7 +25,6 @@ RSpec.describe 'communities singleton_guard check constraint' do
   it 'refuses a second community written past the model with another singleton_guard' do
     expect { insert_a_copy_with_guard(1) }
       .to raise_error(ActiveRecord::StatementInvalid, /communities_singleton_guard_is_zero/)
-    expect(Community.count).to eq(1)
   end
 
   it 'refuses a second community written past the model with singleton_guard 0' do

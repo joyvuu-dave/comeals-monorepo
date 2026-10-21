@@ -42,7 +42,8 @@ No model has a cost method. See "Where the money math lives" below.
 The top-level record. Everything belongs to it.
 
 There is exactly one community row, forever. A unique index on
-`singleton_guard`, which is always 0, makes a second row impossible, and
+`singleton_guard`, which a CHECK keeps at 0
+(`communities_singleton_guard_is_zero`), makes a second row impossible, and
 `Community#enforce_singleton` refuses a second create. `before_destroy` and
 the `prevent_community_delete` database trigger both refuse to delete the row.
 The `before_destroy` is `prepend: true`, so it refuses before the dependent
@@ -92,8 +93,8 @@ Community
   `free_below_age <= full_price_age` (model validation plus the
   `communities_child_ages_non_negative` and `communities_child_ages_ordered`
   CHECKs). See "The Multiplier System" below.
-- `singleton_guard` — always 0, unique. This is what keeps the table at one
-  row.
+- `singleton_guard` — always 0 (a CHECK), unique. This is what keeps the
+  table at one row, even for a write that skips the model.
 
 There is no `slug` column and no friendly_id gem. Migration 20260811130000
 removed the slug.

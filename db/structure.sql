@@ -935,7 +935,8 @@ CREATE TABLE public.communities (
     CONSTRAINT communities_child_ages_ordered CHECK ((free_below_age <= full_price_age)),
     CONSTRAINT communities_dinner_start_times_shape CHECK (public.comeals_valid_dinner_start_times(dinner_start_times)),
     CONSTRAINT communities_meals_per_rotation_range CHECK (((meals_per_rotation >= 1) AND (meals_per_rotation <= 100))),
-    CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule))
+    CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule)),
+    CONSTRAINT communities_singleton_guard_is_zero CHECK ((singleton_guard = 0))
 );
 
 
@@ -4246,6 +4247,7 @@ SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
 ('20261023120000'),
+('20261021120000'),
 ('20261016130000'),
 ('20261016120000'),
 ('20261015120000'),
