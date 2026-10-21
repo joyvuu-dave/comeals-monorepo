@@ -40,10 +40,14 @@ no jobs and can be removed; the schedule lives in git.
 `bin/deploy` and the weekly workflow both scale the worker dyno to 1
 after the release, and then run `rake deploy:verify_solid_queue`, which
 fails unless the supervisor, dispatcher, worker and scheduler all have a
-heartbeat from the last two minutes. `bin/deploy` stops on that; the
-workflow rolls back. `bin/staging-rehearsal` runs the worker dyno during
-the rehearsal too (staging is neutered, so its jobs send nothing out),
-checks the same heartbeats, and parks both dynos at the end. The steps
+heartbeat from the last two minutes, and then
+`rake deploy:verify_recurring_job`, which queues the hourly
+`delete_expired_guest_add_keys` task the way the scheduler does and
+fails unless the worker has run it within two minutes. `bin/deploy`
+stops on either; the workflow rolls back. `bin/staging-rehearsal` runs
+the worker dyno during the rehearsal too (staging is neutered, so its
+jobs send nothing out), runs the same two checks, and parks both dynos
+at the end. The steps
 below are still the record of what happens and why.
 
 ## Steps

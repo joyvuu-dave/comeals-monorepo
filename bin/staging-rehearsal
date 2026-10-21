@@ -243,6 +243,16 @@ if [ "$solid_queue_up" != true ]; then
 fi
 ok "Solid Queue runs on staging (supervisor, dispatcher, worker, scheduler)"
 
+# A heartbeat says a process is alive, not that its work succeeds: on
+# 2026-10-20 the scheduler failed at every tick here with fresh
+# heartbeats. Queue a recurring task the way the scheduler does and wait
+# for the worker to run it. One try: the task waits up to two minutes.
+if ! heroku run --exit-code -a "$STAGING_APP" -- bin/rake deploy:verify_recurring_job; then
+  fail "A recurring task queued on staging did not run. Read the error above and: heroku logs -a $STAGING_APP --dyno worker"
+  exit 1
+fi
+ok "The worker ran a recurring task queued the way the scheduler queues it"
+
 step "Log check"
 
 # Everything the release and boot logged. Deprecation warnings fail on

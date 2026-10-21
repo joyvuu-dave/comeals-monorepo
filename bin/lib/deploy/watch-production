@@ -105,6 +105,14 @@ if [ "$solid_queue_up" != true ]; then
   roll_back
   exit 1
 fi
+# A heartbeat says a process is alive, not that its work succeeds. Queue
+# a recurring task the way the scheduler does and wait (up to two
+# minutes, inside the task) for the worker to run it.
+if ! heroku run --exit-code bin/rake deploy:verify_recurring_job -a "$PROD_APP"; then
+  echo "A recurring task queued on production did not run. Rolling back."
+  roll_back
+  exit 1
+fi
 # The soak: watch the logs for a few minutes of real traffic.
 sleep 180
 # Only lines logged after the promote began — the last 1500

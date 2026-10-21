@@ -568,6 +568,24 @@ check_solid_queue() {
   exit 1
 }
 
+# A heartbeat says a process is alive, not that its work succeeds: on
+# staging on 2026-10-20 the scheduler failed at every tick with fresh
+# heartbeats. So queue a recurring task the way the scheduler does and
+# wait for the worker to run it (rake deploy:verify_recurring_job). One
+# try: the task itself waits up to two minutes for the worker.
+check_recurring_job() {
+  step "Recurring job check"
+
+  if heroku run --exit-code bin/rake deploy:verify_recurring_job -a "$APP"; then
+    ok "The worker ran a recurring task queued the way the scheduler queues it"
+    return 0
+  fi
+
+  fail "Solid Queue is up, but a recurring task did not run. The nightly jobs and live updates may not run."
+  info "Read the error above, then: heroku logs -a $APP --dyno worker | grep -i error"
+  exit 1
+}
+
 # --- Main ---------------------------------------------------------------------
 
 main() {
@@ -637,6 +655,7 @@ main() {
   check_logs
   check_health
   check_solid_queue
+  check_recurring_job
   run_smoke
 
   echo
