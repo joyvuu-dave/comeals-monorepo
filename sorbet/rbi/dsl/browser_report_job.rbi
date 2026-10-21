@@ -9,6 +9,7 @@ class BrowserReportJob
   class << self
     sig do
       params(
+        date: ::Date,
         result: ::String,
         tests: T::Array[::String],
         error: T.nilable(::String),
@@ -20,10 +21,11 @@ class BrowserReportJob
         block: T.nilable(T.proc.params(job: BrowserReportJob).void)
       ).returns(T.any(BrowserReportJob, FalseClass))
     end
-    def perform_later(result:, tests:, error:, browser:, major:, os:, device:, user_agent:, &block); end
+    def perform_later(date:, result:, tests:, error:, browser:, major:, os:, device:, user_agent:, &block); end
 
     sig do
       params(
+        date: ::Date,
         result: ::String,
         tests: T::Array[::String],
         error: T.nilable(::String),
@@ -34,6 +36,6 @@ class BrowserReportJob
         user_agent: ::String
       ).void
     end
-    def perform_now(result:, tests:, error:, browser:, major:, os:, device:, user_agent:); end
+    def perform_now(date:, result:, tests:, error:, browser:, major:, os:, device:, user_agent:); end
   end
 end

@@ -22,6 +22,9 @@ module GeneratedPathHelpersModule
   def admin_bills_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def admin_browsers_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def admin_comment_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -110,6 +113,9 @@ module GeneratedPathHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def admin_user_session_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_browser_reports_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def api_v1_common_house_reservations_path(*args); end

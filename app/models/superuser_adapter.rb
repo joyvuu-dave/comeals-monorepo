@@ -59,6 +59,12 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   # permission.
   TOKEN_READABLE_MODELS = %w[Bill Meal Reconciliation Resident Unit].freeze
 
+  # The pages (ActiveAdmin.register_page) a read-only token link may reach,
+  # by name. Only the dashboard: it is where ActiveAdmin sends a refused
+  # request, so refusing it would make every refusal a redirect loop. The
+  # Browsers page is not linked from any email.
+  TOKEN_READABLE_PAGES = %w[Dashboard].freeze
+
   READ_ACTIONS = %i[read].freeze
 
   # Actions that decide about money without writing a ledger model. See
@@ -137,10 +143,13 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   def token_authorized?(action, subject)
     return false unless READ_ACTIONS.include?(action)
 
+    return TOKEN_READABLE_PAGES.include?(subject.name) if subject.is_a?(ActiveAdmin::Page)
+
     model = model_name(subject)
-    # Pages rather than models (the Dashboard) have no model to check. The
-    # Dashboard is also where ActiveAdmin redirects an unauthorized request,
-    # so refusing it here would turn every denial into a redirect loop.
+    # No subject at all, or one that is neither a model nor a page, has no
+    # name to check. ActiveAdmin asks that way when it decides whether to
+    # draw parts of the layout, and saying no there would break the
+    # dashboard, where every refused request is sent.
     return true if model.nil?
 
     TOKEN_READABLE_MODELS.include?(model)

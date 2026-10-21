@@ -1,5 +1,24 @@
 # frozen_string_literal: true
 
+# == Schema Information
+#
+# Table name: browser_counts
+#
+#  id         :bigint           not null, primary key
+#  browser    :string           not null
+#  count      :integer          not null
+#  date       :date             not null
+#  device     :string           not null
+#  major      :integer
+#  os         :string           not null
+#  result     :string           not null
+#  created_at :datetime         not null
+#  updated_at :datetime         not null
+#
+# Indexes
+#
+#  index_browser_counts_on_the_count_key  (date, browser, COALESCE(major, 0), os, device, result) UNIQUE
+#
 require 'rails_helper'
 
 # One row per day and kind of browser: how many page loads it had, and

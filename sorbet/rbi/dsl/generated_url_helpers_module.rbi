@@ -22,6 +22,9 @@ module GeneratedUrlHelpersModule
   def admin_bills_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def admin_browsers_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def admin_comment_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -110,6 +113,9 @@ module GeneratedUrlHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def admin_user_session_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_browser_reports_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def api_v1_common_house_reservations_url(*args); end

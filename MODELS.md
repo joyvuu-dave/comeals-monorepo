@@ -1244,6 +1244,48 @@ and pushes after the commit (ADR 0007).
 
 ---
 
+## Browser Counts
+
+### BrowserCount
+
+Page loads per day and kind of browser, and the result of the browser
+check that runs in `index.html` before the app
+(`app/frontend/browser_check.js`). The check sends one report per page
+load to `POST /api/v1/browser-reports`, and `BrowserReportJob` adds one to
+the row for that day and browser (`BrowserCount.add_one!`, one `INSERT ...
+ON CONFLICT DO UPDATE`). A browser that runs no script at all, a crawler,
+and a page restored from the browser's back-and-forward cache send nothing
+and are not counted. A reload is a second page load. The admin Browsers
+page adds the rows up by month (`BrowserCount.by_month`).
+
+Counts only. No IP address, no resident, and no User-Agent string are
+stored. Not linked to the community: it is a fact about browsers.
+
+No associations.
+
+**Key fields:** `date` (the community's day when the report arrived, through
+`Community#today`), `browser` (the browser's name, or `Unknown`), `major`
+(the browser's major version, NULL when it could not be read), `os`,
+`device` (`phone`, `tablet`, `desktop` or `unknown`), `result` (`passed`,
+`failed` or `error`), `count` (page loads, at least 1). A unique index on
+`(date, browser, COALESCE(major, 0), os, device, result)` makes one row per
+kind, so a browser with no version adds up in one row too. CHECKs keep
+`device` and `result` to their lists, `count` and `major` above 0, and the
+names 1 to 60 characters.
+
+There is no OS version. Safari on an iPad sends the same User-Agent as
+Safari on a Mac, so the check also sends whether the screen takes touch, and
+a "Mac" with a touch screen is counted as iPadOS. Newer Safari and Chrome
+send a frozen OS version, so the browser's own version is the number to read:
+on an iPad or iPhone, Safari's version is the iOS version
+(`BrowserDescription`).
+
+Two page loads of the same kind at the same moment write the same row, and
+at SERIALIZABLE the second is refused. The job retries it
+(`RetryOnConflict`), and reports a write that keeps failing; it never raises.
+
+---
+
 ## Authentication
 
 ### How login works

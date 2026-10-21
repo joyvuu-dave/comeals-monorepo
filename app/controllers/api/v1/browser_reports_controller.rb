@@ -52,8 +52,19 @@ module Api
       # The page has loaded by the time its report arrives, so a report
       # that cannot be queued changes nothing for the person. It answers
       # the same, and the failure is reported.
+      #
+      # The date is the community's day now, when the page loaded, and not
+      # when the job runs, which can be after midnight.
+      #
+      # No IP address and no resident: the report is about a browser, not a
+      # person.
       def queue(report)
-        BrowserReportJob.perform_later(**report.job_arguments)
+        browser = report.browser
+        BrowserReportJob.perform_later(
+          date: Community.instance.today, result: report.result, tests: report.tests, error: report.error,
+          browser: browser.browser, major: browser.major, os: browser.os, device: browser.device,
+          user_agent: report.user_agent
+        )
       rescue StandardError => e
         Rails.error.report(e, handled: true, context: { browser_report: report.result })
       end

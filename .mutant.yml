@@ -130,6 +130,7 @@ matcher:
     - JobRun*
     - Key*
     - LedgerCheckRun*
+    - BrowserCount*
     - MailDelivery*
     - Meal*
     - MealCharge*

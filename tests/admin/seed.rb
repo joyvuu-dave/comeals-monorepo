@@ -167,9 +167,27 @@ def seed_ledger_checks
                                        ])
 end
 
+# /browsers adds these up by month: this month and the month before, a
+# browser with no version, and every check result.
+def seed_browser_counts
+  this_month = SEED_NOW.to_date
+  last_month = this_month.prev_month
+  [
+    [this_month, 'Safari', 18, 'iPadOS', 'tablet', 'passed', 12],
+    [this_month, 'Safari', 15, 'iPadOS', 'tablet', 'failed', 3],
+    [this_month, 'Chrome', 141, 'Android', 'phone', 'passed', 5],
+    [this_month, 'Safari', 18, 'iOS', 'phone', 'error', 1],
+    [last_month, 'Safari', 18, 'iOS', 'phone', 'passed', 9],
+    [last_month, 'Unknown', nil, 'Unknown', 'unknown', 'passed', 1]
+  ].each do |*key, count|
+    count.times { BrowserCount.add_one!(**BrowserCount::KEY.zip(key).to_h) }
+  end
+end
+
 community, cook, bob, carol = seed_people
 seed_meals(community, cook, bob, carol)
 seed_calendar(community, cook, bob)
 seed_ledger_checks
+seed_browser_counts
 
 puts "seeded #{conn.current_database}"

@@ -937,6 +937,49 @@ ALTER SEQUENCE public.bills_save_keys_id_seq OWNED BY public.bills_save_keys.id;
 
 
 --
+-- Name: browser_counts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.browser_counts (
+    id bigint NOT NULL,
+    date date NOT NULL,
+    browser character varying NOT NULL,
+    major integer,
+    os character varying NOT NULL,
+    device character varying NOT NULL,
+    result character varying NOT NULL,
+    count integer NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT browser_counts_browser_length CHECK (((char_length((browser)::text) >= 1) AND (char_length((browser)::text) <= 60))),
+    CONSTRAINT browser_counts_count_is_positive CHECK ((count > 0)),
+    CONSTRAINT browser_counts_device_is_known CHECK (((device)::text = ANY ((ARRAY['phone'::character varying, 'tablet'::character varying, 'desktop'::character varying, 'unknown'::character varying])::text[]))),
+    CONSTRAINT browser_counts_major_is_positive CHECK (((major IS NULL) OR (major > 0))),
+    CONSTRAINT browser_counts_os_length CHECK (((char_length((os)::text) >= 1) AND (char_length((os)::text) <= 60))),
+    CONSTRAINT browser_counts_result_is_known CHECK (((result)::text = ANY ((ARRAY['passed'::character varying, 'failed'::character varying, 'error'::character varying])::text[])))
+);
+
+
+--
+-- Name: browser_counts_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.browser_counts_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: browser_counts_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.browser_counts_id_seq OWNED BY public.browser_counts.id;
+
+
+--
 -- Name: common_house_reservations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2380,6 +2423,13 @@ ALTER TABLE ONLY public.bills_save_keys ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: browser_counts id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.browser_counts ALTER COLUMN id SET DEFAULT nextval('public.browser_counts_id_seq'::regclass);
+
+
+--
 -- Name: common_house_reservations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2698,6 +2748,14 @@ ALTER TABLE ONLY public.bills
 
 ALTER TABLE ONLY public.bills_save_keys
     ADD CONSTRAINT bills_save_keys_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: browser_counts browser_counts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.browser_counts
+    ADD CONSTRAINT browser_counts_pkey PRIMARY KEY (id);
 
 
 --
@@ -3103,6 +3161,13 @@ CREATE INDEX index_bills_save_keys_on_created_at ON public.bills_save_keys USING
 --
 
 CREATE UNIQUE INDEX index_bills_save_keys_on_meal_id_and_key ON public.bills_save_keys USING btree (meal_id, key);
+
+
+--
+-- Name: index_browser_counts_on_the_count_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_browser_counts_on_the_count_key ON public.browser_counts USING btree (date, browser, COALESCE(major, 0), os, device, result);
 
 
 --

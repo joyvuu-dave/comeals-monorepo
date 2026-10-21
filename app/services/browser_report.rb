@@ -53,15 +53,6 @@ class BrowserReport
     @browser = T.let(BrowserDescription.new(@user_agent, touch: touch), BrowserDescription)
   end
 
-  # What BrowserReportJob takes. No IP address and no resident: the
-  # report is about a browser, not a person.
-  sig { returns(T::Hash[Symbol, T.untyped]) }
-  def job_arguments
-    { result: result, tests: tests, error: error,
-      browser: browser.browser, major: browser.major, os: browser.os, device: browser.device,
-      user_agent: user_agent }
-  end
-
   private
 
   sig { params(params: ActionController::Parameters, key: Symbol).returns(T.nilable(String)) }

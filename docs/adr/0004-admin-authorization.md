@@ -142,6 +142,14 @@ The Dashboard stays readable on the token path. ActiveAdmin redirects an
 unauthorized request to the admin root, so refusing the Dashboard would turn
 every denial into a redirect loop.
 
+Pages that are not a resource (`ActiveAdmin.register_page`) are read from an
+allowlist too, `TOKEN_READABLE_PAGES`, and it holds the Dashboard only.
+Until 2026-10-21 every such page was open to the token, because a page has
+no model to check, and the Dashboard was the only page. The Browsers page
+(browser counts, `app/admin/browsers.rb`) is not linked from any email, so
+the token cannot read it, and a page added later is closed to the token
+until it is put on the list.
+
 ### 4. A community always keeps at least one superuser
 
 Demoting or destroying the last superuser is refused at three layers:

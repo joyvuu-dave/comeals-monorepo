@@ -17,6 +17,14 @@ AdminUser:
     UniqueIndexChecker:
       enabled: false
 
+BrowserCount:
+  # Rows are never saved through the model: add_one! adds to the row with
+  # INSERT ... ON CONFLICT DO UPDATE, so a second row of the same kind is
+  # never tried. A uniqueness validator would never run.
+  index_browser_counts_on_the_count_key:
+    UniqueIndexChecker:
+      enabled: false
+
 MailDelivery:
   # The uniqueness validator on resident_id, scoped to mailer and record,
   # covers a row with no resident too: Rails finds the first one by
