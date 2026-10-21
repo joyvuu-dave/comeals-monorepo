@@ -42,7 +42,7 @@ RSpec.describe 'bin/test-integration', bash_coverage: BashCoverage.new('spec/bin
       'curl -sf http://localhost:3001/api/v1/version',
       'npx playwright test --config playwright.integration.config.js',
       'psql -q -d comeals_test -c TRUNCATE communities, ledger_check_runs, ' \
-      'audits CASCADE'
+      'audits, browser_counts CASCADE'
     )
     expect(sandbox.call_lines.first(4))
       .to eq(['bundle exec rails db:prepare', 'bundle exec rails test:seed_integration', 'npm run build',
@@ -77,7 +77,7 @@ RSpec.describe 'bin/test-integration', bash_coverage: BashCoverage.new('spec/bin
                                           'curl -sf http://localhost:21060/api/v1/version',
                                           'npx playwright test --config playwright.integration.config.js auth.spec.js',
                                           'psql -q -d comeals_test_task -c TRUNCATE communities, ' \
-                                          'ledger_check_runs, audits CASCADE')
+                                          'ledger_check_runs, audits, browser_counts CASCADE')
   end
 
   it 'takes the port from the environment before .env' do

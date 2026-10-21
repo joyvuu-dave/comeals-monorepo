@@ -170,6 +170,7 @@ end
 # /browsers adds these up by month: this month and the month before, a
 # browser with no version, and every check result.
 def seed_browser_counts
+  columns = %i[date browser major os device result]
   this_month = SEED_NOW.to_date
   last_month = this_month.prev_month
   [
@@ -180,7 +181,8 @@ def seed_browser_counts
     [last_month, 'Safari', 18, 'iOS', 'phone', 'passed', 9],
     [last_month, 'Unknown', nil, 'Unknown', 'unknown', 'passed', 1]
   ].each do |*key, count|
-    count.times { BrowserCount.add_one!(**BrowserCount::KEY.zip(key).to_h) }
+    row = columns.zip(key).to_h
+    count.times { BrowserCount.add_one!(**row) }
   end
 end
 

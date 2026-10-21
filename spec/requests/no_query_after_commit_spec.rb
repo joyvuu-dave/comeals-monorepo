@@ -58,7 +58,8 @@ RSpec.describe 'what a write runs after its commit' do
   # a refused save with a redirect too, so for admin this also checks
   # that the page shows no alert.
   def expect_nothing_after_the_commit(result, admin:)
-    expect(response).to have_http_status(:ok).or have_http_status(:created).or have_http_status(:found)
+    expect(response).to have_http_status(:ok).or(have_http_status(:created))
+                                             .or(have_http_status(:no_content)).or(have_http_status(:found))
     expect(flash[:alert]).to be_nil if admin
     expect(result.committed).to be(true)
     expect(result.queries).to eq([]), "ran after the commit:\n#{result.queries.join("\n")}"
@@ -121,6 +122,13 @@ RSpec.describe 'what a write runs after its commit' do
   write 'POST /api/v1/residents/password-reset/:token' do
     resident.update!(reset_password_token: 'a-reset-token', reset_password_sent_at: Time.current)
     -> { post '/api/v1/residents/password-reset/a-reset-token', params: { password: 'a-new-password' } }
+  end
+
+  # Its one write is the job it queues, a Solid Queue row.
+  write 'POST /api/v1/browser-reports' do
+    iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 ' \
+             '(KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1'
+    -> { post '/api/v1/browser-reports?result=failed&tests=lookbehind&touch=0', headers: { 'User-Agent' => iphone } }
   end
 
   write 'DELETE /api/v1/sessions/current' do

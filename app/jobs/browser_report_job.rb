@@ -30,7 +30,7 @@ class BrowserReportJob < ApplicationJob
   CONFLICT_BASE_DELAY = 0.25
 
   retry_on StandardError, wait: WAIT, attempts: ATTEMPTS do |job, error|
-    Rails.error.report(error, handled: true, context: { browser_report: job.arguments.first&.slice(:date, :result) })
+    Rails.error.report(error, handled: true, context: { browser_report: job.arguments.first.slice(:date, :result) })
   end
 
   # rubocop:disable Metrics/ParameterLists -- one keyword per field of the report

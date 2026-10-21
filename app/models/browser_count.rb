@@ -34,10 +34,6 @@
 class BrowserCount < ApplicationRecord
   extend T::Sig
 
-  # The columns that name a row. add_one! adds to the row with these
-  # values, or starts one.
-  KEY = %i[date browser major os device result].freeze
-
   DEVICES = %w[phone tablet desktop unknown].freeze
   MAX_NAME = 60
 

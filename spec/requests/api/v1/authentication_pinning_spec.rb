@@ -12,8 +12,9 @@ require 'rails_helper'
 # never 404. That is why every placeholder in a path can be filled with 1.
 RSpec.describe 'API authentication boundary' do
   # Anyone may call these with no sign-in: signing in, resetting a
-  # password, the two iCal feeds a calendar app polls, and the version
-  # check. Each is [verb, path] as routes.rb draws it.
+  # password, the two iCal feeds a calendar app polls, the version
+  # check, and the browser check's report, which is sent before anyone
+  # signs in. Each is [verb, path] as routes.rb draws it.
   def self.public_routes
     [
       %w[POST /api/v1/residents/token],
@@ -22,7 +23,8 @@ RSpec.describe 'API authentication boundary' do
       %w[GET /api/v1/residents/name/:token],
       %w[GET /api/v1/residents/:id/ical],
       %w[GET /api/v1/communities/:id/ical],
-      %w[GET /api/v1/version]
+      %w[GET /api/v1/version],
+      %w[POST /api/v1/browser-reports]
     ]
   end
 
