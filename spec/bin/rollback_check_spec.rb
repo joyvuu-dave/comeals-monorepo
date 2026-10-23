@@ -28,9 +28,12 @@ RSpec.describe 'bin/rollback-check', bash_coverage: BashCoverage.new('spec/bin/r
     out.strip
   end
 
-  # Writes the files and commits them, and returns the commit.
+  # Writes the files and commits them, and returns the commit. A body of
+  # nil deletes the file.
   def commit(files)
     files.each do |path, body|
+      next File.delete(File.join(repo, path)) if body.nil?
+
       FileUtils.mkdir_p(File.join(repo, File.dirname(path)))
       File.write(File.join(repo, path), body)
     end
@@ -83,6 +86,33 @@ RSpec.describe 'bin/rollback-check', bash_coverage: BashCoverage.new('spec/bin/r
     _, status = check(old, now)
 
     expect(status.exitstatus).to eq(0)
+  end
+
+  # After a deploy, the migrations production ran are deleted
+  # (CLAUDE.md). The database keeps what they made, so the older code
+  # still runs on it.
+  it 'passes when migrations were only deleted' do
+    old = commit('db/migrate/20260101000000_first.rb' => 'class First; end', 'app/a.rb' => '')
+    now = commit('db/migrate/20260101000000_first.rb' => nil)
+
+    out, status = check(old, now)
+
+    expect(status.exitstatus).to eq(0)
+    expect(out).to include('No migration was added after')
+  end
+
+  # git calls a deleted file and an added file with nearly the same text a
+  # rename. The added file is still a new migration that ran.
+  it 'lists a new migration added in the same commit that deletes one with nearly the same text' do
+    body = "class Change < ActiveRecord::Migration[8.1]\n  def change\n    add_column :meals, :a, :text\n  end\nend\n"
+    old = commit('db/migrate/20260101000000_change.rb' => body)
+    now = commit('db/migrate/20260101000000_change.rb' => nil,
+                 'db/migrate/20260301000000_change.rb' => body.sub(':a', ':b'))
+
+    out, status = check(old, now)
+
+    expect(status.exitstatus).to eq(1)
+    expect(out.lines.map(&:strip).drop(1)).to eq(%w[db/migrate/20260301000000_change.rb])
   end
 
   it 'refuses to run without two commits' do
