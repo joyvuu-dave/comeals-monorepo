@@ -20,7 +20,11 @@ fi
 
 target="$1"
 live="$2"
-added=$(git diff --name-only --diff-filter=A "$target" "$live" -- db/migrate)
+# --no-renames: git would call a deleted migration and a new one with
+# nearly the same text a rename, and --diff-filter=A would leave the new
+# one out. A deleted migration is not listed: the database keeps what it
+# made, and the older code was written for that.
+added=$(git diff --name-only --no-renames --diff-filter=A "$target" "$live" -- db/migrate)
 
 if [ -z "$added" ]; then
   echo "No migration was added after $target, so its code runs on this database."
