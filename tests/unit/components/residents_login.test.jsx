@@ -467,12 +467,25 @@ describe("ResidentsLogin", () => {
   });
 
   it("the reset-password path opens the new-password modal", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    renderLogin({ path: "/reset-password/tok-1" });
+    axios.post.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
+    renderLogin({ path: "/reset-password#token=tok-1" });
 
     expect(
       await screen.findByText("Reset Password for Jane Smith"),
     ).toBeInTheDocument();
+  });
+
+  // A link mailed before 2026-10-23, with the token in the path, opens
+  // the form too, and the form says that link no longer works.
+  it("a reset link of the old kind says to ask for a new one", async () => {
+    renderLogin({ path: "/reset-password/tok-1" });
+
+    await vi.waitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "This password reset link no longer works. Please request a new one.",
+      ]);
+    });
+    expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
   });
 
   it("password reset shows the server's answer", async () => {
@@ -560,8 +573,8 @@ describe("ResidentsLogin", () => {
   });
 
   it("Escape closes the new-password modal back to the login page", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    renderLogin({ path: "/reset-password/tok-1" });
+    axios.post.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
+    renderLogin({ path: "/reset-password#token=tok-1" });
     await screen.findByText("Reset Password for Jane Smith");
 
     fireEvent.keyDown(screen.getByRole("dialog"), {
@@ -578,8 +591,8 @@ describe("ResidentsLogin", () => {
   // did nothing. Focus that goes to <body> now goes back to the dialog
   // (watch_dialog_focus.ts).
   it("Escape still closes the new-password modal after its field lost focus to the page", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    renderLogin({ path: "/reset-password/tok-1" });
+    axios.post.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
+    renderLogin({ path: "/reset-password#token=tok-1" });
     const field = await screen.findByPlaceholderText("New Password");
     const dialog = screen.getByRole("dialog");
     field.focus();

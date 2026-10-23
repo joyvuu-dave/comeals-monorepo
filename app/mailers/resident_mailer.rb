@@ -3,10 +3,12 @@
 
 class ResidentMailer < ApplicationMailer
   # The token comes from PasswordReset, which stores only its digest, so
-  # the resident row cannot give it back.
+  # the resident row cannot give it back. It goes after the #: a browser
+  # never sends that part of a link to the server, so the token is in no
+  # request line and no log (Api::V1::ResidentsController).
   def password_reset_email(resident, token)
     @resident = resident
-    @url = "#{root_url}/reset-password/#{token}"
+    @url = "#{root_url}/reset-password#token=#{token}"
     mail(to: @resident.email, subject: 'Reset your password')
   end
 

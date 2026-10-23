@@ -109,7 +109,9 @@ describe("installAuthInterceptor", () => {
     });
 
     it("does not add any Authorization header to a blank config", () => {
-      const out = capturedInterceptor({ url: "/api/v1/residents/name/xyz" });
+      const out = capturedInterceptor({
+        url: "/api/v1/residents/password-reset/name",
+      });
       expect(out.headers?.Authorization).toBeUndefined();
     });
 
@@ -119,7 +121,7 @@ describe("installAuthInterceptor", () => {
       // the caller will handle auth another way. The interceptor must not
       // erase what it didn't set.
       const out = capturedInterceptor({
-        url: "/api/v1/residents/name/xyz",
+        url: "/api/v1/residents/password-reset/name",
         headers: { Authorization: "Bearer caller-provided" },
       });
       expect(out.headers.Authorization).toBe("Bearer caller-provided");

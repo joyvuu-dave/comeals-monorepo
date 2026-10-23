@@ -633,7 +633,7 @@ test.describe("Visual Baselines", () => {
     await mockApi(page);
     await page.clock.setFixedTime(FROZEN_NOW);
 
-    await page.goto("/reset-password/test-reset-token/");
+    await page.goto("/reset-password#token=test-reset-token");
     await page.waitForLoadState("networkidle");
 
     const modal = page.locator(".ReactModal__Content--after-open");
@@ -1815,9 +1815,9 @@ test.describe("Visual Baselines", () => {
     await disableIdleTimer(page);
     await mockApi(page);
     await page.clock.setFixedTime(FROZEN_NOW);
-    await holdRoute(page, "**/api/v1/residents/password-reset/*", "POST");
+    await holdRoute(page, "**/api/v1/residents/password-reset/new", "POST");
 
-    await page.goto("/reset-password/test-reset-token/");
+    await page.goto("/reset-password#token=test-reset-token");
     await page.waitForLoadState("networkidle");
     const modal = page.locator(".ReactModal__Content--after-open");
     await modal.locator('input[type="password"]').fill("hunter2hunter2");
@@ -1985,18 +1985,18 @@ test.describe("Visual Baselines", () => {
       await disableIdleTimer(page);
       await mockApi(page);
       await page.clock.setFixedTime(FROZEN_NOW);
-      await page.route("**/api/v1/residents/name/*", (route) =>
+      await page.route("**/api/v1/residents/password-reset/name", (route) =>
         route.abort("failed"),
       );
 
-      await page.goto("/reset-password/test-reset-token/");
+      await page.goto("/reset-password#token=test-reset-token");
       const modal = page.locator(".ReactModal__Content--after-open");
       await expect(
         modal.getByText(
           "Could not load this page. Check your connection and try again.",
         ),
       ).toBeVisible({ timeout: 10000 });
-      await expect(page).toHaveURL(/\/reset-password\/test-reset-token\/?$/);
+      await expect(page).toHaveURL(/\/reset-password$/);
       await page.waitForTimeout(500);
 
       await expect(page).toHaveScreenshot("password-reset-failed.png", {

@@ -72,28 +72,28 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
     end
   end
 
-  describe 'POST /api/v1/residents/password-reset/:token (password_new)' do
+  describe 'POST /api/v1/residents/password-reset/new (password_new)' do
     let!(:token) { give_reset_token(resident) }
 
     it 'clears the reset_password_token_digest after successful reset' do
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
 
       expect(response).to have_http_status(:ok)
       expect(resident.reload.reset_password_token_digest).to be_nil
     end
 
     it 'clears reset_password_sent_at after successful reset' do
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
 
       expect(response).to have_http_status(:ok)
       expect(resident.reload.reset_password_sent_at).to be_nil
     end
 
     it 'prevents reuse of the same token' do
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
       expect(response).to have_http_status(:ok)
 
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'anotherpassword' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'anotherpassword' }
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Password reset link is incorrect or expired.')
       expect(resident.reload.authenticate('newpassword123')).to eq(resident)
@@ -104,7 +104,7 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
     it 'refuses a link that a newer reset request replaced' do
       request_reset(email: 'sarah@example.com')
 
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to eq('Password reset link is incorrect or expired.')
@@ -116,7 +116,7 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
     it 'rejects a token older than 24 hours' do
       resident.update_columns(reset_password_sent_at: 25.hours.ago)
 
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to include('expired')
@@ -125,7 +125,7 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
     it 'accepts a token less than 24 hours old' do
       resident.update_columns(reset_password_sent_at: 23.hours.ago)
 
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
 
       expect(response).to have_http_status(:ok)
     end
@@ -133,7 +133,7 @@ RSpec.describe 'POST /api/v1/residents/password-reset' do
     it 'rejects a token when reset_password_sent_at is nil' do
       resident.update_columns(reset_password_sent_at: nil)
 
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'newpassword123' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'newpassword123' }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message']).to include('expired')

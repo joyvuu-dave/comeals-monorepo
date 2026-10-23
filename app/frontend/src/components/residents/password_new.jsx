@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate, useParams } from "react-router";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import useFormMessages from "../../helpers/use_form_messages";
@@ -10,9 +10,32 @@ import FormMessages from "../modal_form/form_messages";
 // (see useFormMessages below).
 function nobodyReads() {}
 
+// What the page says when it has no token it can use. The server's
+// answer for a link of the old kind says the same
+// (ResidentsController::RETIRED_RESET_LINK).
+export const RETIRED_LINK =
+  "This password reset link no longer works. Please request a new one.";
+export const NO_TOKEN =
+  "Open the link in your password reset email again, or request a new one.";
+
+// The token in the part of the address after the #, as the reset email
+// writes it: /reset-password#token=... . A browser never sends that part
+// to the server, so the token is in no request line and no log. Empty
+// when there is none.
+export function tokenFromHash(hash) {
+  return new URLSearchParams(hash.replace(/^#/, "")).get("token") || "";
+}
+
 function ResidentsPasswordNew() {
-  const { token } = useParams();
+  // A token in the path is a link mailed before 2026-10-23. Those tokens
+  // were cleared when the link changed, so none of them can work.
+  const { token: oldToken } = useParams();
+  const location = useLocation();
   const navigate = useNavigate();
+  // Read once, when the page opens. The effect below then takes it out
+  // of the address, so it does not stay on a shared screen or in the
+  // browser's history, and the page keeps it here.
+  const [token] = useState(() => tokenFromHash(location.hash));
 
   const [ready, setReady] = useState(false);
   const [name, setName] = useState("");
@@ -38,8 +61,25 @@ function ResidentsPasswordNew() {
   useEffect(
     function () {
       mountedRef.current = true;
+      // No request: the server could not use the link either. The
+      // message stays up on the login page, like a refused link's.
+      if (typeof oldToken !== "undefined" || token === "") {
+        toastStore.show(
+          typeof oldToken !== "undefined" ? RETIRED_LINK : NO_TOKEN,
+          "error",
+        );
+        navigate("/", { replace: true });
+        return function () {
+          mountedRef.current = false;
+        };
+      }
+      // Take the token out of the address. The page has it in state.
+      navigate(
+        { pathname: location.pathname, search: location.search },
+        { replace: true },
+      );
       axios
-        .get(`/api/v1/residents/name/${token}`)
+        .post(`/api/v1/residents/password-reset/name`, { reset_token: token })
         .then(function (response) {
           if (!mountedRef.current) return;
           setName(response.data.name);
@@ -74,7 +114,9 @@ function ResidentsPasswordNew() {
         mountedRef.current = false;
       };
     },
-    [token, navigate],
+    // Taking the token out of the address changes only the part after
+    // the #, so this does not run again.
+    [oldToken, token, navigate, location.pathname, location.search],
   );
 
   function handleSubmit(e) {
@@ -82,7 +124,8 @@ function ResidentsPasswordNew() {
     setLoading(true);
 
     axios
-      .post(`/api/v1/residents/password-reset/${token}`, {
+      .post(`/api/v1/residents/password-reset/new`, {
+        reset_token: token,
         password: password,
       })
       .then(function (response) {

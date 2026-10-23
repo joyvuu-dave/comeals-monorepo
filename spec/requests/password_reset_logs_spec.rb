@@ -76,10 +76,10 @@ RSpec.describe 'Password reset tokens and the logs' do
     get request_line_of(mailed_link)
     expect(response).to have_http_status(:ok)
 
-    post '/api/v1/residents/password-reset/name', params: { token: token }, as: :json
+    post '/api/v1/residents/password-reset/name', params: { reset_token: token }, as: :json
     expect(response.parsed_body).to eq('name' => 'Sarah')
 
-    post '/api/v1/residents/password-reset/new', params: { token: token, password: 'new one' }, as: :json
+    post '/api/v1/residents/password-reset/new', params: { reset_token: token, password: 'new one' }, as: :json
     expect(response.parsed_body).to eq('message' => 'Password updated!')
     expect(resident.reload.authenticate('new one')).to eq(resident)
 

@@ -49,13 +49,15 @@ needs a login and has none, or has a bad token, returns `401`.
 
 Other sign-in endpoints:
 
-| Method   | Path                               | What it does                                                                                                                  |
-| -------- | ---------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| `GET`    | `/residents/id`                    | Returns the signed-in resident's id as a bare number. A cheap way to check that a token still works.                          |
-| `DELETE` | `/sessions/current`                | Signs out. For a JWT this only tells the client to forget the token; the token itself stays valid until the password changes. |
-| `POST`   | `/residents/password-reset`        | Body `{ "email": ... }`. Emails a reset link. No login needed.                                                                |
-| `GET`    | `/residents/name/:token`           | Returns `{ "name": ... }` for a reset token that is less than 24 hours old. No login needed.                                  |
-| `POST`   | `/residents/password-reset/:token` | Body `{ "password": ... }`. Sets the new password. No login needed.                                                           |
+| Method   | Path                                   | What it does                                                                                                                  |
+| -------- | -------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| `GET`    | `/residents/id`                        | Returns the signed-in resident's id as a bare number. A cheap way to check that a token still works.                          |
+| `DELETE` | `/sessions/current`                    | Signs out. For a JWT this only tells the client to forget the token; the token itself stays valid until the password changes. |
+| `POST`   | `/residents/password-reset`            | Body `{ "email": ... }`. Emails a reset link. No login needed.                                                                |
+| `POST`   | `/residents/password-reset/name`       | Body `{ "reset_token": ... }`. Returns `{ "name": ... }` for a reset token that is less than 24 hours old. No login needed.   |
+| `POST`   | `/residents/password-reset/new`        | Body `{ "reset_token": ..., "password": ... }`. Sets the new password. No login needed.                                       |
+| `GET`    | `/residents/name/:old_token`           | Retired. Always `400`: reset links mailed before 2026-10-23 no longer work.                                                   |
+| `POST`   | `/residents/password-reset/:old_token` | Retired. Always `400`, as above.                                                                                              |
 
 ## Rate limits
 

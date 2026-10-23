@@ -148,6 +148,12 @@ module GeneratedPathHelpersModule
   def api_v1_residents_id_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def api_v1_residents_password_reset_name_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_residents_password_reset_new_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def api_v1_residents_password_reset_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }

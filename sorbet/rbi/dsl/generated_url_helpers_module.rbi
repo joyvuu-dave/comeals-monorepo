@@ -145,6 +145,12 @@ module GeneratedUrlHelpersModule
   def api_v1_residents_id_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def api_v1_residents_password_reset_name_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_residents_password_reset_new_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def api_v1_residents_password_reset_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

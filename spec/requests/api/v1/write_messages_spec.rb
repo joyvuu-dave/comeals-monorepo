@@ -259,10 +259,11 @@ RSpec.describe 'API write responses' do
     end
 
     it 'shortens the name on the reset page, with the last initial when first names clash' do
-      resident.update!(name: 'Sarah Connor', reset_password_token: 'tok', reset_password_sent_at: Time.current)
+      resident.update!(name: 'Sarah Connor')
+      give_reset_token(resident, token: 'tok')
       create(:resident, community: community, unit: unit, name: 'Sarah Lee')
 
-      get '/api/v1/residents/name/tok'
+      post '/api/v1/residents/password-reset/name', params: { reset_token: 'tok' }
 
       expect(response.parsed_body).to eq('name' => 'Sarah C')
     end
@@ -273,12 +274,12 @@ RSpec.describe 'API write responses' do
     # page shows when it loads with a bad link, so they know to ask for a
     # new one.
     it 'answers a reset with an unknown token in the words the reset page uses for a bad link' do
-      get '/api/v1/residents/name/no-such-token'
+      post '/api/v1/residents/password-reset/name', params: { reset_token: 'no-such-token' }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => 'Password reset link is incorrect or expired.')
 
-      post '/api/v1/residents/password-reset/no-such-token', params: { password: 'new-secret' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: 'no-such-token', password: 'new-secret' }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => 'Password reset link is incorrect or expired.')
@@ -292,13 +293,13 @@ RSpec.describe 'API write responses' do
     end
 
     it 'clears an expired reset token when someone tries to use it' do
-      resident.update!(reset_password_token: 'old', reset_password_sent_at: 3.days.ago)
+      give_reset_token(resident, token: 'old', sent_at: 3.days.ago)
 
-      post '/api/v1/residents/password-reset/old', params: { password: 'new-secret' }
+      post '/api/v1/residents/password-reset/new', params: { reset_token: 'old', password: 'new-secret' }
 
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body).to eq('message' => 'Password reset link has expired. Please request a new one.')
-      expect(resident.reload).to have_attributes(reset_password_token: nil, reset_password_sent_at: nil)
+      expect(resident.reload).to have_attributes(reset_password_token_digest: nil, reset_password_sent_at: nil)
     end
 
     it 'links each cook slot in the feed to its meal page under the configured root' do

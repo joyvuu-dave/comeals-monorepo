@@ -119,9 +119,36 @@ RSpec.describe 'what a write runs after its commit' do
     -> { post '/api/v1/residents/password-reset', params: { email: resident.email } }
   end
 
-  write 'POST /api/v1/residents/password-reset/:token' do
-    resident.update!(reset_password_token: 'a-reset-token', reset_password_sent_at: Time.current)
-    -> { post '/api/v1/residents/password-reset/a-reset-token', params: { password: 'a-new-password' } }
+  write 'POST /api/v1/residents/password-reset/new' do
+    give_reset_token(resident, token: 'a-reset-token')
+    lambda {
+      post '/api/v1/residents/password-reset/new', params: { reset_token: 'a-reset-token', password: 'a-new-password' }
+    }
+  end
+
+  # A POST so the reset token travels in the body, not the path. It
+  # reads the name and writes nothing.
+  it 'POST /api/v1/residents/password-reset/name commits nothing',
+     route: 'POST /api/v1/residents/password-reset/name' do
+    give_reset_token(resident, token: 'a-reset-token')
+    result = after_commit_queries do
+      post '/api/v1/residents/password-reset/name', params: { reset_token: 'a-reset-token' }
+    end
+
+    expect(response).to have_http_status(:ok)
+    expect(result.committed).to be(false)
+  end
+
+  # The request of a reset page loaded before 2026-10-23. It answers a 400
+  # and writes nothing.
+  it 'POST /api/v1/residents/password-reset/:old_token commits nothing',
+     route: 'POST /api/v1/residents/password-reset/:old_token' do
+    result = after_commit_queries do
+      post '/api/v1/residents/password-reset/a-reset-token', params: { password: 'a-new-password' }
+    end
+
+    expect(response).to have_http_status(:bad_request)
+    expect(result.committed).to be(false)
   end
 
   # Its one write is the job it queues, a Solid Queue row.

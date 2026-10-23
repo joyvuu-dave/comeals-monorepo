@@ -28,7 +28,7 @@ RSpec.describe ResidentMailer do
 
     it 'links to the reset page under the configured app root, in the text part' do
       expect(mail.text_part.body.decoded.lines.map(&:chomp))
-        .to include('To reset your password, follow this link: http://localhost:3036/reset-password/abc123token.')
+        .to include('To reset your password, follow this link: http://localhost:3036/reset-password#token=abc123token.')
     end
 
     it 'greets the resident by name' do
@@ -42,7 +42,7 @@ RSpec.describe ResidentMailer do
 
       expect(body.text.squish).to eq('Reset your Comeals.com password, Sarah Chen ' \
                                      'To reset your password, follow this link. Have a great day!')
-      expect(links_in(body)).to eq([['follow this link.', 'http://localhost:3036/reset-password/abc123token']])
+      expect(links_in(body)).to eq([['follow this link.', 'http://localhost:3036/reset-password#token=abc123token']])
     end
   end
 

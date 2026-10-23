@@ -509,8 +509,9 @@ async function mockApi(page, options = {}) {
     }
   });
 
-  // Password reset with token (GET name, POST new password)
-  await page.route("**/api/v1/residents/name/*", (route) => {
+  // Password reset with token (POST name, POST new password). The token
+  // is in the body of both.
+  await page.route("**/api/v1/residents/password-reset/name", (route) => {
     route.fulfill({
       status: 200,
       contentType: "application/json",
@@ -518,7 +519,7 @@ async function mockApi(page, options = {}) {
     });
   });
 
-  await page.route("**/api/v1/residents/password-reset/*", (route) => {
+  await page.route("**/api/v1/residents/password-reset/new", (route) => {
     if (route.request().method() === "POST") {
       route.fulfill({
         status: 200,

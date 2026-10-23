@@ -83,9 +83,10 @@ const ResidentsLogin = observer(() => {
     return null;
   }
 
-  const modalOpen =
-    params.modal === RESET_PASSWORD_MODAL &&
-    typeof params.token !== "undefined";
+  // The reset link opens /reset-password#token=... . A link mailed
+  // before 2026-10-23 opens /reset-password/<token>, and the form then
+  // says that link no longer works.
+  const modalOpen = params.modal === RESET_PASSWORD_MODAL;
 
   function handleCloseModal() {
     navigate("/");

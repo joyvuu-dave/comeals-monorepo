@@ -13,19 +13,28 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
-import ResidentsPasswordNew from "../../../app/frontend/src/components/residents/password_new.jsx";
+import ResidentsPasswordNew, {
+  NO_TOKEN,
+  RETIRED_LINK,
+  tokenFromHash,
+} from "../../../app/frontend/src/components/residents/password_new.jsx";
 
 function LocationEcho() {
   const location = useLocation();
-  return <span data-testid="location">{location.pathname}</span>;
+  return (
+    <span data-testid="location">
+      {location.pathname + location.search + location.hash}
+    </span>
+  );
 }
 
-// The component reads the reset token from the route.
-function renderForm() {
+// The page reads the reset token from the part of the address after
+// the #, as the reset email writes it.
+function renderForm(address = "/reset-password#token=tok-1") {
   render(
-    <MemoryRouter initialEntries={["/reset-password/tok-1/"]}>
+    <MemoryRouter initialEntries={[address]}>
       <Routes>
-        <Route path="/:modal/:token/*" element={<ResidentsPasswordNew />} />
+        <Route path="/:modal/:token?/*" element={<ResidentsPasswordNew />} />
         <Route path="/" element={<span>login page</span>} />
       </Routes>
       <LocationEcho />
@@ -42,44 +51,101 @@ function deferred() {
   return d;
 }
 
+const NAME_URL = "/api/v1/residents/password-reset/name";
+const SAVE_URL = "/api/v1/residents/password-reset/new";
+
+describe("tokenFromHash", () => {
+  it("reads the token after #token=", () => {
+    expect(tokenFromHash("#token=abc-_123")).toBe("abc-_123");
+  });
+
+  it("is empty when there is no token", () => {
+    expect(tokenFromHash("")).toBe("");
+    expect(tokenFromHash("#")).toBe("");
+    expect(tokenFromHash("#other=1")).toBe("");
+  });
+});
+
 describe("ResidentsPasswordNew", () => {
+  // Both requests are POSTs, so the token is in the body, never in the
+  // address: first the name, then the password. Each test sets what the
+  // two answer.
+  let nameAnswer;
+  let saveAnswer;
+
   beforeEach(() => {
     vi.clearAllMocks();
     toastStore.clearAll();
+    nameAnswer = () =>
+      Promise.resolve({ status: 200, data: { name: "Jane Smith" } });
+    saveAnswer = () => Promise.resolve({ status: 200, data: {} });
+    axios.post.mockImplementation((url) =>
+      url === NAME_URL ? nameAnswer() : saveAnswer(),
+    );
   });
 
   it("shows Loading until the name arrives, then the form", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
     renderForm();
 
     expect(screen.getByText("Loading...")).toBeInTheDocument();
     expect(
       await screen.findByText("Reset Password for Jane Smith"),
     ).toBeInTheDocument();
-    expect(axios.get).toHaveBeenCalledWith("/api/v1/residents/name/tok-1");
+    expect(axios.post).toHaveBeenCalledWith(NAME_URL, { reset_token: "tok-1" });
   });
 
-  it("submits the typed password to the token's endpoint", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    axios.post.mockResolvedValue({ status: 200, data: {} });
+  // The page keeps the token, so a shared screen and the browser's
+  // history do not.
+  it("takes the token out of the address once it has read it", async () => {
+    renderForm();
+
+    await screen.findByText("Reset Password for Jane Smith");
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      /^\/reset-password$/,
+    );
+  });
+
+  it("submits the typed password with the token", async () => {
     renderForm();
 
     const input = await screen.findByPlaceholderText("New Password");
     fireEvent.change(input, { target: { value: "hunter2hunter2" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
-    expect(axios.post).toHaveBeenCalledWith(
-      "/api/v1/residents/password-reset/tok-1",
-      { password: "hunter2hunter2" },
-    );
+    expect(axios.post).toHaveBeenLastCalledWith(SAVE_URL, {
+      reset_token: "tok-1",
+      password: "hunter2hunter2",
+    });
+  });
+
+  // A link mailed before 2026-10-23 has the token in the path. Those
+  // tokens were all cleared, so the page asks nothing and says to ask for
+  // a new link. The token in the path goes to no server request either.
+  it("a link of the old kind goes to the login page and says to ask for a new one", async () => {
+    renderForm("/reset-password/tok-1/");
+
+    expect(await screen.findByText("login page")).toBeInTheDocument();
+    expect(
+      toastStore.toasts.map((t) => ({ message: t.message, type: t.type })),
+    ).toEqual([{ message: RETIRED_LINK, type: "error" }]);
+    expect(axios.post).not.toHaveBeenCalled();
+  });
+
+  // The page was reloaded after it took the token out of the address,
+  // or the link was cut short.
+  it("no token goes to the login page and says to open the link again", async () => {
+    renderForm("/reset-password");
+
+    expect(await screen.findByText("login page")).toBeInTheDocument();
+    expect(
+      toastStore.toasts.map((t) => ({ message: t.message, type: t.type })),
+    ).toEqual([{ message: NO_TOKEN, type: "error" }]);
+    expect(axios.post).not.toHaveBeenCalled();
   });
 
   it("a saved password shows the answer and returns to the login page", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    axios.post.mockResolvedValue({
-      status: 200,
-      data: { message: "Password updated!" },
-    });
+    saveAnswer = () =>
+      Promise.resolve({ status: 200, data: { message: "Password updated!" } });
     renderForm();
 
     const input = await screen.findByPlaceholderText("New Password");
@@ -101,10 +167,8 @@ describe("ResidentsPasswordNew", () => {
     // can fix it.
     const reason =
       "Your password was not changed:\nName can't be blank\nPlease ask an admin to fix your account.";
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    axios.post.mockRejectedValue({
-      response: { status: 400, data: { message: reason } },
-    });
+    saveAnswer = () =>
+      Promise.reject({ response: { status: 400, data: { message: reason } } });
     renderForm();
 
     const input = await screen.findByPlaceholderText("New Password");
@@ -123,12 +187,15 @@ describe("ResidentsPasswordNew", () => {
   // A try that works closes the dialog, and the reasons earlier tries
   // got go with it.
   it("a password saved after a refusal takes the refusal away with the form", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
-    axios.post.mockRejectedValueOnce({ request: {} });
-    axios.post.mockResolvedValueOnce({
-      status: 200,
-      data: { message: "Password updated!" },
-    });
+    const saves = [
+      () => Promise.reject({ request: {} }),
+      () =>
+        Promise.resolve({
+          status: 200,
+          data: { message: "Password updated!" },
+        }),
+    ];
+    saveAnswer = () => saves.shift()();
     renderForm();
     const input = await screen.findByPlaceholderText("New Password");
     fireEvent.change(input, { target: { value: "hunter2hunter2" } });
@@ -157,9 +224,10 @@ describe("ResidentsPasswordNew", () => {
   ])(
     "a link the server refuses goes to the login page and says: %s",
     async (message) => {
-      axios.get.mockRejectedValue({
-        response: { status: 400, data: { message: message } },
-      });
+      nameAnswer = () =>
+        Promise.reject({
+          response: { status: 400, data: { message: message } },
+        });
       renderForm();
       expect(await screen.findByText("login page")).toBeInTheDocument();
       expect(
@@ -205,7 +273,7 @@ describe("ResidentsPasswordNew", () => {
   ])(
     "%s on the name lookup stays on the page and shows why",
     async (_name, response, words) => {
-      axios.get.mockRejectedValue({ response });
+      nameAnswer = () => Promise.reject({ response });
       renderForm();
       expect(await screen.findByText(words)).toBeVisible();
       expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
@@ -213,7 +281,7 @@ describe("ResidentsPasswordNew", () => {
         screen.queryByPlaceholderText("New Password"),
       ).not.toBeInTheDocument();
       expect(screen.getByTestId("location")).toHaveTextContent(
-        "/reset-password/tok-1/",
+        /^\/reset-password$/,
       );
       expect(toastStore.toasts).toHaveLength(0);
     },
@@ -227,7 +295,7 @@ describe("ResidentsPasswordNew", () => {
     // A throw before any request was sent.
     ["an error before the request", new Error("boom")],
   ])("%s on the name lookup says so and stays", async (_name, error) => {
-    axios.get.mockRejectedValue(error);
+    nameAnswer = () => Promise.reject(error);
     renderForm();
     expect(
       await screen.findByText(
@@ -239,7 +307,7 @@ describe("ResidentsPasswordNew", () => {
       screen.queryByPlaceholderText("New Password"),
     ).not.toBeInTheDocument();
     expect(screen.getByTestId("location")).toHaveTextContent(
-      "/reset-password/tok-1/",
+      /^\/reset-password$/,
     );
     expect(toastStore.toasts).toHaveLength(0);
   });
@@ -248,7 +316,7 @@ describe("ResidentsPasswordNew", () => {
   // gone, so this only checks that a late name does not throw.
   it("a name that arrives after the page is gone throws nothing", async () => {
     const name = deferred();
-    axios.get.mockReturnValueOnce(name.promise);
+    nameAnswer = () => name.promise;
     renderForm();
     cleanup();
     await act(async () => name.resolve({ status: 200, data: { name: "J" } }));
@@ -257,7 +325,7 @@ describe("ResidentsPasswordNew", () => {
 
   it("a refusal that arrives after the page is gone shows nothing", async () => {
     const refusedName = deferred();
-    axios.get.mockReturnValueOnce(refusedName.promise);
+    nameAnswer = () => refusedName.promise;
     renderForm();
     cleanup();
     await act(async () =>
@@ -272,10 +340,9 @@ describe("ResidentsPasswordNew", () => {
   });
 
   it("a save answered after the page is gone shows nothing", async () => {
-    axios.get.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
     for (const settle of ["resolve", "reject"]) {
       const save = deferred();
-      axios.post.mockReturnValueOnce(save.promise);
+      saveAnswer = () => save.promise;
       renderForm();
       const input = await screen.findByPlaceholderText("New Password");
       fireEvent.change(input, { target: { value: "hunter2hunter2" } });
