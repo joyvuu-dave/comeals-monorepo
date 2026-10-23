@@ -45,6 +45,7 @@ class BashCoverage
     'bin/lib/deploy/promote' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/watch-production' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/write-release-note' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/playwright-install' => 'spec/bin/playwright_install_spec.rb',
     'bin/lib/rollback/check-migrations' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/file-issue' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/find-release' => 'spec/bin/rollback_workflow_spec.rb',

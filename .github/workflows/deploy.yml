@@ -99,7 +99,7 @@ jobs:
         if: steps.compare.outputs.proceed == 'true'
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          bin/lib/playwright-install install --with-deps chromium
 
       # The release note: commit messages between the live sha and the
       # candidate, turned into plain language by Claude. If the call

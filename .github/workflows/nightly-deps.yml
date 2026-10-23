@@ -173,7 +173,7 @@ jobs:
       # is the old build, so every browser test fails at launch.
       - name: Install Playwright browsers
         if: steps.diff.outputs.changed == 'true'
-        run: npx playwright install --with-deps chromium webkit
+        run: bin/lib/playwright-install install --with-deps chromium webkit
 
       # bin/check runs gitleaks on the whole history (.gitleaks.toml).
       # brew installs it on a laptop; the runner gets the release

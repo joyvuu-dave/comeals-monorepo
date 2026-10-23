@@ -331,7 +331,10 @@ jobs:
       # slow CDN stretched it to 12 minutes in integration-tests and the
       # job hit its timeout. With the cache, only a Playwright version
       # bump downloads browsers. The apt packages (install-deps) are not
-      # cached; they come from fast mirrors and take seconds.
+      # cached; they come from the runner's mirror and usually take
+      # seconds. On 2026-10-22 install-deps waited on the mirror and used
+      # the job's whole 25 minutes, so bin/lib/playwright-install gives
+      # each try 5 minutes and tries twice (#240).
       - name: Read Playwright version
         id: playwright-version
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
@@ -341,9 +344,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ steps.playwright-version.outputs.version }}-chromium-webkit
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium webkit
+        run: bin/lib/playwright-install install --with-deps chromium webkit
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium webkit
+        run: bin/lib/playwright-install install-deps chromium webkit
       - run: npm run test:e2e
       # The screen-state measure compares counters, not pixels, so it
       # runs on this plain runner even though the goldens cannot.
@@ -444,9 +447,9 @@ jobs:
           path: ~/.cache/ms-playwright
           key: playwright-${{ steps.playwright-version.outputs.version }}-chromium-webkit
       - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium webkit
+        run: bin/lib/playwright-install install --with-deps chromium webkit
       - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium webkit
+        run: bin/lib/playwright-install install-deps chromium webkit
       # Load the schema the same way ruby-test does. On a fresh empty
       # database, db:prepare inside bin/test-integration would instead
       # replay every migration from zero and re-dump structure.sql.

@@ -145,21 +145,17 @@ jobs:
           URL: ${{ steps.find.outputs.url }}
         run: bin/lib/rollback/say-what-to-do
 
-      - name: Set up Node and browsers for the smoke test
-        uses: actions/setup-node@v6
-        with:
-          node-version: 24
-          cache: npm
-      - name: Smoke the rolled-back site
-        run: |
-          npm ci
-          npx playwright install --with-deps chromium
-          bin/smoke "${{ steps.find.outputs.url }}"
-
+      # The bookkeeping runs once the rollback worked, before the smoke
+      # test and whatever happened to the steps in between: production
+      # runs the old code now, and without DEPLOY_HOLD the weekly deploy
+      # would ship the bad sha again. Before #240 it ran after the smoke
+      # test, so a Playwright install that failed or used up the job's
+      # time skipped all three steps.
+      #
       # The weekly deploy refuses while this is set. It clears when a
       # person fixes main (usually git revert) and removes the variable.
       - name: Hold the weekly deploy
-        if: inputs.app == 'comeals-monorepo'
+        if: always() && steps.roll.outcome == 'success' && inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -170,16 +166,34 @@ jobs:
       # pointed at the rolled-back sha. Deploys older than the release
       # process have no release to mark — say so and move on.
       - name: Mark the release notes
-        if: inputs.app == 'comeals-monorepo'
+        if: always() && steps.roll.outcome == 'success' && inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
           BAD_SHA: ${{ steps.roll.outputs.bad_sha }}
         run: bin/lib/rollback/mark-release-notes
 
       - name: File the follow-up issue
-        if: inputs.app == 'comeals-monorepo'
+        if: always() && steps.roll.outcome == 'success' && inputs.app == 'comeals-monorepo'
         env:
           GH_TOKEN: ${{ github.token }}
           BAD_SHA: ${{ steps.roll.outputs.bad_sha }}
           LIVE_SHA: ${{ steps.roll.outputs.live_sha }}
         run: bin/lib/rollback/file-issue
+
+      # The smoke test runs even when a bookkeeping step failed: it is
+      # the only check that the old code serves. The install gets 3
+      # minutes a try, not 5, so two slow tries still fit in the job's 15.
+      - name: Set up Node and browsers for the smoke test
+        if: ${{ !cancelled() && steps.roll.outcome == 'success' }}
+        uses: actions/setup-node@v6
+        with:
+          node-version: 24
+          cache: npm
+      - name: Smoke the rolled-back site
+        if: ${{ !cancelled() && steps.roll.outcome == 'success' }}
+        env:
+          PLAYWRIGHT_INSTALL_MINUTES: 3
+        run: |
+          npm ci
+          bin/lib/playwright-install install --with-deps chromium
+          bin/smoke "${{ steps.find.outputs.url }}"

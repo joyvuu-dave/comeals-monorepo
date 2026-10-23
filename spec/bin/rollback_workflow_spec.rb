@@ -550,7 +550,32 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
       expect(with_token.pluck('name')).to eq(['Hold the weekly deploy', 'Mark the release notes',
                                               'File the follow-up issue'])
-      expect(with_token.pluck('if')).to all(eq("inputs.app == 'comeals-monorepo'"))
+      expect(with_token.pluck('if')).to all(end_with("inputs.app == 'comeals-monorepo'"))
+    end
+
+    # Once the rollback ran, production runs the old code, and the weekly
+    # deploy must be held or it ships the bad sha again. On 2026-10-22 the
+    # smoke step's Playwright install waited 11 of the job's 15 minutes on
+    # the apt mirror (#240). Had it failed, or had the job run out of time,
+    # every step after it would have been skipped: no DEPLOY_HOLD, no
+    # marked release note, no follow-up issue. So these steps run before
+    # the smoke test, and whenever the rollback itself worked, whatever
+    # happened to the steps between them.
+    it 'does the bookkeeping whenever the rollback worked, before the smoke test' do
+      names = steps.pluck('name')
+      with_token = steps.select { it.dig('env', 'GH_TOKEN') }
+
+      expect(with_token.pluck('if'))
+        .to all(eq("always() && steps.roll.outcome == 'success' && inputs.app == 'comeals-monorepo'"))
+      expect(with_token.map { names.index(it['name']) }).to all(be < names.index('Smoke the rolled-back site'))
+    end
+
+    # The smoke test still runs after a bookkeeping step fails: it is the
+    # only check that the old code serves.
+    it 'smokes the site whenever the rollback worked' do
+      smoke = steps.find { it['name'] == 'Smoke the rolled-back site' }
+
+      expect(smoke['if']).to eq("${{ !cancelled() && steps.roll.outcome == 'success' }}")
     end
 
     it 'gives no other step a way to write to GitHub' do

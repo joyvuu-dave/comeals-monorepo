@@ -1,0 +1,30 @@
+#!/usr/bin/env bash
+# Runs `npx playwright` with the given arguments on a CI runner, with a
+# time limit on each try, and tries once more if the first try fails:
+#
+#   bin/lib/playwright-install install --with-deps chromium webkit
+#   bin/lib/playwright-install install-deps chromium webkit
+#
+# The system packages come from the runner's apt mirror. When the
+# mirror stops sending, apt waits with no limit, and the step used up
+# the whole job's time (#240). So each try stops after
+# PLAYWRIGHT_INSTALL_MINUTES (default 5). A normal install, browsers
+# included, takes about a minute.
+#
+# timeout stops the whole process group, so apt stops too, not only npx.
+# --kill-after: if a process ignores the first signal, KILL follows.
+set -uo pipefail
+
+limit="${PLAYWRIGHT_INSTALL_MINUTES:-5}m"
+for try in 1 2; do
+  timeout --kill-after=30s "$limit" npx playwright "$@"
+  status=$?
+  if [ "$status" -eq 0 ]; then
+    exit 0
+  elif [ "$status" -eq 124 ]; then
+    echo "npx playwright $* ran out of time ($limit) on try $try of 2." >&2
+  else
+    echo "npx playwright $* failed (exit $status) on try $try of 2." >&2
+  fi
+done
+exit 1
