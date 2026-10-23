@@ -49,7 +49,13 @@ class ApplicationController < ActionController::Base
     Time.use_zone(zone, &)
   end
 
+  # The request did not come from a page this session gave out, so the
+  # browser is signed out: the session and the remember-me cookie both go,
+  # the same as admin_logout. Devise's handle_unverified_request would
+  # sign out every scope after Rails' check, but the check raises first,
+  # and this rescue answers instead.
   def csrf_failed
+    cookies.delete(:remember_admin_user_token)
     reset_session
     redirect_to '/login', alert: 'Your session expired. Please try again.'
   end

@@ -24,6 +24,8 @@ RSpec.describe 'admin POST with a bad CSRF token' do
 
     expect(response).to redirect_to('/login')
     expect(flash[:alert]).to eq('Your session expired. Please try again.')
+    follow_redirect!
+    expect(response.body).to include('Your session expired. Please try again.')
   end
 
   # The request did not come from a page this session was given, so the
@@ -38,5 +40,47 @@ RSpec.describe 'admin POST with a bad CSRF token' do
 
     get '/'
     expect(response).to redirect_to('/login')
+  end
+
+  # The same for an admin who ticked "Remember me": the remember cookie
+  # outlives the session, so ending the session alone signed them in
+  # again on the next request.
+  describe 'an admin who asked to be remembered' do
+    let(:admin) do
+      create(:admin_user, community: Community.instance, password: 'secret-password',
+                          password_confirmation: 'secret-password')
+    end
+
+    before do
+      get '/login'
+      token = response.body[/name="authenticity_token" value="([^"]+)"/, 1]
+      post '/login', params: { authenticity_token: token,
+                               admin_user: { email: admin.email, password: 'secret-password', remember_me: '1' } }
+    end
+
+    it 'is signed out' do
+      expect(cookies['remember_admin_user_token']).to be_present
+
+      post '/units', params: { unit: { name: 'Z' } }
+      expect(response).to redirect_to('/login')
+
+      get '/'
+      expect(response).to redirect_to('/login')
+    end
+
+    # A browser can drop the session cookie and keep the remember cookie
+    # (it ends the session when it quits). A form left open from before
+    # then fails the check, because its token was for the old session.
+    it 'is signed out when the browser had already dropped the session cookie' do
+      cookies.delete('_session_id')
+      get '/'
+      expect(response).to have_http_status(:ok)
+
+      post '/units', params: { unit: { name: 'Z' } }
+      expect(response).to redirect_to('/login')
+
+      get '/'
+      expect(response).to redirect_to('/login')
+    end
   end
 end
