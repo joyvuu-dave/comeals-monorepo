@@ -14,8 +14,8 @@
 # expression in its ON CONFLICT.
 #
 # Dated after every other migration: nothing that runs in an earlier
-# migration reads this table (the data fixes from 20261010130000 run
-# settlement code only).
+# migration reads this table (the data fixes of October 2026, since
+# deleted, ran settlement code only).
 class CreateBrowserCounts < ActiveRecord::Migration[8.1]
   def change
     create_table :browser_counts do |t|
