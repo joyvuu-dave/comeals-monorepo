@@ -8,6 +8,8 @@
 #
 # Counters live in Rails.cache (solid_cache, i.e. Postgres, in production).
 
+require Rails.root.join('lib/secret_file_probe')
+
 module Rack
   class Attack
     # 20 login attempts per IP per 5 minutes. A human retrying a forgotten
@@ -48,6 +50,18 @@ module Rack
     def self.browser_report?(req)
       req.path == '/api/v1/browser-reports' && req.post?
     end
+
+    # Requests for secret files that a scanner hopes a site left in its
+    # web folder (/.env, /.git/config, /wp-admin; the full rule and the
+    # paths it leaves alone are in lib/secret_file_probe.rb). Each one is
+    # refused with a 403 before it reaches the router.
+    #
+    # The rule reads only the path. It bans no address and reads no
+    # cache. Many residents share one address (a phone carrier, the
+    # common house wifi), so a ban by address would lock all of them,
+    # and the dinner iPad, out because of one scanner on that address.
+    # The login has its own throttle above.
+    blocklist('secret-file-probe') { |req| SecretFileProbe.match?(req.path) }
 
     # Custom 429 response — JSON for the API, with a Retry-After header so
     # well-behaved clients back off politely.

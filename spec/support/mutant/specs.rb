@@ -116,6 +116,8 @@ MUTANT_SPEC_ROWS = {
   # The same rule: a spec described by a sentence, or by the thing a class
   # is reached through, names the classes whose behaviour it checks.
   'spec/requests/asset_cache_control_spec.rb' => %w[AssetCacheControl],
+  'spec/requests/unknown_route_log_spec.rb' => %w[UnknownRouteLog],
+  'spec/requests/rack_attack_probe_spec.rb' => %w[SecretFileProbe],
   'spec/requests/api/v1/live_update_contract_spec.rb' =>
     %w[Settlement LiveUpdate Meal Rotation Bill MealResident Guest Resident Unit Community
        Event GuestRoomReservation CommonHouseReservation NotesMealLiveUpdate

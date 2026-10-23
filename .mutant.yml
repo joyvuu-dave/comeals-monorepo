@@ -111,6 +111,8 @@ matcher:
     - LedgerCheckFindingsTable*
     - AdminOrderClause*
     - AssetCacheControl*
+    - SecretFileProbe*
+    - UnknownRouteLog*
     - DatabasePoolCheck*
     - SolidQueueCheck*
     - BugsnagErrorSubscriber*
