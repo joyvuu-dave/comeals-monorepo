@@ -187,7 +187,7 @@ jobs:
         if: ${{ !cancelled() && steps.roll.outcome == 'success' }}
         uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - name: Smoke the rolled-back site
         if: ${{ !cancelled() && steps.roll.outcome == 'success' }}

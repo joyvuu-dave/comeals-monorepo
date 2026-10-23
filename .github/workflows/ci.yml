@@ -135,7 +135,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       - run: npm run lint
@@ -152,7 +152,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       - run: npm run typecheck
@@ -164,7 +164,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm audit
 
@@ -267,7 +267,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       - run: npm run build
@@ -304,7 +304,7 @@ jobs:
       # The generation task shells out to prettier for formatting.
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       - run: bin/rails db:schema:load
@@ -325,7 +325,7 @@ jobs:
       - uses: actions/checkout@v6
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       # test:coverage, so the thresholds in vitest.config.mjs are enforced.
@@ -368,7 +368,7 @@ jobs:
           bundler-cache: true
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       # Cache the Playwright browsers, keyed on the Playwright version.
@@ -477,7 +477,7 @@ jobs:
           bundler-cache: true
       - uses: actions/setup-node@v6
         with:
-          node-version: 24
+          node-version-file: package.json
           cache: npm
       - run: npm ci
       # Same browser cache as node-e2e-tests; the comment there explains
