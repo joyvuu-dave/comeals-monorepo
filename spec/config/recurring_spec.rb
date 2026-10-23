@@ -85,10 +85,13 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
   # it, and descendants lists only loaded classes. So without eager loading
   # this example, run alone, checked an empty list, and it never saw a job
   # that is not on the schedule yet. Unnamed classes a spec builds are left
-  # out.
+  # out. So is a class a spec put in place with stub_const: when the
+  # example ends, the name points back at the real class (or at nothing),
+  # but the stub class stays in descendants and still answers to the name
+  # (#238).
   it 'gives every recurring job a healthchecks.io slug' do
     Rails.application.eager_load!
-    jobs = RecurringJob.descendants.select(&:name)
+    jobs = RecurringJob.descendants.select { |job| job.name&.safe_constantize == job }
 
     expect(jobs).to include(RefreshBalancesJob, VerifyLedgerJob, EnsureRotationsJob, SendMissedSettlementMailJob)
     jobs.each do |job|
