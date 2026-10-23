@@ -121,7 +121,7 @@ RSpec.describe 'Residents API' do
   # ---------------------------------------------------------------------------
   describe 'GET /api/v1/residents/name/:token' do
     it 'returns the resident name for a valid reset token' do
-      resident.update!(reset_password_token: 'valid-token-123', reset_password_sent_at: Time.current)
+      give_reset_token(resident, token: 'valid-token-123', sent_at: Time.current)
 
       get '/api/v1/residents/name/valid-token-123'
 
@@ -138,7 +138,7 @@ RSpec.describe 'Residents API' do
     end
 
     it 'returns 400 for an expired reset token' do
-      resident.update!(reset_password_token: 'expired-token', reset_password_sent_at: 25.hours.ago)
+      give_reset_token(resident, token: 'expired-token', sent_at: 25.hours.ago)
 
       get '/api/v1/residents/name/expired-token'
 
@@ -147,17 +147,17 @@ RSpec.describe 'Residents API' do
     end
 
     it 'does not clear the expired token (GET must be side-effect-free)' do
-      resident.update!(reset_password_token: 'stale-token', reset_password_sent_at: 25.hours.ago)
+      give_reset_token(resident, token: 'stale-token', sent_at: 25.hours.ago)
 
       get '/api/v1/residents/name/stale-token'
 
       resident.reload
-      expect(resident.reset_password_token).to eq('stale-token')
+      expect(resident.reset_password_token_digest).to eq(PasswordReset.digest('stale-token'))
       expect(resident.reset_password_sent_at).to be_present
     end
 
     it 'returns 400 when reset_password_sent_at is nil' do
-      resident.update_columns(reset_password_token: 'orphan-token', reset_password_sent_at: nil)
+      give_reset_token(resident, token: 'orphan-token', sent_at: nil)
 
       get '/api/v1/residents/name/orphan-token'
 
@@ -171,7 +171,7 @@ RSpec.describe 'Residents API' do
   # ---------------------------------------------------------------------------
   describe 'POST /api/v1/residents/password-reset/:token' do
     it 'sets a new password with a valid reset token' do
-      resident.update!(reset_password_token: 'reset-token-456', reset_password_sent_at: Time.current)
+      give_reset_token(resident, token: 'reset-token-456', sent_at: Time.current)
 
       post '/api/v1/residents/password-reset/reset-token-456', params: {
         password: 'newpassword123'
@@ -202,13 +202,13 @@ RSpec.describe 'Residents API' do
     # A blank password is a feature the community asked for, not a gap:
     # some residents log in with email alone. The whole path must work.
     it 'accepts a blank new password, and the resident can then log in with email alone' do
-      resident.update!(reset_password_token: 'reset-token-789', reset_password_sent_at: Time.current)
+      give_reset_token(resident, token: 'reset-token-789', sent_at: Time.current)
 
       post '/api/v1/residents/password-reset/reset-token-789', params: { password: '' }
 
       expect(response).to have_http_status(:ok)
       expect(response.parsed_body['message']).to eq('Password updated!')
-      expect(resident.reload.reset_password_token).to be_nil
+      expect(resident.reload.reset_password_token_digest).to be_nil
 
       post '/api/v1/residents/token', params: { email: resident.email, password: '' }
       expect(response).to have_http_status(:ok)
@@ -223,7 +223,7 @@ RSpec.describe 'Residents API' do
     # field and says who can fix it, so the person does not go off to try
     # other passwords, which would all fail the same way (#105).
     it 'names the field that stops the save, not the password, and the link works once an admin fixes it' do
-      resident.update!(reset_password_token: 'reset-token-791', reset_password_sent_at: Time.current)
+      give_reset_token(resident, token: 'reset-token-791', sent_at: Time.current)
       resident.update_columns(name: '')
 
       post '/api/v1/residents/password-reset/reset-token-791', params: { password: 'new one' }
@@ -231,7 +231,7 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message'])
         .to eq("Your password was not changed:\nName can't be blank\nPlease ask an admin to fix your account.")
-      expect(resident.reload.reset_password_token).to eq('reset-token-791')
+      expect(resident.reload.reset_password_token_digest).to eq(PasswordReset.digest('reset-token-791'))
       expect(resident.authenticate('new one')).to be(false)
 
       resident.update_columns(name: 'Ann Lee')
@@ -242,7 +242,7 @@ RSpec.describe 'Residents API' do
     end
 
     it 'names every field that stops the save, one to a line' do
-      resident.update!(reset_password_token: 'reset-token-792', reset_password_sent_at: Time.current)
+      give_reset_token(resident, token: 'reset-token-792', sent_at: Time.current)
       resident.update_columns(name: '', birthday: community.today + 1)
 
       post '/api/v1/residents/password-reset/reset-token-792', params: { password: 'new one' }
@@ -266,11 +266,11 @@ RSpec.describe 'Residents API' do
       expect(response).to have_http_status(:bad_request)
       expect(response.parsed_body['message'])
         .to eq("No reset link was sent:\nName can't be blank\nPlease ask an admin to fix your account.")
-      expect(resident.reload.reset_password_token).to be_nil
+      expect(resident.reload.reset_password_token_digest).to be_nil
     end
 
     it 'treats a missing password the same as a blank one' do
-      resident.update!(reset_password_token: 'reset-token-790', reset_password_sent_at: Time.current)
+      give_reset_token(resident, token: 'reset-token-790', sent_at: Time.current)
 
       post '/api/v1/residents/password-reset/reset-token-790'
 

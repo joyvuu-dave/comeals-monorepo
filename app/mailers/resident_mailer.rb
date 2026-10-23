@@ -2,9 +2,11 @@
 # frozen_string_literal: true
 
 class ResidentMailer < ApplicationMailer
-  def password_reset_email(resident)
+  # The token comes from PasswordReset, which stores only its digest, so
+  # the resident row cannot give it back.
+  def password_reset_email(resident, token)
     @resident = resident
-    @url = "#{root_url}/reset-password/#{@resident.reset_password_token}"
+    @url = "#{root_url}/reset-password/#{token}"
     mail(to: @resident.email, subject: 'Reset your password')
   end
 

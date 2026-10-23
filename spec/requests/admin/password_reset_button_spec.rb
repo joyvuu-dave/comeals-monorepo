@@ -30,7 +30,7 @@ RSpec.describe 'Admin password reset button' do
       expect { post "/residents/#{resident.id}/send_password_reset" }
         .to change { ActionMailer::Base.deliveries.count }.by(1)
 
-      expect(resident.reload.reset_password_token).to be_present
+      expect(resident.reload.reset_password_token_digest).to be_present
       expect(response).to redirect_to("/residents/#{resident.id}")
       follow_redirect!
       expect(response.body).to include('Password reset link emailed to sarah@example.com')
@@ -52,7 +52,7 @@ RSpec.describe 'Admin password reset button' do
         expect { post "/residents/#{child.id}/send_password_reset" }
           .not_to(change { ActionMailer::Base.deliveries.count })
 
-        expect(child.reload.reset_password_token).to be_nil
+        expect(child.reload.reset_password_token_digest).to be_nil
         follow_redirect!
         expect(response.body).to include('has no email address')
       end
@@ -65,7 +65,7 @@ RSpec.describe 'Admin password reset button' do
         expect { post "/residents/#{resident.id}/send_password_reset" }
           .not_to(change { ActionMailer::Base.deliveries.count })
 
-        expect(resident.reload.reset_password_token).to be_nil
+        expect(resident.reload.reset_password_token_digest).to be_nil
         follow_redirect!
         expect(response.body).to include('Name can&#39;t be blank')
       end
@@ -81,7 +81,7 @@ RSpec.describe 'Admin password reset button' do
       it 'keeps the token and tells the admin the email did not go out' do
         post "/residents/#{resident.id}/send_password_reset"
 
-        expect(resident.reload.reset_password_token).to be_present
+        expect(resident.reload.reset_password_token_digest).to be_present
         follow_redirect!
         expect(response.body).to include('the email could not be sent')
       end
@@ -108,7 +108,7 @@ RSpec.describe 'Admin password reset button' do
       # in at all also redirects, to /login.
       expect(response).to redirect_to('http://admin.example.com/')
       expect(flash[:error]).to eq('You are not authorized to perform this action.')
-      expect(resident.reload.reset_password_token).to be_nil
+      expect(resident.reload.reset_password_token_digest).to be_nil
     end
   end
 end

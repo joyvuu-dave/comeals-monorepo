@@ -21,7 +21,7 @@ module Api
 
       # GET /api/v1/residents/name/:token
       def show_name
-        resident = Resident.find_by(reset_password_token: params[:token])
+        resident = PasswordReset.resident_for(params[:token])
 
         return render json: { message: UNKNOWN_RESET_TOKEN }, status: :bad_request if resident.nil?
 
@@ -83,13 +83,13 @@ module Api
 
       # POST /api/v1/residents/password-reset/:token { password: 'password' }
       def password_new
-        resident = Resident.find_by(reset_password_token: params[:token])
+        resident = PasswordReset.resident_for(params[:token])
 
         return render json: { message: UNKNOWN_RESET_TOKEN }, status: :bad_request if resident.nil?
 
         sent_at = resident.reset_password_sent_at
         if sent_at.nil? || sent_at < RESET_TOKEN_LIFETIME.ago
-          resident.update_columns(reset_password_token: nil, reset_password_sent_at: nil)
+          resident.update_columns(reset_password_token_digest: nil, reset_password_sent_at: nil)
           render json: { message: 'Password reset link has expired. Please request a new one.' },
                  status: :bad_request and return
         end
@@ -99,7 +99,7 @@ module Api
         # residents want to log in with only their email. So '' is a valid
         # new password here, and the login accepts it (Resident#password=).
         # Pinned by spec/requests/api/v1/residents_controller_spec.rb.
-        resident.reset_password_token = nil
+        resident.reset_password_token_digest = nil
         resident.reset_password_sent_at = nil
         resident.password = params[:password].to_s
 

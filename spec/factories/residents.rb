@@ -4,30 +4,31 @@
 #
 # Table name: residents
 #
-#  id                     :bigint           not null, primary key
-#  active                 :boolean          default(TRUE), not null
-#  birthday               :date
-#  can_cook               :boolean          default(TRUE), not null
-#  can_reconcile          :boolean          default(FALSE), not null
-#  email                  :string
-#  keys_valid_since       :datetime         not null
-#  name                   :string           not null
-#  password_digest        :string           not null
-#  phone                  :string
-#  reset_password_sent_at :datetime
-#  reset_password_token   :string
-#  vegetarian             :boolean          default(FALSE), not null
-#  created_at             :datetime         not null
-#  updated_at             :datetime         not null
-#  community_id           :bigint           not null
-#  unit_id                :bigint           not null
+#  id                          :bigint           not null, primary key
+#  active                      :boolean          default(TRUE), not null
+#  birthday                    :date
+#  can_cook                    :boolean          default(TRUE), not null
+#  can_reconcile               :boolean          default(FALSE), not null
+#  email                       :string
+#  keys_valid_since            :datetime         not null
+#  name                        :string           not null
+#  password_digest             :string           not null
+#  phone                       :string
+#  reset_password_sent_at      :datetime
+#  reset_password_token_digest :string
+#  vegetarian                  :boolean          default(FALSE), not null
+#  created_at                  :datetime         not null
+#  updated_at                  :datetime         not null
+#  community_id                :bigint           not null
+#  unit_id                     :bigint           not null
 #
 # Indexes
 #
-#  index_residents_on_lower_email           (lower((email)::text)) UNIQUE
-#  index_residents_on_lower_name            (lower((name)::text)) UNIQUE
-#  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
-#  index_residents_on_unit_id               (unit_id)
+#  index_residents_on_lower_email                  (lower((email)::text)) UNIQUE
+#  index_residents_on_lower_name                   (lower((name)::text)) UNIQUE
+#  index_residents_on_reset_password_token         (reset_password_token) UNIQUE
+#  index_residents_on_reset_password_token_digest  (reset_password_token_digest) UNIQUE
+#  index_residents_on_unit_id                      (unit_id)
 #
 # Foreign Keys
 #

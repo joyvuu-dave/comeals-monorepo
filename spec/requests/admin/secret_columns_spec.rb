@@ -5,9 +5,11 @@ require 'rails_helper'
 # Every admin index page offers CSV and JSON downloads, and every show
 # page answers .json. No download may carry a column that holds a
 # credential, or says when one was made. A resident's reset token is
-# stored as it is mailed, and a live one is as good as the password. An
-# admin who could read it could sign in as that resident, which
-# app/admin/resident.rb rules out ("Send password reset email").
+# stored only as a digest, which cannot be turned back into the link,
+# but a digest is still not for export. The mailed token must not be
+# readable at all: an admin who could read it could sign in as that
+# resident, which app/admin/resident.rb rules out ("Send password reset
+# email").
 #
 # The CSV columns come from ActiveAdmin's filter_attributes
 # (config/initializers/active_admin.rb). The JSON comes from the model's
@@ -21,9 +23,10 @@ RSpec.describe 'Secret columns in admin downloads' do
   # download that contains it got it from a secret column.
   let(:secret_time) { Time.zone.local(2001, 2, 3, 4, 5, 6) }
   let(:secret_date) { '2001-02-03' }
+  let(:reset_digest) { PasswordReset.digest('live-reset-token') }
   let!(:ann) do
     create(:resident, community: community, unit: unit, name: 'Ann Adult', email: 'ann@example.com').tap do |resident|
-      resident.update_columns(reset_password_token: 'live-reset-token', reset_password_sent_at: secret_time,
+      resident.update_columns(reset_password_token_digest: reset_digest, reset_password_sent_at: secret_time,
                               keys_valid_since: secret_time)
     end
   end
@@ -58,7 +61,7 @@ RSpec.describe 'Secret columns in admin downloads' do
     it 'gets no resident secret from any download of the residents pages' do
       paths = %W[/residents.csv /residents.json /residents/#{ann.id}.json]
 
-      expect(paths_containing(['live-reset-token', ann.password_digest, secret_date], paths)).to eq({})
+      expect(paths_containing([reset_digest, ann.password_digest, secret_date], paths)).to eq({})
     end
 
     it 'gets the residents CSV without the secret columns, and every other column' do
@@ -109,14 +112,13 @@ RSpec.describe 'Secret columns in admin downloads' do
     # the link. The token here is the one PasswordReset made and mailed.
     it 'cannot read the reset link it just had mailed' do
       post "/residents/#{ann.id}/send_password_reset"
-      mailed_token = ann.reload.reset_password_token
+      mailed_token = ActionMailer::Base.deliveries.last.text_part.body.decoded[/reset-password\S*?([\w-]{43})/, 1]
       expect(mailed_token).to be_present
-      expect(mailed_token).not_to eq('live-reset-token')
-      expect(ActionMailer::Base.deliveries.last.body.encoded).to include(mailed_token)
+      expect(ann.reload.reset_password_token_digest).to eq(PasswordReset.digest(mailed_token))
 
       paths = %W[/residents.csv /residents.json /residents/#{ann.id}.json]
 
-      expect(paths_containing([mailed_token], paths)).to eq({})
+      expect(paths_containing([mailed_token, PasswordReset.digest(mailed_token)], paths)).to eq({})
     end
   end
 
@@ -139,7 +141,7 @@ RSpec.describe 'Secret columns in admin downloads' do
 
     it 'is found, so the checks below cannot pass on an empty list' do
       expect(credential_columns).to include(
-        %w[residents password_digest], %w[residents reset_password_token],
+        %w[residents password_digest], %w[residents reset_password_token_digest],
         %w[admin_users encrypted_password], %w[admin_users reset_password_token], %w[keys token]
       )
     end

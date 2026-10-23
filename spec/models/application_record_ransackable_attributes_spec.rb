@@ -37,8 +37,8 @@ RSpec.describe ApplicationRecord do
     end
 
     it 'never lists a secret' do
-      expect(secret_columns).to include('password_digest', 'reset_password_token', 'reset_password_sent_at',
-                                        'keys_valid_since', 'encrypted_password')
+      expect(secret_columns).to include('password_digest', 'reset_password_token', 'reset_password_token_digest',
+                                        'reset_password_sent_at', 'keys_valid_since', 'encrypted_password')
 
       models_with_a_list.each do |model|
         leaked = model.ransackable_attributes & secret_columns

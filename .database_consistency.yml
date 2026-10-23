@@ -185,6 +185,14 @@ Resident:
   index_residents_on_lower_name:
     UniqueIndexChecker:
       enabled: false
+  # The old column, ignored by the model since 2026-10-23 and dropped one
+  # release later, with this index.
   index_residents_on_reset_password_token:
+    UniqueIndexChecker:
+      enabled: false
+  # The digest of a random 32-byte token, so two can never collide. The
+  # unique index is the guard; a uniqueness validator would add a query
+  # for nothing.
+  index_residents_on_reset_password_token_digest:
     UniqueIndexChecker:
       enabled: false

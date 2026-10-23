@@ -131,15 +131,15 @@ RSpec.describe 'Read-only admin token' do
 
     # The residents index offers CSV and JSON downloads, and the show page
     # answers .json. None of them may carry the password digest or
-    # the reset token: a reset token that is still live is as good as the
-    # password. The same rule for admins, and where it is kept:
-    # secret_columns_spec.rb.
+    # the digest of the reset token. The same rule for admins, and where
+    # it is kept: secret_columns_spec.rb.
     it 'cannot download a resident\'s password digest or reset token' do
       unit = create(:unit, community: community)
       ann = create(:resident, community: community, unit: unit, name: 'Ann Adult')
       # No other column holds this date, so finding it means a secret column was sent.
       secret_time = Time.zone.local(2001, 2, 3, 4, 5, 6)
-      ann.update_columns(reset_password_token: 'live-reset-token', reset_password_sent_at: secret_time,
+      reset_digest = PasswordReset.digest('live-reset-token')
+      ann.update_columns(reset_password_token_digest: reset_digest, reset_password_sent_at: secret_time,
                          keys_valid_since: secret_time)
 
       downloads = %W[/residents.csv /residents.json /residents/#{ann.id}.json].index_with do |path|
@@ -148,7 +148,7 @@ RSpec.describe 'Read-only admin token' do
         response.body
       end
 
-      expect(downloads.select { |_, body| body.include?('live-reset-token') }.keys).to eq([])
+      expect(downloads.select { |_, body| body.include?(reset_digest) }.keys).to eq([])
       expect(downloads.select { |_, body| body.include?(ann.password_digest) }.keys).to eq([])
       expect(downloads.select { |_, body| body.include?('2001-02-03') }.keys).to eq([])
       # The downloads are real ones, not refusals.

@@ -1663,8 +1663,10 @@ CREATE TABLE public.residents (
     vegetarian boolean DEFAULT false NOT NULL,
     phone character varying,
     can_reconcile boolean DEFAULT false NOT NULL,
+    reset_password_token_digest character varying,
     CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
-    CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text)))
+    CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text))),
+    CONSTRAINT residents_reset_password_token_digest_is_sha256 CHECK (((reset_password_token_digest)::text ~ '^[0-9a-f]{64}$'::text))
 );
 
 
@@ -3465,6 +3467,13 @@ CREATE UNIQUE INDEX index_residents_on_reset_password_token ON public.residents 
 
 
 --
+-- Name: index_residents_on_reset_password_token_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_residents_on_reset_password_token_digest ON public.residents USING btree (reset_password_token_digest);
+
+
+--
 -- Name: index_residents_on_unit_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4423,6 +4432,8 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261023130100'),
+('20261023130000'),
 ('20261023120000'),
 ('20261021140000'),
 ('20261021130000'),

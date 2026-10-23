@@ -24,12 +24,14 @@ RSpec.describe 'Admin index sort order' do
   let!(:bob) { resident_with_secrets('Bob Brown', 1) }
   let(:name_order) { [ann, bob, cara].map(&:id) }
 
-  let(:resident_secrets) { %w[password_digest reset_password_token reset_password_sent_at keys_valid_since] }
+  let(:resident_secrets) { %w[password_digest reset_password_token_digest reset_password_sent_at keys_valid_since] }
 
   def resident_with_secrets(name, rank)
     create(:resident, community: community, unit: unit, name: name).tap do |resident|
       time = Time.zone.local(2001, 2, rank)
-      resident.update_columns(password_digest: "digest-#{rank}", reset_password_token: "token-#{rank}",
+      # The reset digest column holds 64 hex digits (a CHECK), so the
+      # rank is written 64 times.
+      resident.update_columns(password_digest: "digest-#{rank}", reset_password_token_digest: rank.to_s * 64,
                               reset_password_sent_at: time, keys_valid_since: time)
     end
   end
@@ -123,8 +125,8 @@ RSpec.describe 'Admin index sort order' do
     # a column it reads the model's searchable associations, which
     # ApplicationRecord sets to none.
     it 'gets the residents in name order when it asks Ransack for a secret sort' do
-      expect_default_order('/residents', nil, name_order, 'reset_password_token',
-                           { q: { s: 'reset_password_token asc' } })
+      expect_default_order('/residents', nil, name_order, 'reset_password_token_digest',
+                           { q: { s: 'reset_password_token_digest asc' } })
     end
 
     it 'still sorts by a column the page lists' do

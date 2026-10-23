@@ -40,7 +40,7 @@ RSpec.describe AdminOrderClause do
   end
 
   it 'uses the default order for every column a model does not list, on every admin page' do
-    expect(refused_columns(resource_for(Resident))).to include('password_digest', 'reset_password_token',
+    expect(refused_columns(resource_for(Resident))).to include('password_digest', 'reset_password_token_digest',
                                                                'reset_password_sent_at', 'keys_valid_since')
 
     admin_resources.each do |resource|
@@ -97,6 +97,6 @@ RSpec.describe AdminOrderClause do
     allow(resident_page).to receive(:sort_order).and_return('password_digest_asc')
 
     expect(described_class.new(resident_page, 'password_digest_asc').valid?).to be(false)
-    expect(described_class.new(resident_page, 'reset_password_token_desc').valid?).to be(false)
+    expect(described_class.new(resident_page, 'reset_password_token_digest_desc').valid?).to be(false)
   end
 end

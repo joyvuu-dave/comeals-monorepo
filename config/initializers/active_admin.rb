@@ -174,9 +174,10 @@ ActiveAdmin.setup do |config|
   # index, show page and form. The first three are ActiveAdmin's own
   # defaults. The rest hold a credential, or say when one was made:
   #
-  #   residents    password_digest, reset_password_token (stored as it is
-  #                mailed, so whoever reads it can set that resident's
-  #                password), reset_password_sent_at, keys_valid_since
+  #   residents    password_digest, reset_password_token_digest,
+  #                reset_password_sent_at, keys_valid_since, and
+  #                reset_password_token (ignored by the model since
+  #                2026-10-23; kept one release, then dropped)
   #   admin_users  reset_password_token, reset_password_sent_at
   #   keys         token (a legacy API session; no admin page today)
   #
@@ -193,7 +194,7 @@ ActiveAdmin.setup do |config|
   # missing here.
   config.filter_attributes = %i[
     encrypted_password password password_confirmation
-    password_digest reset_password_token reset_password_sent_at keys_valid_since
+    password_digest reset_password_token reset_password_token_digest reset_password_sent_at keys_valid_since
     token
     current_sign_in_ip last_sign_in_ip
   ]

@@ -16,8 +16,8 @@ class ResidentMailer
     end
     def new_rotation_email(resident, rotation, community); end
 
-    sig { params(resident: T.untyped).returns(::ActionMailer::MessageDelivery) }
-    def password_reset_email(resident); end
+    sig { params(resident: T.untyped, token: T.untyped).returns(::ActionMailer::MessageDelivery) }
+    def password_reset_email(resident, token); end
 
     sig { returns(::ActionMailer::MessageDelivery) }
     def root_admin_url; end

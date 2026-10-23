@@ -5,30 +5,31 @@
 #
 # Table name: residents
 #
-#  id                     :bigint           not null, primary key
-#  active                 :boolean          default(TRUE), not null
-#  birthday               :date
-#  can_cook               :boolean          default(TRUE), not null
-#  can_reconcile          :boolean          default(FALSE), not null
-#  email                  :string
-#  keys_valid_since       :datetime         not null
-#  name                   :string           not null
-#  password_digest        :string           not null
-#  phone                  :string
-#  reset_password_sent_at :datetime
-#  reset_password_token   :string
-#  vegetarian             :boolean          default(FALSE), not null
-#  created_at             :datetime         not null
-#  updated_at             :datetime         not null
-#  community_id           :bigint           not null
-#  unit_id                :bigint           not null
+#  id                          :bigint           not null, primary key
+#  active                      :boolean          default(TRUE), not null
+#  birthday                    :date
+#  can_cook                    :boolean          default(TRUE), not null
+#  can_reconcile               :boolean          default(FALSE), not null
+#  email                       :string
+#  keys_valid_since            :datetime         not null
+#  name                        :string           not null
+#  password_digest             :string           not null
+#  phone                       :string
+#  reset_password_sent_at      :datetime
+#  reset_password_token_digest :string
+#  vegetarian                  :boolean          default(FALSE), not null
+#  created_at                  :datetime         not null
+#  updated_at                  :datetime         not null
+#  community_id                :bigint           not null
+#  unit_id                     :bigint           not null
 #
 # Indexes
 #
-#  index_residents_on_lower_email           (lower((email)::text)) UNIQUE
-#  index_residents_on_lower_name            (lower((name)::text)) UNIQUE
-#  index_residents_on_reset_password_token  (reset_password_token) UNIQUE
-#  index_residents_on_unit_id               (unit_id)
+#  index_residents_on_lower_email                  (lower((email)::text)) UNIQUE
+#  index_residents_on_lower_name                   (lower((name)::text)) UNIQUE
+#  index_residents_on_reset_password_token         (reset_password_token) UNIQUE
+#  index_residents_on_reset_password_token_digest  (reset_password_token_digest) UNIQUE
+#  index_residents_on_unit_id                      (unit_id)
 #
 # Foreign Keys
 #
@@ -43,10 +44,16 @@ class Resident < ApplicationRecord
 
   include HasPhoneNumber
 
+  # Until 2026-10-23 the reset token was stored here as it was mailed. Now
+  # only its digest is stored (reset_password_token_digest, PasswordReset),
+  # and migration 20261023130100 emptied this column. It stays one release
+  # so an undo to the code before can still read it; drop it after that.
+  self.ignored_columns += %w[reset_password_token]
+
   # The columns the admin index may be filtered and sorted by
   # (AdminOrderClause reads this list for ?order=). It deliberately leaves
-  # out password_digest, reset_password_token, reset_password_sent_at and
-  # keys_valid_since.
+  # out password_digest, reset_password_token_digest, reset_password_sent_at
+  # and keys_valid_since.
   #
   # The read-only token cannot filter or sort by the birthday either: trying
   # dates and watching who is left would tell it the date it is not shown
@@ -230,15 +237,14 @@ class Resident < ApplicationRecord
   end
 
   # Columns no JSON of a resident may carry: the password digest, the
-  # reset token (stored as it is mailed, so whoever reads it can set this
-  # person's password), when that token was made, and the time before
-  # which every session is refused. ActiveAdmin's JSON download calls
+  # digest of the reset token, when that token was made, and the time
+  # before which every session is refused. ActiveAdmin's JSON download calls
   # to_json, which reads serializable_hash, so leaving them out here
   # covers it and any other JSON of a resident. The CSV download leaves
   # out the same columns through config.filter_attributes in
   # config/initializers/active_admin.rb.
-  SECRET_COLUMNS = T.let(%w[password_digest reset_password_token reset_password_sent_at keys_valid_since].freeze,
-                         T::Array[String])
+  SECRET_COLUMNS = T.let(%w[password_digest reset_password_token_digest reset_password_sent_at
+                            keys_valid_since].freeze, T::Array[String])
   private_constant :SECRET_COLUMNS
 
   # Removed from the result, not added to options[:except], so a caller's
@@ -344,7 +350,7 @@ class Resident < ApplicationRecord
   # (keys_valid_since, the reset-token columns) touch nothing a screen
   # shows. A birthday moves someone into the adult band on its own, with
   # no write at all, so the SPA refetches the hosts list at midnight.
-  UNSHOWN_COLUMNS = T.let(%w[email phone password_digest reset_password_token reset_password_sent_at
+  UNSHOWN_COLUMNS = T.let(%w[email phone password_digest reset_password_token_digest reset_password_sent_at
                              created_at updated_at].freeze, T::Array[String])
   private_constant :UNSHOWN_COLUMNS
 

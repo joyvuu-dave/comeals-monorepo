@@ -10,9 +10,9 @@ RSpec.describe ResidentMailer do
   end
 
   describe '#password_reset_email' do
-    before { resident.update!(reset_password_token: 'abc123token') }
-
-    let(:mail) { described_class.password_reset_email(resident) }
+    # PasswordReset makes the token and stores only its digest, so the
+    # mailer takes the token itself.
+    let(:mail) { described_class.password_reset_email(resident, 'abc123token') }
 
     it 'sends to the resident email' do
       expect(mail.to).to eq(['sarah@example.com'])

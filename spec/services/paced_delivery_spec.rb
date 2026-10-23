@@ -125,9 +125,7 @@ RSpec.describe PacedDelivery do
     end
 
     it 'opens the session without STARTTLS, timeouts, or authentication' do
-      message = ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cooks.first.tap do |c|
-        c.reset_password_token = 't'
-      end)
+      message = ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cooks.first, 't')
 
       result = described_class.deliver([cooks.first], mailer: 'x') { message }
 
@@ -155,9 +153,9 @@ RSpec.describe PacedDelivery do
     end
 
     it 'does not turn STARTTLS on or set a timeout' do
-      cook = cooks.first.tap { |c| c.reset_password_token = 't' }
+      cook = cooks.first
       described_class.deliver([cook], mailer: 'x') do
-        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook)
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook, 't')
       end
 
       expect(smtp).not_to have_received(:enable_starttls_auto)
@@ -183,9 +181,9 @@ RSpec.describe PacedDelivery do
     end
 
     it 'gives the session the STARTTLS and timeout settings, so a dead SMTP server cannot hang the job' do
-      cook = cooks.first.tap { |c| c.reset_password_token = 't' }
+      cook = cooks.first
       described_class.deliver([cook], mailer: 'x') do
-        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook)
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook, 't')
       end
 
       expect(smtp).to have_received(:enable_starttls_auto)
@@ -202,9 +200,7 @@ RSpec.describe PacedDelivery do
       end
       allow(MailDeliveryFailure).to receive(:report)
       messages = cooks.index_with do |cook|
-        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook.tap do |c|
-          c.reset_password_token = 't'
-        end)
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook, 't')
       end
 
       result = described_class.deliver(cooks, mailer: 'x') { |cook| messages[cook] }
@@ -215,9 +211,7 @@ RSpec.describe PacedDelivery do
 
     it 'opens one session, sends every message over it, and pauses between messages' do
       messages = cooks.index_with do |cook|
-        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook.tap do |c|
-          c.reset_password_token = 't'
-        end)
+        ActionMailer::MessageDelivery.new(ResidentMailer, :password_reset_email, cook, 't')
       end
 
       result = described_class.deliver(cooks, mailer: 'x') { |cook| messages[cook] }
