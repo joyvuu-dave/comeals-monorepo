@@ -30,6 +30,16 @@ RSpec.describe 'the migrations production has not run' do
               .reject(&:disable_ddl_transaction)
   end
 
+  # The files themselves say which migrations production has not run, and
+  # which of those are data migrations. Counting from the files, and not
+  # from a number written here, keeps this right after each deploy moves
+  # db/production_migrations.txt.
+  let(:unrun_schema_migration_files) do
+    Rails.root.glob('db/migrate/*.rb')
+         .select { |path| Integer(path.basename.to_s[/\A\d+/], 10) > PRODUCTION_SCHEMA_VERSION }
+         .reject { |path| path.read.include?('disable_ddl_transaction!') }
+  end
+
   # Everything a migration can make in the public schema, each object as
   # Postgres prints its definition.
   def schema
@@ -94,11 +104,13 @@ RSpec.describe 'the migrations production has not run' do
   end
 
   it 'covers every schema migration after production\'s newest one' do
-    expect(schema_migrations.size).to be > 20
     expect(schema_migrations.map(&:version)).to all(be > PRODUCTION_SCHEMA_VERSION)
+    expect(schema_migrations.size).to eq(unrun_schema_migration_files.size)
   end
 
   it 'leaves the schema as it was after running down and up again' do
+    skip 'production has run every schema migration' if schema_migrations.empty?
+
     before = schema
 
     run_each(:down, schema_migrations.reverse)
@@ -106,7 +118,6 @@ RSpec.describe 'the migrations production has not run' do
     run_each(:up, schema_migrations)
 
     expect(rolled_back).not_to eq(before)
-    expect(rolled_back[:columns]).not_to include(a_collection_including('residents', 'can_reconcile'))
     expect(schema).to eq(before)
   end
 end
