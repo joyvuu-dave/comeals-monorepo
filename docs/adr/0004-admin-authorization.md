@@ -138,6 +138,14 @@ same reason, a page the token reads says what a correction or a settlement
 mark did and when, but not which admin made it
 (`ApplicationHelper#names_admins?`).
 
+The token reads `Resident`, so the same rule has to hold inside that
+resource (2026-10-23). The token sees a resident's price band but not the
+birthday: not on the list, the resident's page, the CSV or the JSON
+(`ApplicationHelper#shows_birthdays?`, `Resident::HIDDEN_FROM_THE_TOKEN`).
+It cannot filter or sort by the birthday either, because trying dates and
+watching who is left would tell it the date. Until then the token read
+every full birthday.
+
 The Dashboard stays readable on the token path. ActiveAdmin redirects an
 unauthorized request to the admin root, so refusing the Dashboard would turn
 every denial into a redirect loop.
@@ -244,6 +252,8 @@ which is how the flag came to be unmanageable in the first place.
   moment, the one way admin can reach that rule. One demotion is refused.
 - `spec/requests/admin/read_only_token_spec.rb` — the token path: what it
   reads, what it cannot reach, what it cannot write.
+- `spec/requests/admin/read_only_token_birthdays_spec.rb` — the token sees
+  no birthday, in any format, and cannot filter or sort by one.
 - `spec/models/admin_user_spec.rb` — the model guards and the database
   trigger, including `update_all` and `delete_all`.
 - `spec/requests/admin/attendance_correction_spec.rb` — that the hand-written

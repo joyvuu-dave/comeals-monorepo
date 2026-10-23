@@ -96,10 +96,21 @@ ActiveAdmin.register Resident do
     end
   end
 
+  # CSV
+  # ActiveAdmin's own CSV (the id and every column), except that the
+  # read-only token gets no birthday (ApplicationHelper#shows_birthdays?).
+  # The block runs again for every download, so it can ask.
+  csv do
+    column :id
+    active_admin_config.content_columns.each do |name|
+      column name unless name == :birthday && !shows_birthdays?
+    end
+  end
+
   # INDEX
   index do
     column :name
-    column :birthday
+    column :birthday if shows_birthdays?
     column 'Price Category', sortable: false do |resident|
       price_category_label(resident.multiplier_on(Community.instance.today))
     end
@@ -125,7 +136,7 @@ ActiveAdmin.register Resident do
     attributes_table do
       row :id
       row :name
-      row :birthday
+      row :birthday if shows_birthdays?
       row('Category') { |r| price_category_label(r.multiplier_on(Community.instance.today)) }
       row :unit
       row :can_cook

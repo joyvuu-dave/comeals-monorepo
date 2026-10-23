@@ -229,6 +229,8 @@ MUTANT_SPEC_ROWS = {
   # The token sees a correction's and a mark's date, not the admin's email.
   'spec/requests/admin/read_only_token_spec.rb' =>
     %w[SuperuserAdapter ApplicationController ApplicationHelper SettlementMarkHelper MealCorrectionDetails],
+  # The token sees no birthday: the admin pages, the JSON and the filters.
+  'spec/requests/admin/read_only_token_birthdays_spec.rb' => %w[Resident ApplicationHelper],
   'spec/requests/admin/csrf_failure_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/bootstrap_guard_spec.rb' => %w[ApplicationController],
   'spec/requests/admin/session_persistence_spec.rb' => %w[ApplicationController],

@@ -47,10 +47,22 @@ class Resident < ApplicationRecord
   # (AdminOrderClause reads this list for ?order=). It deliberately leaves
   # out password_digest, reset_password_token, reset_password_sent_at and
   # keys_valid_since.
+  #
+  # The read-only token cannot filter or sort by the birthday either: trying
+  # dates and watching who is left would tell it the date it is not shown
+  # (HIDDEN_FROM_THE_TOKEN).
   sig { params(_auth_object: T.untyped).returns(T::Array[String]) }
   def self.ransackable_attributes(_auth_object = nil)
-    %w[id active birthday can_cook created_at email name phone unit_id updated_at vegetarian]
+    columns = %w[id active birthday can_cook created_at email name phone unit_id updated_at vegetarian]
+    Current.read_only_admin_token ? columns - HIDDEN_FROM_THE_TOKEN : columns
   end
+
+  # What the read-only admin token may not read about a resident. Its
+  # links are mailed to the whole community, and a mailed link must not
+  # be a list of everyone's date of birth (ADR 0004 §3). The admin pages
+  # leave the birthday out for the token too
+  # (ApplicationHelper#shows_birthdays?).
+  HIDDEN_FROM_THE_TOKEN = T.let(%w[birthday].freeze, T::Array[String])
 
   sig { returns(T.nilable(String)) }
   attr_reader :password
@@ -233,7 +245,8 @@ class Resident < ApplicationRecord
   # only: or methods: cannot bring a secret column back.
   sig { params(options: T.nilable(T::Hash[T.untyped, T.untyped])).returns(T::Hash[String, T.untyped]) }
   def serializable_hash(options = nil)
-    super.except(*SECRET_COLUMNS)
+    hash = super.except(*SECRET_COLUMNS)
+    Current.read_only_admin_token ? hash.except(*HIDDEN_FROM_THE_TOKEN) : hash
   end
 
   # Invalidate every outstanding session on password change. We hit both auth

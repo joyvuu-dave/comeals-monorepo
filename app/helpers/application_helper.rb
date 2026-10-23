@@ -20,6 +20,16 @@ module ApplicationHelper
     !Current.read_only_admin_token
   end
 
+  # Whether this page may show a resident's birthday. A signed-in admin
+  # sees it and edits it. The read-only token does not: its links are
+  # mailed to the whole community, and a mailed link must not be a list
+  # of everyone's date of birth (ADR 0004 §3). The token still sees the
+  # price band. Resident leaves the birthday out of the JSON and the
+  # filters for the token itself (Resident::HIDDEN_FROM_THE_TOKEN).
+  def shows_birthdays?
+    !Current.read_only_admin_token
+  end
+
   # The words for a price ("Adult", "Child", "Child (free)"). They live
   # in Multiplier.label, because the meal history uses them too.
   def price_category_label(multiplier)
