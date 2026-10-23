@@ -181,6 +181,44 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                                                ])
     end
 
+    # #244. The deploy scales web to 0 for the migrations, and must bring
+    # back as many web dynos as ran before, not always one.
+    it 'brings web back to the count it had before, and waits for every one' do
+      deploy.production(web: 2)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Scaling web back up to 2 dyno(s)...', 'Web is up on v701')
+      expect(deploy.calls).to include('heroku ps:scale web=2 -a comeals-monorepo')
+      expect_production(maintenance: false, web: 2, pushed: true)
+    end
+
+    # A deploy must leave the site serving, so web that was off comes
+    # back as one dyno, and the script says so.
+    it 'brings web up as one dyno when it was at 0 before, and says so' do
+      deploy.production(web: 0)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Web ran 0 dynos before the deploy. It will come back as 1, so the site ' \
+                                       'serves after the deploy.')
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    it 'names the web count it read in the recovery banner' do
+      deploy.production(web: 2)
+      deploy.rule('heroku', '^ps:scale web=2', exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('heroku ps:scale web=2 -a comeals-monorepo')
+      expect(result.output).not_to include('heroku ps:scale web=1 -a comeals-monorepo')
+      expect_production(maintenance: true, web: 0, pushed: true, worker: 1)
+    end
+
     # Heroku marks a web dyno "up" only once it listens on its port, and
     # Puma listens only after it has loaded the app. Until then a request
     # waits on a booting dyno, or fails when the boot fails. On 2026-10-23

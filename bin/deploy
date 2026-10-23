@@ -38,6 +38,9 @@ HEROKU_SHA=""
 # The newest release before the push, and the release the push made.
 RELEASE_BEFORE=""
 NEW_RELEASE=""
+# How many web dynos a maintenance deploy brings back. deploy_maintenance
+# sets it from the count that ran before (#244).
+WEB_COUNT=1
 
 # --yes (or DEPLOY_YES=1): proceed without the interactive
 # confirmation. The automated pipeline (deploy.yml) runs with this;
@@ -107,7 +110,7 @@ cleanup() {
     yellow "Investigate the failure, then manually run:"
     echo
     echo "  heroku ps:scale worker=1 -a $APP"
-    echo "  heroku ps:scale web=1 -a $APP"
+    echo "  heroku ps:scale web=$WEB_COUNT -a $APP"
     echo "  heroku maintenance:off -a $APP"
     echo
     yellow "Turn maintenance off last, once heroku ps -a $APP shows web up."
@@ -608,6 +611,14 @@ deploy_maintenance() {
 
   local formation
   formation=$(heroku ps:scale -a "$APP")
+  # Bring back as many web dynos as run now (#244). The formation is the
+  # count Heroku keeps running, which is what ps:scale sets back. With
+  # none, bring back one: a deploy must leave the site serving.
+  if [[ " $formation" =~ \ web=([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
+    WEB_COUNT=${BASH_REMATCH[1]}
+  else
+    warn "Web ran 0 dynos before the deploy. It will come back as 1, so the site serves after the deploy."
+  fi
   if [[ " $formation" == *" worker="* ]]; then
     info "Scaling web and worker dynos to 0..."
     heroku ps:scale web=0 worker=0 -a "$APP"
@@ -626,8 +637,8 @@ deploy_maintenance() {
   post_deploy_tasks
   start_worker
 
-  info "Scaling web dyno back up..."
-  heroku ps:scale web=1 -a "$APP"
+  info "Scaling web back up to $WEB_COUNT dyno(s)..."
+  heroku ps:scale "web=$WEB_COUNT" -a "$APP"
   wait_for_web
 }
 
