@@ -190,17 +190,23 @@ Rails.logger.debug { "#{community.bills.count} Bills created" }
 # less the ones with a blank cost, which wait (ADR 0011 rule 3). end_date
 # must be at least 14 days before today (ADR 0011 rule 2). The cutoff sits
 # on the first batch's boundary so the sweep takes only that batch.
-Settlement.run!(cutoff: 8.weeks.ago.to_date)
+first_cutoff = 8.weeks.ago.to_date
+Settlement.run!(cutoff: first_cutoff)
 Rails.logger.debug { "#{community.reconciliations.count} Reconciliation created" }
 
 # Meals (will not be reconciled)
 create_rotations.call(community.meal_schedule.dates_between(7.weeks.ago.to_date, 26.weeks.from_now.to_date))
 
+# Only these meals. A first-batch meal with a blank cost is not settled
+# either, but it already has its cooks and sign-ups: two cooks picked at
+# random here could include one of its cooks, which Bill refuses.
+second_batch = Meal.where('date > ?', first_cutoff)
+
 # MealResidents & Guests for the unreconciled batch. Skip reconciled meals
 # because MealResident/Guest enforce immutability via before_save callbacks
 # (see app/models/meal_resident.rb, guest.rb) — writing to a reconciled meal
 # raises RecordNotSaved.
-Meal.unreconciled.find_each do |meal|
+second_batch.find_each do |meal|
   next if meal.date > community.today + 7
 
   Resident.all.shuffle[0..(Random.rand(8..21))].each_with_index do |resident, index|
@@ -236,7 +242,7 @@ Rails.logger.debug { "#{community.meal_residents.count} MealResidents created" }
 # batch, plus meals where nobody has signed up to cook yet. A "never
 # entered" cook on a closed meal is the pending state the meal page
 # displays.
-Meal.unreconciled.each_with_index do |meal, index|
+second_batch.order(:id).each_with_index do |meal, index|
   next if meal.date > community.today + 14
 
   ids = Resident.pluck(:id).sample(2)
