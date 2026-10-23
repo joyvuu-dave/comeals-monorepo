@@ -6,6 +6,7 @@ import { execSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import istanbulSource from "./tests/helpers/vite_istanbul.mjs";
 import { BUILD_TARGET } from "./app/frontend/browser_target.mjs";
+import stripOldJsxPropsPlugin from "./app/frontend/strip_old_jsx_props.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -142,6 +143,13 @@ export default defineConfig(({ command }) => ({
       ? [istanbulSource({ include: "app/frontend/src" })]
       : []),
   ],
+  // The dev server's one-time bundling of packages (#28,
+  // app/frontend/strip_old_jsx_props.mjs). `vite build` does not use it.
+  optimizeDeps: {
+    rolldownOptions: {
+      plugins: [stripOldJsxPropsPlugin()],
+    },
+  },
   server: {
     port: 3036,
     proxy: {
