@@ -379,7 +379,7 @@ jobs:
       # cached; they come from the runner's mirror and usually take
       # seconds. On 2026-10-22 install-deps waited on the mirror and used
       # the job's whole 25 minutes, so bin/lib/playwright-install gives
-      # each try 5 minutes and tries twice (#240).
+      # each try 8 minutes and tries twice (#240).
       - name: Read Playwright version
         id: playwright-version
         run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"

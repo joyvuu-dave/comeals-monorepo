@@ -8,15 +8,41 @@
 # The system packages come from the runner's apt mirror. When the
 # mirror stops sending, apt waits with no limit, and the step used up
 # the whole job's time (#240). So each try stops after
-# PLAYWRIGHT_INSTALL_MINUTES (default 5). A normal install, browsers
-# included, takes about a minute.
+# PLAYWRIGHT_INSTALL_MINUTES (default 8). A normal install, browsers
+# included, takes about a minute; on a slow mirror the system packages
+# (about 120 MB) took more than 5 minutes (2026-10-23).
 #
-# timeout stops the whole process group, so apt stops too, not only npx.
-# --kill-after: if a process ignores the first signal, KILL follows.
+# timeout stops npx, but not the apt-get that Playwright starts as root:
+# a signal from this user cannot reach a root process. That apt keeps
+# the dpkg lock, and a second try at once fails with "Could not get lock
+# /var/lib/dpkg/lock-frontend". So before the second try, wait (up to
+# the same limit) until nothing holds the lock, then let dpkg finish any
+# package that was left half set up.
+# --kill-after: if npx ignores the first signal, KILL follows.
 set -uo pipefail
 
-limit="${PLAYWRIGHT_INSTALL_MINUTES:-5}m"
+minutes="${PLAYWRIGHT_INSTALL_MINUTES:-8}"
+limit="${minutes}m"
+
+# Waits until no process holds dpkg's lock files. fuser exits 1 when none
+# does. Fails if one still does after the time limit.
+wait_for_apt() {
+  local waited=0
+  while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock >/dev/null 2>&1; do
+    if [ "$waited" -ge $((minutes * 60)) ]; then
+      return 1
+    fi
+    sleep 5
+    waited=$((waited + 5))
+  done
+  sudo dpkg --configure -a
+}
+
 for try in 1 2; do
+  if [ "$try" -eq 2 ] && ! wait_for_apt; then
+    echo "apt still holds the dpkg lock $limit after try 1 of 2 ended, so a second try cannot run." >&2
+    exit 1
+  fi
   timeout --kill-after=30s "$limit" npx playwright "$@"
   status=$?
   if [ "$status" -eq 0 ]; then
