@@ -9,8 +9,9 @@ class AuditSerializer
              :description,
              :display_time
 
-  # The start of the comment of a row a data fix wrote with no person
-  # (migration 20261010130000's TurnOffNoCostOnBillsWithAnAmount::BY).
+  # The start of the comment of a row a data fix wrote with no person, such
+  # as "Automatic fix (migration <its version>)." The data fixes of
+  # October 2026 wrote rows like that, and production keeps them.
   AUTOMATIC_FIX = 'Automatic fix'
 
   # A row a person made names them through `user`, and the history shows

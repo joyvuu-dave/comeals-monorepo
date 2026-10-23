@@ -45,7 +45,7 @@ ActiveAdmin.register Bill do
     #
     # It no longer does. The database catches it now, from any path: the
     # settlement holds FOR UPDATE on every meal it claims, and the child-write
-    # trigger's lookups update the meal row (20261016120000), so a racing
+    # trigger's lookups update the meal row (comeals_reject_settled_child_write), so a racing
     # write waits for the settlement and is then refused. What is
     # left here is which sentence the person sees, by timing: this
     # redirect's, the model guard's ("Meal has been reconciled.", it reads

@@ -20,7 +20,7 @@ original design for the record, and this list is what actually shipped:
    And the phase is already expressible in the grid: moving a day to
    the other week row shifts it by a week, and the preview shows the
    result. So the field was redundant. Week 1 is now pinned by a fixed
-   constant (`MealSchedule::EPOCH`); migration 20260808120000 rotated
+   constant (`MealSchedule::EPOCH`); a migration of 2026-08-08 rotated
    stored rows so generated dates did not change.
 
 3. **There is no regenerate button.** Saving the schedule changes only

@@ -2,15 +2,15 @@
 
 # A bill marked No cost that also has an amount. The Bill model refuses
 # one since 2026-10-10 (Bill::NO_COST_MEANS_NO_AMOUNT), and so does the
-# CHECK bills_no_cost_means_no_amount. Migration 20261010130000 turned No
-# cost off on every bill that had both, and its spec needs such bills to
-# turn off.
+# CHECK bills_no_cost_means_no_amount. A one-time data fix turned No
+# cost off on every bill that had both, and specs of code that still
+# reads such a bill need one.
 #
 # This writes one the way the app did before April 2026: the bill saved
 # with No cost and $0, then the amount saved through the model, so the
 # history has both rows. The amount is saved without the validation, and
 # with the CHECK removed for that one write and added back NOT VALID, as
-# it was before migration 20261010130200 validated it. ALTER TABLE is
+# it was before it was validated in October 2026. ALTER TABLE is
 # part of the transaction, so the example's transaction puts the CHECK
 # back as it was, and if the block raises, the savepoint does. It needs
 # the example's transaction: outside one, removing the CHECK would be

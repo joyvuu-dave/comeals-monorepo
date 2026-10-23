@@ -69,7 +69,7 @@ RSpec.describe Community do
   end
 
   describe 'timezone' do
-    # The DB column default was dropped (see 20260423170000 migration) so
+    # The DB column default was dropped (in April 2026) so
     # operators must explicitly pick a tz at create time. This stops a
     # Berlin community from being set up on Pacific time with no error.
     it 'requires a timezone at creation' do
@@ -845,7 +845,7 @@ RSpec.describe Community do
 
     # The dates below are what the old hard-coded algorithm produced for the
     # same starting state (computed from it before it was deleted). The row
-    # arrangement matches what migration 20260808120000 produces when it
+    # arrangement matches what a migration of 2026-08-08 produced when it
     # rotates a schedule into epoch phase, so this pins "the first rotation
     # generated after deploy matches what the old code would have created" —
     # including which of the alternating days comes next. The week of Sunday

@@ -263,8 +263,7 @@ The settlement preview gets a button for past dinners people signed up
 for and nobody cooked: "Mark these N dinners as cancelled". It lists
 them, asks yes or no, and marks only the ones that still have no cook
 at the moment of the yes. It needs a superuser, like settling. A deploy
-migration marks the 27 such dinners from before October 2026
-(20261015120000).
+migration marked the 27 such dinners from before October 2026.
 
 ## Options we did not take
 

@@ -34,7 +34,8 @@ class LedgerCheckRun < ApplicationRecord
   validates :reconciliations_checked, :mismatch_count,
             numericality: { only_integer: true, greater_than_or_equal_to: 0 }
 
-  # Append-only. The database trigger in 20260731130000 is the backstop; this
+  # Append-only. The database trigger comeals_protect_ledger_check_run refuses
+  # the writes that skip callbacks; this
   # is the readable half, and the reason is the same as for a settled
   # balance — a record that can be edited afterwards is not evidence.
   include AppendOnly

@@ -61,8 +61,8 @@
 #                                      an amount. Clear the amount, or
 #                                      turn No cost off."
 #       (Bill::NO_COST_MEANS_NO_AMOUNT). Only `to`: `from` is the bill
-#       as the page saw it, and a page that read the meal before
-#       migration 20261010130000 ran may have seen a bill with both.
+#       as the page saw it, and a page that read the meal before a
+#       one-time data fix turned No cost off may have seen a bill with both.
 #   - the same cook twice              "Duplicate cook in edits: resident #N."
 #   - a cook who is not a resident, or a resident_id that is not a whole
 #     number                           "Resident not found."

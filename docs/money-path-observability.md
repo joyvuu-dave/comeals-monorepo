@@ -27,8 +27,8 @@ Worth writing down so nobody rebuilds it.
   concerns, and the `AppendOnly` concern
   (`app/models/concerns/append_only.rb`) that `Reconciliation` includes.
 - **Settled balances sum to zero.** `Settlement.assert_balanced_input!` and
-  `Settlement.assert_candidates_cover_pennies!`, and since
-  `20260731120000` a deferred constraint trigger that makes PostgreSQL check
+  `Settlement.assert_candidates_cover_pennies!`, and since 2026-07-31 a
+  deferred constraint trigger (`reconciliation_balances_sum_zero`) that makes PostgreSQL check
   it too, at every commit, for writes that never went through Ruby. That one
   has no bypass: `comeals.allow_settled_writes` does not turn it off.
 - **Settled amounts cannot be rewritten.** `reconciliation_balances` refuses
@@ -38,7 +38,8 @@ Worth writing down so nobody rebuilds it.
   table. Added 2026-07-31. `INSERT` stayed open until 2026-10-09, so two new
   rows that add up to zero could still be added to a settled reconciliation
   or meal. Now only the settlement that owns the row may add it
-  (`20261009120000`).
+  (`comeals_balance_insert_by_settlement`,
+  `comeals_meal_charge_insert_by_settlement`).
 - **One implementation of the arithmetic.** `MealLedger`. Settlement and the
   running balance used to carry separate copies of the same rules.
 
@@ -164,8 +165,8 @@ Built on top of this, and the reason it was worth doing:
   each person's statement show the new numbers like any other settlement's;
   the record of the correction is read with the query in
   `docs/runbooks/settled-data-repair.md`.
-  Migration `20261010130000` did this for the settlements that had bills
-  marked No cost by mistake. One older settlement still has no lines.
+  A data-fix migration in October 2026 did this for the settlements that
+  had bills marked No cost by mistake. One older settlement still has no lines.
 
 ### Check three: each settled dinner against its rows — built 2026-10-13
 

@@ -159,7 +159,7 @@ Demoting or destroying the last superuser is refused at three layers:
   Meal and Reconciliation prepend theirs (issue #26) — dependent callbacks run
   first otherwise, and a swallowed inner rollback leaves partial writes.
 - The `comeals_refuse_last_superuser_removal` trigger
-  (`20260728120000`), which holds for paths that skip callbacks: `update_all`,
+  (`db/structure.sql`), which holds for paths that skip callbacks: `update_all`,
   `delete_all`, `update_column`, psql. "At least one row has `superuser` set"
   is a statement about the table, not a row, so no CHECK constraint or partial
   unique index can express it. A trigger is the only database-level way to say

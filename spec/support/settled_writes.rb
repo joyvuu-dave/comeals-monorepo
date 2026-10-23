@@ -4,8 +4,8 @@
 #
 # The database refuses an insert into meal_charges or
 # reconciliation_balances unless the settlement of that row's
-# reconciliation is writing it, or the repair bypass is on (migration
-# 20261009120000). So a spec that needs such a row says which of the two
+# reconciliation is writing it, or the repair bypass is on
+# (comeals_balance_insert_by_settlement in db/structure.sql). So a spec that needs such a row says which of the two
 # it is acting as:
 #
 #   SettledWrites.as_settlement_of(reconciliation) { ... }

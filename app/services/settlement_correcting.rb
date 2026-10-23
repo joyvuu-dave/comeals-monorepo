@@ -19,8 +19,8 @@ module SettlementCorrecting
   # line item it deleted.
   #
   # For a settlement whose rows were wrong, when the owner decides the
-  # settlement must show the right numbers. The first case is migration
-  # 20261010130000: 11 bills of settled meals were marked No cost and also
+  # settlement must show the right numbers. The first case was a one-time
+  # data fix of October 2026: 11 bills of settled meals were marked No cost and also
   # had an amount, so their cooks had been credited $0 for them (owner
   # decision, 2026-10-10). The caller fixes the rows in the block:
   #

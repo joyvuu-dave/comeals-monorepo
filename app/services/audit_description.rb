@@ -112,7 +112,7 @@ class AuditDescription
   end
 
   # The amount a bill's create row gives it, in dollars, or nil. Rows
-  # written before migration 20260326000001 hold whole cents
+  # written before March 2026 hold whole cents
   # (amount_change says more).
   def created_amount(changes)
     return dollars(changes['amount']) if changes.key?('amount')
@@ -288,8 +288,8 @@ class AuditDescription
   # longer marked as no cost, so the $86.00 now counts in the meal's
   # cost". Before April 2026 the meal page let a cost be typed into a row
   # marked No cost, and MealLedger leaves a no-cost bill out of the meal's
-  # cost. Migration 20261010130000 turned No cost off on those bills, with
-  # rows like this one. On a meal that was already settled, the migration
+  # cost. A one-time data fix turned No cost off on those bills, with
+  # rows like this one. On a meal that was already settled, the fix
   # worked the settlement out again with the amount counted
   # (Settlement#correct!), so the line is true there too. `amount` is the
   # bill's amount just before the row, from its history, or nil.
@@ -303,7 +303,7 @@ class AuditDescription
   end
 
   # The amount a bill row changed, as [from, to] in dollars, or nil when
-  # it changed none. Until migration 20260326000001 the column was
+  # it changed none. Until March 2026 the column was
   # amount_cents and held whole cents, and the audit rows written before
   # it still say so (6051 in production, 2017 to 2026-03). Those become
   # dollars here, as BigDecimal, so they read like every later row. A row

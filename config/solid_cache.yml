@@ -2,8 +2,10 @@
 #
 # There is deliberately no `database:` key here. That key is what makes
 # solid_cache open a second database connection; without it, it uses the
-# primary connection, which is what we want — see the comment in
-# db/migrate/20260724120000_create_solid_cache_entries.rb.
+# primary connection, which is what we want — CLAUDE.md, "The production
+# cache is solid_cache, in the primary database", says why. The table's
+# columns and indexes were copied from the gem's schema template
+# (solid_cache 1.0.10); keep db/structure.sql in step if it changes.
 #
 # max_size is the cap on total cache size. When writes push past it,
 # solid_cache trims the oldest entries. 64 MB is generous for this app:

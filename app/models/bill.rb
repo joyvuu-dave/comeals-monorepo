@@ -83,8 +83,8 @@ class Bill < ApplicationRecord
   # no amount. MealLedger leaves a no-cost bill out of the meal's cost, so
   # a bill with both credited the cook $0 for what they spent. Before
   # April 2026 the meal page let a cost be typed into a row marked No
-  # cost, and nothing refused it here until 2026-10-10. Migration
-  # 20261010130000 turned No cost off on every bill that had both, and
+  # cost, and nothing refused it here until 2026-10-10. A one-time data
+  # fix turned No cost off on every bill that had both, and
   # worked out again each settlement that had left one out. The
   # bills_no_cost_means_no_amount CHECK refuses the same rows from writes
   # that skip the model (MODELS.md, Bill).

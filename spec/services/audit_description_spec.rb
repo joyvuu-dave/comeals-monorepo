@@ -86,7 +86,7 @@ RSpec.describe AuditDescription do
     expect(described_class.describe(audit)).to eq("Bill for #{name} changed from $30.00 to $0.00 and marked as no cost")
   end
 
-  # Until migration 20260326000001, bills.amount was called amount_cents
+  # Until March 2026, bills.amount was called amount_cents
   # and held whole cents. The audit rows written before it still hold
   # amount_cents: 6051 of them in production, from 2017-08-30 to
   # 2026-03-24. The history once said "unknown bill changed" for each.
@@ -134,7 +134,7 @@ RSpec.describe AuditDescription do
 
   # Before April 2026 the meal page let a cost be typed into a row marked
   # No cost, and MealLedger leaves a no-cost bill out of the meal's cost.
-  # Migration 20261010130000 turned No cost off on those bills, and wrote
+  # A one-time data fix turned No cost off on those bills, and wrote
   # one row for each: no_cost [true, false], and nothing about the amount,
   # because the amount did not change. The history reads the amount from
   # the bill's own rows, the way it reads the cook. Nothing can make such a
@@ -183,8 +183,8 @@ RSpec.describe AuditDescription do
     end
 
     # A bill whose amount never changed after it was made: the amount is
-    # the one its create row holds, in dollars or, before migration
-    # 20260326000001, in cents.
+    # the one its create row holds, in dollars or, before March 2026,
+    # in cents.
     it "reads the amount from the bill's create row, in dollars or in cents" do
       row(999_981, 'create', { 'meal_id' => meal.id, 'resident_id' => resident.id, 'amount' => '86.0',
                                'no_cost' => true })

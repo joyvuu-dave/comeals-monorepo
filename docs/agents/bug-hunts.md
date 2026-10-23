@@ -155,8 +155,8 @@ What was true is that nothing pinned it:
 
 - no spec created a meal closed (added to `spec/models/meal_spec.rb`);
 - nothing outside the model kept `closed` and `closed_at` in step
-  (CHECK `meals_closed_at_matches_closed` added, migration
-  `20260917120000`, `spec/db/closed_at_matches_closed_check_spec.rb`).
+  (CHECK `meals_closed_at_matches_closed` added on 2026-09-17,
+  `spec/db/closed_at_matches_closed_check_spec.rb`).
 
 The two specs that set up a closed meal with no `closed_at` through
 `update_columns` are gone, because the state is now impossible, and

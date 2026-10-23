@@ -42,7 +42,7 @@
 # day the units were saved (ADR 0011 rule 7): `unit` is the unit they
 # lived in, or last lived in, and `lived_here` is their active flag. That
 # day is reconciliations.units_recorded_on: the day of the settlement, or
-# for one made before migration 20261010125950, the day it ran. The unit
+# for one made before 2026-10-10, the day a migration filled them in. The unit
 # totals on the settlement page come from these, so they never change
 # later. A settlement whose units were saved on its own day counts the
 # people who had moved out under "Moved out", not in a unit
@@ -65,14 +65,15 @@ class ReconciliationBalance < ApplicationRecord
   # A settled balance is what a resident has already been billed. It is
   # written once, inside the settlement transaction, and never again.
   #
-  # These guards produce the readable error; the database triggers in
-  # 20260731120000 are the backstop for writes that skip callbacks —
+  # These guards produce the readable error; the database triggers
+  # (comeals_protect_settled_balance, comeals_reconciliation_balances_sum_zero)
+  # refuse the writes that skip callbacks —
   # update_all, delete_all, a rake task, psql. Same split as the settled-meal
   # triggers, and the same reason: a validation only runs when the write goes
   # through the model.
   #
-  # Adding a balance has no guard here, only in the database: the trigger in
-  # 20261009120000 refuses an INSERT unless its reconciliation's settlement
+  # Adding a balance has no guard here, only in the database: the trigger
+  # comeals_balance_insert_by_settlement refuses an INSERT unless its reconciliation's settlement
   # is writing it, or the repair bypass is on. The settlement itself adds
   # balances through this model, so the model cannot refuse them.
   #

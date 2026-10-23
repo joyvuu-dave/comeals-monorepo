@@ -7,7 +7,7 @@ require 'rails_helper'
 # Community via the UI. During the window between admin creation and community
 # creation:
 #
-#   - admin_users.community_id is nullable (see migration 20260423170000).
+#   - admin_users.community_id is nullable (db/structure.sql).
 #   - Every ActiveAdmin page except the Community new/create form redirects
 #     to new_admin_community_path (see initializer active_admin_bootstrap_guard).
 #

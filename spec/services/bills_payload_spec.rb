@@ -173,8 +173,8 @@ RSpec.describe BillsPayload do
 
     # "No cost" means the cook spent nothing (Bill::NO_COST_MEANS_NO_AMOUNT).
     # Only `to` is checked: `from` is the bill as the page saw it, and a
-    # page that read the meal before migration 20261010130000 ran may have
-    # seen a bill with both.
+    # page that read the meal before a one-time data fix of October 2026
+    # turned No cost off on such bills may have seen a bill with both.
     it 'refuses a to with No cost and an amount, and takes a from with both' do
       no_cost_amount_error = "A bill marked No cost can't have an amount. Clear the amount, or turn No cost off."
 

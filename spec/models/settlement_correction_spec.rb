@@ -27,8 +27,8 @@ require 'rails_helper'
 # replaced. It is evidence of what a settlement said before and after, so
 # nothing changes or deletes it: the model refuses in words, and the
 # database refuses writes that skip the model. Only Settlement#correct!
-# adds to it, while it works that settlement out again (migration
-# 20261010125800).
+# adds to it, while it works that settlement out again
+# (comeals_settlement_correction_insert_by_settlement in db/structure.sql).
 RSpec.describe SettlementCorrection do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }

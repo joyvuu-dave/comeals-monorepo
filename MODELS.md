@@ -96,8 +96,8 @@ Community
 - `singleton_guard` — always 0 (a CHECK), unique. This is what keeps the
   table at one row, even for a write that skips the model.
 
-There is no `slug` column and no friendly_id gem. Migration 20260811130000
-removed the slug.
+There is no `slug` column and no friendly_id gem. The slug was removed
+in August 2026.
 
 **Behavior:**
 
@@ -397,23 +397,23 @@ Bill ----> Community
   marked No cost, and `MealLedger` left that cost out, so the cook was
   credited $0 for what they spent. The owner decided on 2026-10-10 to fix
   every such bill during the deploy, with no person doing anything, in
-  three migrations:
-  1. `20261010125900` adds the CHECK `NOT VALID`, so every bill added or
-     changed from then on is checked. It comes first so that the old
-     release, which keeps serving while the migrations run, cannot write a
-     bill with both after step 2 has looked.
-  2. `20261010130000` turns No cost off, and keeps the amount, on every
-     bill that has both. Some of those bills are on meals not settled yet,
-     whose amounts now count at the next settlement, and some are on
-     settled meals. It writes one audit row
+  three migrations (run, and since deleted):
+  1. The first added the CHECK `NOT VALID`, so every bill added or
+     changed from then on was checked. It came first so that the old
+     release, which kept serving while the migrations ran, could not write
+     a bill with both after step 2 had looked.
+  2. The second turned No cost off, and kept the amount, on every
+     bill that had both. Some of those bills were on meals not settled yet,
+     whose amounts counted at the next settlement, and some were on
+     settled meals. It wrote one audit row
      for each, so the meal history says "Bill for (the cook) no longer
      marked as no cost, so the (amount) now counts in the meal's cost".
-     On a settled meal it uses the repair bypass for that one write. Then,
-     in the same transaction, it works out again
+     On a settled meal it used the repair bypass for that one write. Then,
+     in the same transaction, it worked out again
      each settlement that claimed one of the fixed bills
      (`Settlement#correct!`, under Reconciliation below), so those
      settlements count the amounts too.
-  3. `20261010130200` validates the CHECK.
+  3. The third validated the CHECK.
 - **The settlements of those settled meals were worked out again.**
   The owner decided on 2026-10-10 that every settled number must be
   right; nobody recorded what was paid or collected for them. Each keeps
@@ -828,8 +828,8 @@ SettlementCorrection ----< SettlementCorrectionCharge ----> Meal, Resident
 
 A record of what a settlement said before and after, so it never changes:
 `AppendOnly` on the three models, and a trigger on the three tables
-refuses UPDATE and DELETE unless the repair bypass is on (migration
-`20261010125800`). Another trigger refuses an INSERT unless
+refuses UPDATE and DELETE unless the repair bypass is on
+(`comeals_protect_settlement_correction`). Another trigger refuses an INSERT unless
 `comeals.settling` names the correction's reconciliation, which
 `Settlement#correct!` sets while it writes the record, or the bypass is
 on. CHECKs: the reason is not blank; a line's two amounts differ (the model
@@ -895,8 +895,9 @@ refusal comes from the nightly check's own checks of the whole
 settlement instead (`LedgerVerification#findings_for`: the recompute
 check, at the cent). Such a dinner can be corrected like any other.
 
-The database keeps the rules for psql too (migrations `20261010125951`
-and `20261010125952`): a correction is inserted only for a settled meal
+The database keeps the rules for psql too (`comeals_meal_correction_guard`,
+`comeals_meal_correction_line_guard`, and the `comeals.correcting` check in
+`comeals_reject_settled_child_write`): a correction is inserted only for a settled meal
 that `comeals.correcting` names, with no settlement yet; its lines only
 while the same holds; the lines sum to zero
 (`meal_correction_lines_sum_zero`) and are never zero (CHECK). Nothing
@@ -992,8 +993,8 @@ ReconciliationBalance ----> Unit
   their own, "Moved out", so the totals never change later. A rework
   (`Settlement#correct!`) keeps them (`Reconciliation#saved_units`).
   `reconciliations.units_recorded_on` is the day they were saved; for the
-  settlements made before migration 20261010125950 it is the day that
-  migration filled them in. Such a settlement's `lived_here` is about that
+  settlements made before 2026-10-10 it is the day a migration filled
+  them in. Such a settlement's `lived_here` is about that
   later day, so its page counts everyone in their unit, with no "Moved
   out" line, and says so (`Reconciliation#records_who_moved_out?`).
 - `(reconciliation_id, resident_id)` is unique
@@ -1033,7 +1034,7 @@ SettlementLineMark ----> AdminUser
 Any admin may mark a line Paid. Setting or changing a Let go mark needs a
 superuser (`SuperuserAdapter`, the `:let_go` action). Append-only:
 `AppendOnly` in the model and the trigger `settlement_line_marks_protect`
-(migration 20261010125953), with the repair bypass. The foreign key keeps a
+(`comeals_protect_settlement_line_mark`), with the repair bypass. The foreign key keeps a
 marked line from being deleted, and `Settlement#correct!` refuses a
 settlement with a mark.
 
@@ -1497,7 +1498,7 @@ books at commit: `reconciliation_balances_sum_zero`, that every settlement's
 balances sum to zero, and `meal_charges_sum_zero`, that every meal's lines
 do.
 
-Only a settlement adds rows to the settled ledger. Since 20261009120000,
+Only a settlement adds rows to the settled ledger. Since October 2026,
 `meal_charges_insert_by_settlement` and
 `reconciliation_balances_insert_by_settlement` refuse an INSERT unless the
 setting `comeals.settling` names the reconciliation the row belongs to (for
@@ -1506,7 +1507,7 @@ with `set_config(..., true)`, so it lasts at most until the end of its
 transaction, and turns it off when it is done. Without this, two rows that
 add up to zero could be added to a settled meal from a console, and the
 sum-zero triggers would accept them. The three correction tables have the
-same rule (`*_insert_by_settlement`, migration 20261010125800):
+same rule (`*_insert_by_settlement`, `comeals_settlement_correction_insert_by_settlement`):
 `Settlement#correct!` sets the setting while it writes the record. A spec
 that writes these rows by hand uses `SettledWrites`
 (`spec/support/settled_writes.rb`).
@@ -1516,7 +1517,7 @@ update, and destroy on Bill, MealResident, and Guest once their meal (or the
 meal they are being moved from) is reconciled. The
 `*_reject_settled_write` triggers on those three tables do the same in the
 database. Both of their meal lookups run unconditionally, and each one
-updates the meal row (`updated_at = updated_at`, migration 20261016120000)
+updates the meal row (`updated_at = updated_at`, in `comeals_reject_settled_child_write`)
 rather than only reading it. So an unlocked write that comes after a running
 settlement waits for it and is then refused, and a settlement or a cancel
 that waited for a write that came first finds the meal row changed: at

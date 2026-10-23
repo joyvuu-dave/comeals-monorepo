@@ -31,8 +31,13 @@
 # Written only by MealCorrecting, in the same transaction that changed the
 # dinner's rows. The old settlement keeps what it settled; the next
 # settlement carries this correction (reconciliation, empty until then)
-# and adds its lines to the balances it rounds to cents. The table
-# comment is in migration 20261010125951.
+# and adds its lines to the balances it rounds to cents. The database
+# keeps the rules for writes that skip the model, in
+# comeals_meal_correction_guard, comeals_meal_correction_line_guard and
+# comeals_meal_correction_lines_sum_zero: a correction and its lines are
+# added only to a settled dinner while it is being corrected
+# (comeals.correcting names it), the lines add up to zero, and nothing
+# changes afterwards except the claim by a later settlement.
 class MealCorrection < ApplicationRecord
   extend T::Sig
 
@@ -64,7 +69,7 @@ class MealCorrection < ApplicationRecord
   validates :reason, presence: true
 
   # Append-only. A settlement claims a correction with update_all, which
-  # skips this; the database trigger in 20261010125951 allows that one
+  # skips this; the database trigger comeals_meal_correction_guard allows that one
   # change and refuses every other.
   include AppendOnly
 

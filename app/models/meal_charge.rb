@@ -30,7 +30,11 @@
 #
 # One line of a settlement: what one resident was charged or credited for one
 # meal, and why. Written once inside the settlement transaction, from
-# MealLedger. See the migration (20260802120000) for the reasoning.
+# MealLedger. It is a ledger, not a cache (money rule 8): written once and
+# refused by a trigger afterwards, it records what was decided and cannot
+# drift. It has no reconciliation_id: the meal already says which
+# settlement settled it, and a copy here would be a second answer that
+# could disagree.
 #
 # `amount` is signed the way MealLedger signs everything (see its "Signs"
 # section): a credit is positive (the community owes the cook), a debit is
@@ -65,11 +69,11 @@ class MealCharge < ApplicationRecord
   validates :amount, :unit_cost, presence: true, numericality: true
 
   # Immutable once written, the same as the balances these add up to. The
-  # database trigger in 20260802120000 is the backstop; this is the
-  # readable half.
+  # database trigger comeals_protect_meal_charge refuses the writes that
+  # skip callbacks; this is the readable half.
   #
-  # Adding a line has no guard here, only in the database: the trigger in
-  # 20261009120000 refuses an INSERT unless the settlement that settles the
+  # Adding a line has no guard here, only in the database: the trigger
+  # comeals_meal_charge_insert_by_settlement refuses an INSERT unless the settlement that settles the
   # line's meal is writing it, or the repair bypass is on. That refusal
   # also holds for writes that skip the model, like insert_all and psql.
   include AppendOnly

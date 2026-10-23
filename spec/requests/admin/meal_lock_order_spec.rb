@@ -20,7 +20,7 @@ require 'rails_helper'
 # wrote: the API's write changed the meal row, and the admin request's
 # SERIALIZABLE snapshot is older than that change. A write through the
 # models changes the meal row with `touch: true`, and since
-# 20261016120000 the child-write trigger changes it too, so the API side
+# 2026-10-16 the child-write trigger changes it too, so the API side
 # below, which writes raw SQL, changes it the same way the real API does.
 # What one lock order buys is that this is a wait and one conflict,
 # never a deadlock: no example may ever see ActiveRecord::Deadlocked.
@@ -125,7 +125,7 @@ RSpec.describe 'the lock order of an admin write against an API write on the sam
 
   # The common case: two people editing one meal's different rows. The
   # admin edit waits for the API, then is told to try again, because the
-  # API's write changed the meal row. Before 20261016120000 a raw write
+  # API's write changed the meal row. Before 2026-10-16 a raw write
   # here left the meal row as it was, and this example said the admin edit
   # then applied; the real API's write, which touches the meal, never
   # allowed that.

@@ -11,7 +11,7 @@ require 'rails_helper'
 #
 # Neither the controller nor the model guard can see the race. Each
 # checks "is another superuser left?" before the other side has
-# committed, and each sees yes. The trigger from 20260728120000 is what
+# committed, and each sees yes. The trigger comeals_refuse_last_superuser_removal is what
 # refuses it: it takes FOR UPDATE on the other superusers' rows, so the
 # later write waits for the earlier one, and at SERIALIZABLE it is then
 # refused as a conflict (ADR 0004).

@@ -76,9 +76,8 @@ class Meal < ApplicationRecord
   # production no meal nobody signed up for has ever settled with a cost
   # on it; the last settlement is dated 2024-01-01. Two such dinners wait:
   # a potluck with placeholder costs that were not real money (marked No
-  # cost by migration 20261016130000), and an empty meal with a receipt
-  # typed on the wrong day (moved to the dinner it was for by migration
-  # 20261012120000).
+  # cost by a one-time data fix), and an empty meal with a receipt typed
+  # on the wrong day (moved to the dinner it was for by another).
   #
   # A meal where someone is charged and a cook's cost is blank waits
   # (waiting_for_a_cost, ADR 0011 rule 3): the cook has not said what they
@@ -493,7 +492,7 @@ class Meal < ApplicationRecord
 
   # Read from the bills table, not the loaded bills: a cook may have
   # entered a cost since this meal was loaded. Every bill write changes
-  # the meal row (the child-write trigger, 20261016120000, and `touch:
+  # the meal row (the child-write trigger, comeals_reject_settled_child_write, and `touch:
   # true`). So when this cancel locks the meal first, as every cancel in
   # the app does (FOR UPDATE), a cost saved at the same moment either
   # commits while this cancel waits for the lock, and the cancel then

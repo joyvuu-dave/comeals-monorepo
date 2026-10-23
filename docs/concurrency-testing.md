@@ -325,7 +325,7 @@ PostgreSQL's conflict check does not see a READ COMMITTED writer, so
 after the wait it decided from the rows as they were: a settlement
 without a sign-up added at that moment, and a dinner cancelled with a
 cost of $12 on it. Now the trigger updates the meal row
-(`updated_at = updated_at`, migration `20261016120000`), so the waiting
+(`updated_at = updated_at`, in `comeals_reject_settled_child_write`), so the waiting
 transaction fails as a conflict and is tried again with a fresh
 snapshot (`settlement_after_a_raw_write_race_spec.rb`,
 `cancel_against_a_cost_race_spec.rb`; ADR 0003, "The other order").

@@ -81,7 +81,8 @@ class Settlement
   # write_ledger! sets it to the reconciliation's id while it writes the
   # line items and balances, and the database refuses an insert into
   # either table unless this setting names the reconciliation the row
-  # belongs to, or the repair bypass is on (migration 20261009120000).
+  # belongs to, or the repair bypass is on (comeals_meal_charge_insert_by_settlement,
+  # comeals_balance_insert_by_settlement).
   SETTLING_SETTING = 'comeals.settling'
 
   # The repair bypass (docs/runbooks/settled-data-repair.md). correct!
@@ -481,8 +482,8 @@ class Settlement
   # delete never waits at all, because a DELETE takes no foreign-key lock on
   # the parent. Each piece alone was tested and does not close the hole.
   #
-  # Each lookup updates the meal row (updated_at = updated_at, migration
-  # 20261016120000), not only reads it (20260727120000). That covers the
+  # Each lookup updates the meal row (updated_at = updated_at, since
+  # 2026-10-16), not only reads it (as it did from 2026-07-27). That covers the
   # other order: a raw write, from psql at READ COMMITTED, that started
   # before this settlement. This settlement waits for it at FOR UPDATE, but
   # its SERIALIZABLE snapshot was taken before the wait. A lock changes no
@@ -518,7 +519,7 @@ class Settlement
   # saved while this settlement runs is carried by exactly one
   # settlement: this one if it committed before the locking read, the
   # next one otherwise. The database lets the claim through only while
-  # SETTLING_SETTING names this settlement (20261010125951), so the
+  # SETTLING_SETTING names this settlement (comeals_meal_correction_guard), so the
   # setting is on for the UPDATE only, in its own savepoint, as in
   # write_ledger!.
   sig { void }
@@ -574,13 +575,15 @@ class Settlement
   # This is not idempotent, and should not be. A settled balance is what a
   # resident has already been billed, so re-running it would rewrite the
   # ledger rather than correct it. Re-running is refused twice over: the
-  # deletes by the triggers in 20260731120000 and 20260802120000, and the
+  # deletes by the triggers comeals_protect_settled_balance and
+  # comeals_protect_meal_charge, and the
   # re-inserts by the unique indexes on both tables. To rebuild a
   # reconciliation on purpose, see docs/runbooks/settled-data-repair.md.
   #
   # The database refuses an insert into either table unless
   # SETTLING_SETTING names the reconciliation the row belongs to
-  # (20261009120000). So the setting is on for exactly these writes: set
+  # (comeals_meal_charge_insert_by_settlement, comeals_balance_insert_by_settlement).
+  # So the setting is on for exactly these writes: set
   # first, and turned off once both tables are written. The writes run in their own savepoint
   # (requires_new) so that an error rolls the setting back with the rows.
   # Without the savepoint, a caller that caught the error and kept its

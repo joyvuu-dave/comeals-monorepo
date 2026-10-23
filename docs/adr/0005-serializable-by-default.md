@@ -573,7 +573,7 @@ steps that open a savepoint), and `spec/services/settle_and_notify_spec.rb`
   conflict check. So a settlement that waited for a psql write that
   started first settled without it, and a cancel that waited for a psql
   cost with money went through. The trigger now updates the meal row
-  (`updated_at = updated_at`, migration `20261016120000`), so the
+  (`updated_at = updated_at`, in `comeals_reject_settled_child_write`), so the
   waiting transaction fails as a conflict and is tried again with a
   fresh snapshot (`spec/db/settlement_after_a_raw_write_race_spec.rb`,
   `spec/db/cancel_against_a_cost_race_spec.rb`; ADR 0003, "The other

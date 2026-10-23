@@ -67,8 +67,8 @@ class MealCorrecting
   # was made.
   class Changed < StandardError; end
 
-  # The database setting the trigger and ReconciledMealImmutability read
-  # (20261010125952).
+  # The database setting the trigger comeals_reject_settled_child_write and
+  # ReconciledMealImmutability read.
   CORRECTING_SETTING = 'comeals.correcting'
 
   # What a correction changes: the edits, in the words of the record

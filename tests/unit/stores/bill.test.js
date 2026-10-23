@@ -530,7 +530,7 @@ describe("Bill model", () => {
     });
 
     it("does not clear amount when no_cost is toggled off", () => {
-      // No bill has both since migration 20261010130000, but a page that
+      // No bill has both since a one-time data fix, but a page that
       // loaded the meal before it ran can still hold a row with No cost
       // ticked and an amount.
       const store = createStore({

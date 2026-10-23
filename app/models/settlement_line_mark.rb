@@ -10,8 +10,10 @@
 #
 # Written only by SettlementLineMarking. Any admin may mark a line Paid;
 # setting or changing a Let go mark is a decision about money, so it needs
-# a superuser (SuperuserAdapter, the :let_go action). The table, its
-# checks and its trigger are in migration 20261010125953.
+# a superuser (SuperuserAdapter, the :let_go action). Its CHECKs
+# (settlement_line_marks_status_known, settlement_line_marks_note_not_blank)
+# and its trigger (comeals_protect_settlement_line_mark) are in
+# db/structure.sql.
 # == Schema Information
 #
 # Table name: settlement_line_marks
@@ -51,7 +53,7 @@ class SettlementLineMark < ApplicationRecord
   # A blank note is no note: the database refuses one made of spaces.
   normalizes :note, with: ->(note) { note.strip.presence }
 
-  # Append-only. The trigger in 20261010125953 refuses an update or a
+  # Append-only. The trigger comeals_protect_settlement_line_mark refuses an update or a
   # delete that skips this.
   include AppendOnly
 

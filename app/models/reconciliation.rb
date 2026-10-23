@@ -303,9 +303,9 @@ class Reconciliation < ApplicationRecord
   end
 
   # The units of this settlement's lines were saved after the day it was
-  # made: it was made before settlements saved them, and migration
-  # 20261010125950 filled in each person's unit as it was on the day that
-  # migration ran. Its page says so.
+  # made: it was made before settlements saved them, and a migration
+  # filled in each person's unit as it was on the day it ran (2026-10-10
+  # or later). Its page says so.
   sig { returns(T::Boolean) }
   def units_recorded_later?
     T.must(units_recorded_on) > T.must(date)
@@ -313,8 +313,8 @@ class Reconciliation < ApplicationRecord
 
   # Whether this settlement's lines say who had moved out on its own day.
   # A line's lived_here is the person's active flag on the day the units
-  # were saved. For a settlement made before migration 20261010125950 that
-  # is the day the migration ran, years later, and the app did not record
+  # were saved. For a settlement made before 2026-10-10 that is the day a
+  # migration filled them in, years later, and the app did not record
   # who lived here before then: someone who moved out after the settlement
   # would read as moved out at the time. So such a settlement counts
   # everyone in the unit they live in, or last lived in, with no Moved out

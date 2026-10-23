@@ -393,7 +393,7 @@ MUTANT_SPEC_ROWS = {
   # Proves a database trigger, which mutant does not change.
   'spec/requests/admin/superuser_demotion_race_spec.rb' => [],
   # Each proves the child-write trigger's update of the meal row
-  # (20261016120000) against a write from psql, on real sessions.
+  # (comeals_reject_settled_child_write) against a write from psql, on real sessions.
   'spec/db/cancel_against_a_cost_race_spec.rb' => [],
   'spec/db/settlement_after_a_raw_write_race_spec.rb' => []
 }.freeze

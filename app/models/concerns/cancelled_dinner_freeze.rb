@@ -15,7 +15,7 @@
 # ReconciledMealImmutability, so a settled dinner says it is settled, and
 # before ClosedMealAttendanceFreeze, so a cancelled dinner that is also
 # closed says it is cancelled. The trigger comeals_reject_settled_child_write
-# holds the same rule for a write that skips the model (20261010125954).
+# holds the same rule for a write that skips the model.
 module CancelledDinnerFreeze
   extend ActiveSupport::Concern
   extend T::Helpers

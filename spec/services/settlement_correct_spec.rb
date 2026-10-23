@@ -5,7 +5,7 @@ require 'rails_helper'
 # Settlement#correct! works a settled period out again from its meals'
 # rows as they are now, and records what changed. It is for a settlement
 # whose rows were wrong, when the owner decides the settlement must show
-# the right numbers (migration 20261010130000 is the first). The caller
+# the right numbers (a one-time data fix of October 2026 was the first). The caller
 # fixes the rows in its block; before the block runs, correct! refuses a
 # settlement that already disagrees with its rows.
 #

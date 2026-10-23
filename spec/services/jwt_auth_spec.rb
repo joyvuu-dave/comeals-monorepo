@@ -204,8 +204,8 @@ RSpec.describe JwtAuth do
         expect(described_class.authenticate(after)).to eq(resident)
       end
 
-      # Simulates the state after 20260423160000_add_keys_valid_since_to_residents.rb
-      # runs against prod: every existing resident has keys_valid_since = created_at,
+      # Simulates the state after the migration that added keys_valid_since
+      # (April 2026) ran against prod: every existing resident has keys_valid_since = created_at,
       # often months in the past. Post-deploy JWTs (iat = now) must pass.
       it 'accepts fresh JWTs for residents whose keys_valid_since was backfilled from created_at' do
         pre_deploy_resident = create(:resident, community: community, unit: unit,

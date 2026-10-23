@@ -117,7 +117,7 @@ RSpec.describe 'Admin Reconciliation Show' do
       expect(response.body).not_to include('did not record who had moved out')
     end
 
-    # A settlement made before migration 20261010125950 had its units
+    # A settlement made before 2026-10-10 had its units
     # filled in by the migration, from each person's unit and active flag
     # that day, years later. Dana's line says she had moved out, but the
     # app does not know whether she had by the settlement. So the page

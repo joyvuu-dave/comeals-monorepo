@@ -12,7 +12,7 @@
 #
 # Read docs/adr/0003-concurrency-on-the-money-path.md before changing this.
 # ActiveAdmin still writes bills without the meal lock, but that path is
-# safe now: the child-write trigger (migration 20260727120000) makes an
+# safe now: the child-write trigger (comeals_reject_settled_child_write) makes an
 # unlocked write wait for a running settlement and then refuses it. None
 # of that depends on the thread count.
 #

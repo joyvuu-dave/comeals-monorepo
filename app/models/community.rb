@@ -143,8 +143,9 @@ class Community < ApplicationRecord
   # An empty week means "no meals that week"; the cycle as a whole must have
   # at least one day or the generator would never find a meal date. Which
   # calendar week is week 1 is fixed by MealSchedule::EPOCH, not stored per
-  # community. Both rules mirror database CHECK constraints (migration
-  # 20260807140000) so raw writes are caught too. See MealSchedule.
+  # community. Both rules mirror database CHECK constraints
+  # (communities_meals_per_rotation_range, communities_schedule_shape) so
+  # raw writes are caught too. See MealSchedule.
   validates :meals_per_rotation,
             numericality: {
               only_integer: true,
@@ -174,7 +175,8 @@ class Community < ApplicationRecord
   # One "HH:MM" per weekday, Sunday first (index = Date#wday), 24-hour
   # clock, in this community's time zone. The default is 19:00 every day;
   # the admin form overrides single days (this community eats at 18:00 on
-  # Sundays). The rule mirrors the database CHECK (migration 20260825120000).
+  # Sundays). The rule mirrors the database CHECK
+  # communities_dinner_start_times_shape.
   #
   # A time here is a wall-clock time, not a moment. It becomes a moment
   # only for one date, in this community's zone — see dinner_start_at —

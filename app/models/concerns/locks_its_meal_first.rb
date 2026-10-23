@@ -6,8 +6,8 @@
 #
 # The settled-meal trigger already locks the meal from inside every write
 # to these tables (comeals_reject_settled_child_write): it updates the
-# meal row (updated_at = updated_at, migration 20261016120000; until then
-# it read the row FOR KEY SHARE, 20260727120000), so an unlocked write
+# meal row (updated_at = updated_at, since 2026-10-16; from 2026-07-27
+# until then it read the row FOR KEY SHARE), so an unlocked write
 # waits for a running settlement and is then refused. But a trigger fires
 # on the row write, which means the row lock is taken first and the meal
 # lock second. The API locks them the other way round — the meal row with
@@ -28,7 +28,7 @@
 # Two writes to different rows of one meal therefore still meet on the
 # meal row: the second waits for the first's update and, at SERIALIZABLE,
 # fails as a conflict once the first commits. That is the same wait and
-# conflict `touch: true` caused before 20261016120000. What this lock
+# conflict `touch: true` caused before 2026-10-16. What this lock
 # adds is the order, meal before row, so the wait is never a deadlock.
 #
 # Both meals when meal_id is changing, in id order, so two writers moving

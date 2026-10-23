@@ -205,7 +205,8 @@ Both together do close it, and this combination was verified end to end:
    meal is still unreconciled, so it takes no lock and never waits.
 
    _Amended 2026-10-16: each lookup now updates the meal row instead of
-   reading it, still unconditionally (migration `20261016120000`):_
+   reading it, still unconditionally (`comeals_reject_settled_child_write`
+   in `db/structure.sql`):_
 
    ```sql
    UPDATE meals SET updated_at = updated_at WHERE id = NEW.meal_id
@@ -257,10 +258,10 @@ meal row in the same transaction. Pinned by
 `Settlement#assign_meals` (it was `Reconciliation#assign_meals` until
 2026-08-23, when the settlement pipeline moved out of the model's
 `after_create` callback into `app/services/settlement.rb`, unchanged); part 2
-is migration `20260727120000`, which
-locks **both** lookups, replaces the function body with
-`CREATE OR REPLACE FUNCTION`, and leaves the already-applied `20260707100000`
-untouched. `spec/db/settlement_race_spec.rb` pins it for inserts, deletes, and
+is a migration of the same day, which
+locks **both** lookups, replaces the body of `comeals_reject_settled_child_write`
+with `CREATE OR REPLACE FUNCTION`, and leaves the already-applied migration
+of 2026-07-07 that first made it untouched. `spec/db/settlement_race_spec.rb` pins it for inserts, deletes, and
 re-parenting across all three child tables, and the money-level assertion in
 that spec is what fails first without the fix: the reconciliation's stored
 balances stop matching its own source data. That was confirmed by reverting
@@ -271,7 +272,7 @@ fail on that assertion.
 The two lookups were written as two migrations while the second hole was being
 found, then merged into one before anything was committed. Nothing shipped in
 between, so there is no half-fixed state to migrate through — a database is
-either on `20260707100000`'s non-locking function or on this one.
+either on the non-locking function of 2026-07-07 or on this one.
 
 One detail the spec had to get right, because it is easy to write a test that
 passes for the wrong reason. The dangerous instant is not when `assign_meals`
@@ -288,7 +289,7 @@ transaction, so no racing write commits anywhere between the claim and the
 reads. They all block, and are all refused. _Amended 2026-10-16: that holds
 for a write that starts after the claim. Since ADR 0005 the settlement does
 not take a fresh snapshot per statement, so a write that started before it
-was missed until migration `20261016120000`; see "The other order" above._)
+was missed until 2026-10-16; see "The other order" above._)
 
 ## Decision
 

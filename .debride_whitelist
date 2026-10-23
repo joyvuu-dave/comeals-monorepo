@@ -98,8 +98,9 @@ settlement_correction
 settlement_correction_lines
 settlement_correction_charges
 charges
-# Called from a migration, which debride does not read: migration
-# 20261010130000 works out again the settlements it fixed a bill of.
+# Called from a one-time data-fix migration, which debride does not read,
+# when the owner decides a settlement must show the right numbers. The
+# first such migration ran in October 2026 and was deleted after it ran.
 correct!
 # Read by specs only, on purpose: Settlement#rewrite! is a repair step,
 # Resident#password is the plain-text password just assigned.

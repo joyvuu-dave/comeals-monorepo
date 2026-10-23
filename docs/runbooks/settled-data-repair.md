@@ -4,10 +4,10 @@ Database triggers refuse every write to a reconciled meal's data: its bills,
 attendance, guests, and the meal's own settlement inputs (`cancelled_at`,
 `cap`, `date`, `reconciliation_id`). This applies even to writes that skip
 Rails callbacks — `update_all`, raw SQL, a psql session. The triggers were
-added in `db/migrate/20260707100000_add_settled_meal_immutability_triggers.rb`.
-`20260727120000_lock_meal_in_settled_child_write_trigger.rb` and then
-`20261016120000_update_the_meal_row_on_every_child_write.rb` replaced the
-child-write function body. Read the last one for what runs today.
+added on 2026-07-07; the child-write function body was replaced on
+2026-07-27 and again on 2026-10-16. What runs today is
+`comeals_reject_settled_child_write` and `comeals_protect_settled_meal` in
+`db/structure.sql`.
 
 > **A gap that was open until 2026-07-27, and how to find what it left
 > behind.** The triggers used to decide by reading the meal without taking a
@@ -20,8 +20,8 @@ child-write function body. Read the last one for what runs today.
 > credited with no source row behind it).
 >
 > Both are closed now — the settlement holds `FOR UPDATE` on every meal it
-> claims, and both of the trigger's lookups update the meal row (migration
-> `20261016120000`; locking reads from `20260727120000`). A racing write
+> claims, and both of the trigger's lookups update the meal row (since
+> 2026-10-16; locking reads from 2026-07-27). A racing write
 > waits and is then refused, and a raw write that started before the
 > settlement makes the settlement fail as a conflict and try again. See
 > `docs/adr/0003-concurrency-on-the-money-path.md` (issue #43).
@@ -150,12 +150,15 @@ the guard for every session, not just yours.
 
 ### A repair that worked the settlements out again (2026-10-10)
 
-Migration `20261010130000` used the bypass on 11 bills of 9 settled
-meals. Each was marked No cost and also had an amount, which the meal
+A data-fix migration used the bypass on 11 bills of 9 settled
+meals. It ran in the deploy of October 2026 and was deleted afterwards,
+like every migration production has run; `git log --diff-filter=D
+--name-only -- db/migrate/` lists the deleted files, and its spec was
+deleted with it. Each was marked No cost and also had an amount, which the meal
 page allowed before April 2026, so the cook was credited $0 for what they
 spent. Nobody recorded what was paid or collected for those settlements,
 and the owner decided that the app must show the right numbers. So, in
-the same transaction as the bill fix, the migration works out again each
+the same transaction as the bill fix, the migration worked out again each
 settlement that claimed one of the bills:
 
 ```ruby
@@ -224,12 +227,13 @@ replaced, column for column.
 ## The settled amounts themselves
 
 `reconciliation_balances` holds what each resident was actually billed. Since
-`20260731120000` it has two guards of its own.
+2026-07-31 it has two guards of its own (`comeals_protect_settled_balance`,
+`comeals_reconciliation_balances_sum_zero`).
 
 **Rewriting is refused.** No `UPDATE`, no `DELETE`, from any path — the same
 bypass above is the only way through, for the same narrow reason.
 
-**Adding is refused too, since `20261009120000`.** An `INSERT` into
+**Adding is refused too, since 2026-10-09.** An `INSERT` into
 `reconciliation_balances` or `meal_charges` is refused unless the settlement
 of that row's reconciliation is writing it, or the bypass above is on. The
 settlement says so with a setting that lasts only for its own transaction,

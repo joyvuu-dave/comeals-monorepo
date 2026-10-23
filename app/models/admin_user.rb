@@ -84,8 +84,8 @@ class AdminUser < ApplicationRecord
   # Both guards are prepended for the same reason Meal and Reconciliation
   # prepend theirs (issue #26): dependent callbacks registered by associations
   # run first otherwise, so a swallowed inner rollback can leave partial
-  # writes behind. A database trigger backstops both paths — see
-  # 20260728120000_refuse_removing_the_last_superuser.rb.
+  # writes behind. A database trigger refuses both for a write that skips
+  # the model: comeals_refuse_last_superuser_removal in db/structure.sql.
   #
   # superuser? and superuser_changed?(to:) are the methods Rails makes
   # for the superuser column. The column is NOT NULL, so a change to false

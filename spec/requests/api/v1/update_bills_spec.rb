@@ -236,7 +236,7 @@ RSpec.describe 'PATCH /api/v1/meals/:meal_id/bills' do
       expect(bill_audits.where(action: 'update')).to be_empty
     end
 
-    # A page that read the meal before migration 20261010130000 turned No
+    # A page that read the meal before a one-time data fix turned No
     # cost off on this bill still shows it with both. A change built on
     # what that page saw is stale, so nothing is written and the page reads
     # the meal again.

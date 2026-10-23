@@ -13,8 +13,8 @@
 # EPOCH is arbitrary (any fixed Sunday gives some assignment of rows to
 # calendar weeks), but it must never change: existing schedules were arranged
 # against this value, and changing it would move the days of every multi-week
-# schedule to different weeks, with no error. Migration 20260808120000 rotated
-# stored rows against this exact date.
+# schedule to different weeks, with no error. A migration of 2026-08-08
+# rotated stored rows against this exact date.
 #
 # This is the one home for "is this date a meal day". Community's rotation
 # generator, the admin preview, and db/seeds.rb all go through it, so the
