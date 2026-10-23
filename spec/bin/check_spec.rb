@@ -208,6 +208,19 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       expect(result.output).to include('All checks passed with 2 warning(s).')
     end
 
+    # endoflife.date can take a day or more to list a new release, so the
+    # running version can be newer than its "latest".
+    it 'passes, and does not offer an older release, when the running version is newer than the list' do
+      result = run_check(curl: { '*/ruby/4.0.json' => reply('{"latest":"4.0.6"}'),
+                                 '*/nodejs/24.json' => reply('{"latest":"24.9.0"}') })
+
+      expect(result).to be_success, result.output
+      expect(summary_line(result.output, 'Ruby version')).to eq('✓  Ruby version         4.0.7 (newer than 4.0.6)')
+      expect(summary_line(result.output, 'Node version')).to eq('✓  Node version         24.21.0 (newer than 24.9.0)')
+      expect(result.output).not_to include('available')
+      expect(result.output).to include('All checks passed.')
+    end
+
     it 'passes without the latest release when the network is down' do
       result = run_check(curl: { '*' => 'exit 6' })
 
