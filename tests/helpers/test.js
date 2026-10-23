@@ -20,10 +20,12 @@
  * array value as a [value, options] tuple, so only the first pattern
  * is used and nothing reports an error. Combine patterns with
  * alternation (see combinePatterns below). Anything not matching still
- * fails the test.
+ * fails the test. A failed preconnect is ignored in every test
+ * (tests/helpers/console_errors.js).
  */
 const base = require("@playwright/test");
 const { saveCoverage } = require("./visual_coverage");
+const { failsTheTest } = require("./console_errors");
 
 const test = base.test.extend({
   allowedConsoleErrors: [null, { option: true }],
@@ -50,8 +52,7 @@ const test = base.test.extend({
     page.on("console", (message) => {
       if (message.type() !== "error") return;
       const text = message.text();
-      if (allowedConsoleErrors && allowedConsoleErrors.test(text)) return;
-      consoleErrors.push(text);
+      if (failsTheTest(text, allowedConsoleErrors)) consoleErrors.push(text);
     });
     await use(page);
     if (process.env.VISUAL_COVERAGE && !page.isClosed()) {
