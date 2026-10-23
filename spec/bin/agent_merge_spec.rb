@@ -87,6 +87,25 @@ RSpec.describe 'bin/agent-merge', bash_coverage: BashCoverage.new('spec/bin/agen
     end
   end
 
+  # After a deploy the migrations production ran are deleted. The
+  # development database ran them already, so there is nothing to migrate.
+  context 'when the branch only deletes a migration' do
+    before do
+      commit({ 'db/migrate/20261019000000_add_thing.rb' => "class AddThing; end\n" })
+      git('push', '-q', 'origin', 'main')
+      git('rebase', '-q', 'main', chdir: worktree)
+      commit({ 'db/migrate/20261019000000_add_thing.rb' => nil }, chdir: worktree)
+    end
+
+    it 'does not migrate the development database' do
+      result = run('fix-it')
+
+      expect(result).to be_success, result.output
+      expect(sandbox.calls_to('bin/rails')).to be_empty
+      expect(result.output).not_to include('branch added migrations')
+    end
+  end
+
   it 'brings main up to date with origin first, when only origin moved' do
     pushed = push_from_elsewhere('other.rb' => "1\n")
     git('fetch', '-q')

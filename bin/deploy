@@ -10,10 +10,12 @@ set -euo pipefail
 #   1. Compares local HEAD vs Heroku's deployed SHA.
 #      Skips if already up to date.
 #   2. Diffs db/migrate/ between the deployed and local SHAs.
-#      - If migrations changed → maintenance deploy (scale web and the
-#        worker to 0, push, scale up, and turn maintenance off once web
-#        is up on the new release).
-#      - If no migrations    → push deploy (brief downtime during restart).
+#      - If a migration was added or changed → maintenance deploy (scale
+#        web and the worker to 0, push, scale up, and turn maintenance off
+#        once web is up on the new release).
+#      - If not → push deploy (brief downtime during restart). A deleted
+#        migration does not count: production ran it, its version stays
+#        in schema_migrations, and the release phase has nothing to run.
 #
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
 #
@@ -428,8 +430,12 @@ detect_pending_migrations() {
     fi
   fi
 
+  # Every file added or changed, never a deleted one: after a deploy the
+  # migrations production ran are deleted, and that changes nothing in
+  # the database. --no-renames, because git would call a deleted migration
+  # and a new one with nearly the same text a rename.
   local migration_diff
-  if ! migration_diff=$(git diff --name-only "$HEROKU_SHA" HEAD -- db/migrate/ 2>/dev/null); then
+  if ! migration_diff=$(git diff --name-only --no-renames --diff-filter=d "$HEROKU_SHA" HEAD -- db/migrate/ 2>/dev/null); then
     warn "git diff failed — assuming migrations needed"
     NEEDS_MAINTENANCE=true
     return
@@ -442,7 +448,7 @@ detect_pending_migrations() {
       info "  $f"
     done
   else
-    ok "No migration changes — push deploy"
+    ok "No new or changed migration — push deploy"
   fi
 }
 

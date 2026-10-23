@@ -45,7 +45,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.status).to eq(0)
-      expect(result.output).to include('No migration changes — push deploy', 'PUSH deploy (no migrations)',
+      expect(result.output).to include('No new or changed migration — push deploy', 'PUSH deploy (no migrations)',
                                        'Proceeding without a prompt (--yes)', 'Release phase succeeded',
                                        'Cache flushed', 'Billing recalculated', 'Smoke test passed',
                                        'Deploy complete!')
@@ -129,6 +129,51 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
       order = deploy.calls.map { it.split.first(2).join(' ') }
       expect(order.index('heroku pg:backups:capture')).to be < order.index('git push')
+    end
+  end
+
+  # After a deploy, the migrations production ran are deleted and
+  # db/structure.sql is the record of the schema (CLAUDE.md). A deleted
+  # migration changes nothing in the database: its version stays in
+  # schema_migrations, and the release phase's db:migrate has nothing to
+  # run for it. So deleting one alone is a push deploy, and a new
+  # migration in the same push is still found.
+  describe 'a deploy that deletes migrations production has run' do
+    # The new commit becomes HEAD and origin/main, so the deploy pushes it.
+    def make_head(files)
+      deploy.commits[:head] = deploy.commit(files, 'delete migrations')
+      deploy.git('update-ref', 'refs/remotes/origin/main', head)
+    end
+
+    it 'is a push deploy when migrations were only deleted' do
+      make_head('db/migrate/20260101000000_first.rb' => nil, 'db/migrate/20260201000000_second.rb' => nil)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('No new or changed migration — push deploy', 'PUSH deploy (no migrations)')
+      expect(result.output).not_to include('maintenance deploy required')
+      expect(deploy.calls_to('heroku').grep(/maintenance/)).to eq([])
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    # git calls a deleted file and an added one with nearly the same text
+    # a rename. The added one is a new migration all the same.
+    it 'is a maintenance deploy when the same push adds a migration with nearly the text of a deleted one' do
+      body = "class Change < ActiveRecord::Migration[8.1]\n  def change\n    add_column :meals, :a, :text\n  end\nend\n"
+      running = deploy.commit({ 'db/migrate/20260301000000_change.rb' => body }, 'production runs this')
+      deploy.production(heroku_sha: running)
+      make_head('db/migrate/20260301000000_change.rb' => nil,
+                'db/migrate/20260401000000_change.rb' => body.sub(':a', ':b'))
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Migration changes detected — maintenance deploy required:',
+                                       'db/migrate/20260401000000_change.rb', 'MAINTENANCE deploy (has migrations)')
+      expect(result.output).not_to include('db/migrate/20260301000000_change.rb')
+      expect(deploy.calls).to include('heroku maintenance:on -a comeals-monorepo')
+      expect_production(maintenance: false, web: 1, pushed: true)
     end
   end
 
@@ -298,7 +343,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.output).to include('Heroku SHA not in local history — fetching from Heroku...',
-                                       'Fetched Heroku main branch', 'No migration changes — push deploy')
+                                       'Fetched Heroku main branch', 'No new or changed migration — push deploy')
       expect(deploy.calls).to include('git fetch heroku main --quiet')
       expect(result.status).to eq(0)
     end

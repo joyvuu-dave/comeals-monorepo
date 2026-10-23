@@ -83,8 +83,12 @@ class DeployHarness
     out.strip
   end
 
+  # Writes the files and commits them, and returns the commit. A body of
+  # nil deletes the file.
   def commit(files, message = 'change')
     files.each do |path, body|
+      next File.delete(File.join(@repo, path)) if body.nil?
+
       FileUtils.mkdir_p(File.join(@repo, File.dirname(path)))
       File.write(File.join(@repo, path), body)
     end

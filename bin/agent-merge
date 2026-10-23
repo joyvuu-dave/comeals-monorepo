@@ -85,7 +85,11 @@ if [ -n "$unpushed" ]; then
   exit 1
 fi
 
-migrations=$(git diff --name-only "main..$branch" -- db/migrate/)
+# Added or changed migrations only. A deleted one is a migration that
+# production ran, deleted after a deploy; the development database ran it
+# too. --no-renames, because git would call a deleted migration and a new
+# one with nearly the same text a rename.
+migrations=$(git diff --name-only --no-renames --diff-filter=d "main..$branch" -- db/migrate/)
 
 if ! git merge --ff-only "$branch"; then
   echo "" >&2

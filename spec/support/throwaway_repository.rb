@@ -53,6 +53,8 @@ module ThrowawayRepository
   def commit(files, chdir: repo, message: 'files')
     files.each do |path, body|
       target = File.join(chdir, path)
+      next File.delete(target) if body.nil?
+
       FileUtils.mkdir_p(File.dirname(target))
       if body.is_a?(RealScript)
         File.symlink(File.join(ScriptSandbox::REPO, body.path), target)
