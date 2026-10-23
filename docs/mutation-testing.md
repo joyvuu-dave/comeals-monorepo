@@ -58,7 +58,7 @@ batch of merges the way a bug hunt runs
 counts as not killed, and the browser suites are load.
 
 Every run prints "parser/current is loading parser/ruby33 ... but you
-are running 4.0.7". The line is noise. Mutant reads Ruby through
+are running 4.0.9". The line is noise. Mutant reads Ruby through
 `unparser`, and on Ruby 3.5 and later `unparser` parses with Prism
 (`Prism::Translation::Parser40` here), the same parser Ruby itself and
 RuboCop use, so syntax newer than 3.3 is read correctly: the implicit
