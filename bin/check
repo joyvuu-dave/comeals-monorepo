@@ -3,6 +3,7 @@
 #
 # Runs every test, linter, security scanner, and freshness check.
 # Exit 0 = all checks passed. Exit 1 = at least one check failed.
+# `bin/check <step>...` runs only those steps (see run_steps).
 
 set -uo pipefail
 
@@ -869,7 +870,30 @@ summary() {
 
 # --- Main ---------------------------------------------------------------------
 
+# Runs only the named steps, in that order, then the summary. A name is
+# a check_<name> function above: `bin/check sorbet rbi_fresh`. CI uses
+# this for the steps no other CI job runs (#225), so they run there the
+# same way they run here.
+run_steps() {
+  local name
+  for name in "$@"; do
+    if ! declare -F "check_$name" > /dev/null; then
+      echo "bin/check: no step named $name. Each name is a check_<name> function in bin/check."
+      return 2
+    fi
+  done
+  for name in "$@"; do
+    "check_$name"
+  done
+  summary
+}
+
 main() {
+  if [ "$#" -gt 0 ]; then
+    run_steps "$@"
+    return
+  fi
+
   local start_time
   start_time=$(date +%s)
 

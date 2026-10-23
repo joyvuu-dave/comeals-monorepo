@@ -80,12 +80,13 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
 
   # bundle, npm, git: answers that take the place of the passing ones.
   # curl: all of curl's answers.
-  def run_check(bundle: {}, npm: {}, curl: nil, git: {})
+  # steps: the step names to run only those, as CI does.
+  def run_check(*steps, bundle: {}, npm: {}, curl: nil, git: {})
     sandbox.fake('bundle', sandbox.answers(bundle_answers.merge(bundle)), notes: %w[RAILS_ENV])
     sandbox.fake('npm', sandbox.answers(npm_answers.merge(npm)), notes: %w[E2E_SKIP_BUILD])
     sandbox.fake('curl', sandbox.answers(curl || curl_answers, otherwise: 'exit 22'))
     sandbox.fake('git', sandbox.answers(git_answers.merge(git), otherwise: 'exit 1'))
-    sandbox.run(script)
+    sandbox.run(script, *steps)
   end
 
   # The summary's line for one check, with its colored mark taken out.
@@ -736,6 +737,40 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       result = run_check
 
       expect(summary_line(result.output, 'App-zone dates')).to eq('✗  App-zone dates       grep failed (exit 2)')
+    end
+  end
+
+  # CI runs the steps that no other CI job runs this way (#225):
+  #   bin/check sorbet rbi_fresh debride ...
+  describe 'with step names' do
+    it 'runs only those steps, in the order given, and sums up only them' do
+      result = run_check('sorbet', 'todo_markers', 'debride')
+
+      expect(result).to be_success, result.output
+      plain = result.output.gsub(/\e\[[0-9;]*m/, '')
+      expect(plain.scan(/^==> (.+)$/).flatten).to eq(['Sorbet', 'TODO markers', 'Debride'])
+      summary = plain[plain.index("  Summary\n")..].lines.grep(/\A    [✓✗⚠ℹ] /).map(&:rstrip)
+      expect(summary).to eq(['    ✓  Sorbet               no type errors',
+                             '    ✓  TODO markers         none in money-path code',
+                             '    ✓  Debride              no suspects'])
+      expect(sandbox.call_lines('bundle').map { it.split[0..2].join(' ') })
+        .to eq(['bundle exec srb', 'bundle exec rails', 'bundle exec debride'])
+    end
+
+    it 'fails when one of them fails' do
+      result = run_check('sorbet', 'fasterer', bundle: { 'exec srb tc' => reply("Errors: 2\n", status: 1) })
+
+      expect(result.exitstatus).to eq(1)
+      expect(summary_line(result.output, 'Sorbet')).to eq('✗  Sorbet               2 type error(s)')
+    end
+
+    # A name that is not a step must not pass with nothing checked.
+    it 'refuses a name that is not a step, before running any' do
+      result = run_check('sorbet', 'srb')
+
+      expect(result.exitstatus).to eq(2)
+      expect(result.output).to eq("bin/check: no step named srb. Each name is a check_<name> function in bin/check.\n")
+      expect(sandbox.calls).to eq([])
     end
   end
 end

@@ -212,6 +212,51 @@ jobs:
           bundler-cache: true
       - run: bundle exec rubycritic app lib --no-browser --format console --minimum-score 80
 
+  # The bin/check steps that no other job here runs (#225). Before this
+  # job only the nightly ran them, so a pull request that broke one
+  # merged green and the nightly failed the next morning. bin/check runs
+  # them by name, the same code as on a laptop. The RBI step checks the
+  # files as committed: nothing in this job runs bin/tapioca without
+  # --verify first.
+  ruby-static:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: comeals_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
+      # `bin/tapioca dsl --verify` boots the development environment,
+      # and config/initializers/pusher.rb refuses to boot it without
+      # these. Placeholders: nothing here calls Pusher.
+      PUSHER_APP_ID: "test"
+      PUSHER_KEY: "test"
+      PUSHER_SECRET: "test"
+      PUSHER_CLUSTER: "test"
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      # database_consistency, the dsl RBI check and annotaterb read the
+      # schema from the database.
+      - run: bin/rails db:schema:load
+      - run: >-
+          bin/check sorbet rbi_fresh debride fasterer database_consistency
+          todo_markers app_zone_dates new_js_files annotations
+
   bundle-budget:
     runs-on: ubuntu-24.04
     timeout-minutes: 10
