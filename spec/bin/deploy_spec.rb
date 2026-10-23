@@ -148,14 +148,16 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                        'MAINTENANCE deploy (has migrations)', 'Deploy complete!')
       expect(result.output).not_to include(recovery_banner)
       expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
-      steps = deploy.calls_to('heroku').grep(/maintenance|ps:scale|releases|cache\.clear|billing/)
-                    .map { it.delete_suffix(' -a comeals-monorepo').delete_suffix(' --json') }
+      steps = deploy.calls_to('heroku').grep(/maintenance|ps:scale|ps -a|releases|SLUG_COMMIT|cache\.clear|billing/)
+                    .map { it.delete_suffix(' --json').delete_suffix(' -a comeals-monorepo') }
       expect(steps).to eq([
+                            'heroku config:get HEROKU_SLUG_COMMIT', 'heroku releases',
                             'heroku maintenance:on', 'heroku ps:scale', 'heroku ps:scale web=0 worker=0',
-                            'heroku releases -a comeals-monorepo', 'heroku releases:output',
+                            'heroku releases', 'heroku releases:output', 'heroku config:get HEROKU_SLUG_COMMIT',
                             'heroku run --exit-code bin/rails runner Rails.cache.clear',
                             'heroku run --exit-code bin/rake billing:recalculate',
-                            'heroku ps:scale worker=1', 'heroku ps:scale web=1', 'heroku maintenance:off'
+                            'heroku ps:scale worker=1', 'heroku ps:scale web=1', 'heroku ps',
+                            'heroku maintenance:off'
                           ])
       push = deploy.calls.index('git push heroku main --force')
       expect(push).to be > deploy.calls.index('heroku ps:scale web=0 worker=0 -a comeals-monorepo')
@@ -177,6 +179,49 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                                                  'heroku ps:scale worker=1 -a comeals-monorepo',
                                                                  'heroku ps:scale web=1 -a comeals-monorepo'
                                                                ])
+    end
+
+    # Heroku marks a web dyno "up" only once it listens on its port, and
+    # Puma listens only after it has loaded the app. Until then a request
+    # waits on a booting dyno, or fails when the boot fails. On 2026-10-23
+    # maintenance went off 13 seconds before web.1 was up.
+    it 'turns maintenance off only once web is up on the new release' do
+      deploy.rule('heroku', '^ps -a', times: 1,
+                                      stdout: '[{"type":"web","state":"starting","release":{"version":701}}]')
+      deploy.rule('heroku', '^ps -a', times: 1,
+                                      stdout: '[{"type":"web","state":"up","release":{"version":700}}]')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Waiting for web to be up on v701...',
+                                       'web on v701: starting — waiting (1/36)',
+                                       'web on v701: no dyno yet — waiting (2/36)', 'Web is up on v701')
+      expect_production(maintenance: false, web: 1, pushed: true)
+      order = deploy.calls
+      polls = order.each_index.select { order[it] == 'heroku ps -a comeals-monorepo --json' }
+      expect(polls.size).to eq(3)
+      expect(polls.first).to be > order.index('heroku ps:scale web=1 -a comeals-monorepo')
+      expect(polls.last).to be < order.index('heroku maintenance:off -a comeals-monorepo')
+    end
+
+    # State left: maintenance on, web at 1 but not up, worker at 1, new
+    # code and migrations in. Next step: what the script prints.
+    it 'leaves maintenance on and says what to do when web is not up after 3 minutes' do
+      deploy.rule('heroku', '^ps -a', stdout: '[{"type":"web","state":"crashed","release":{"version":701}}]')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        'Web is not up on v701 after 3 minutes. Maintenance stays on.',
+        'Find out why: heroku ps -a comeals-monorepo ; heroku logs -a comeals-monorepo --dyno web -n 200',
+        'When heroku ps shows web up on v701, run: heroku maintenance:off -a comeals-monorepo',
+        'Then check the site: bin/smoke https://comeals.com'
+      )
+      expect(deploy.calls_to('heroku').grep(/ps -a/).size).to eq(36)
+      expect(deploy.calls_to('heroku').grep(/maintenance:off/)).to eq([])
+      expect_production(maintenance: true, web: 1, pushed: true)
     end
 
     # After a rollback, the main branch of Heroku's git repository is the
@@ -261,6 +306,52 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
     expect(result.status).to eq(0)
     expect(result.output).to include('Already up to date', 'Already up to date — nothing to deploy.')
+    expect(deploy.calls_to('bundle')).to eq([])
+    expect_nothing_changed_in_production
+  end
+
+  # #242. A rollback changes the release that runs, not Heroku's git
+  # repository, so after one Heroku's git main can already be the commit
+  # being deployed. A push then prints "Everything up-to-date", builds
+  # nothing and makes no release.
+  describe 'Heroku git already has this commit, but an older release runs (after a rollback)' do
+    before { deploy.production(heroku_sha: deploy.commits[:second_migration], git_sha: head) }
+
+    it 'refuses before anything in production changes, and says how to deploy the commit again' do
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        "Heroku's git already has #{head[0, 7]} on main, but comeals-monorepo runs " \
+        "#{deploy.commits[:second_migration][0, 7]}. A push would build nothing.",
+        'A rollback changes the release that runs, not what Heroku\'s git holds.',
+        'To deploy this code again, see "Deploying a commit again after a rollback" in ' \
+        'docs/runbooks/undo-a-deploy.md.'
+      )
+      expect(deploy.calls).to include('git ls-remote heroku refs/heads/main')
+      expect(deploy.calls_to('bundle')).to eq([])
+      expect(deploy.calls_to('git').grep(/push/)).to eq([])
+      expect_nothing_changed_in_production
+    end
+
+    it 'asks the staging app, not the heroku remote, on staging' do
+      deploy.production(config: { 'COMEALS_STAGING' => '1' })
+
+      result = deploy.run('--yes', env: { 'DEPLOY_APP' => 'comeals-staging' })
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('A push would build nothing.')
+      expect(deploy.calls).to include('git ls-remote https://git.heroku.com/comeals-staging.git refs/heads/main')
+    end
+  end
+
+  it 'refuses when it cannot read the main branch of Heroku\'s git' do
+    deploy.rule('git', '^ls-remote', exit: 128, stderr: "fatal: unable to access heroku\n")
+
+    result = deploy.run('--yes')
+
+    expect(result.status).to eq(1)
+    expect(result.output).to include("Cannot read the main branch of Heroku's git (git ls-remote heroku)")
     expect(deploy.calls_to('bundle')).to eq([])
     expect_nothing_changed_in_production
   end
@@ -363,6 +454,38 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.output).to include('Local is 1 commit(s) behind origin/main, pulling...', 'Pulled 1 commit(s)')
       expect(deploy.calls).to include('git pull --ff-only --quiet')
       expect(result.status).to eq(0)
+    end
+
+    # #241. ESLint, Vitest and bin/smoke run with node_modules, which can
+    # be older than package-lock.json (the pull above can make it so).
+    it 'installs exactly the npm packages of package-lock.json, and the smoke browser, before the npm checks' do
+      deploy.run('--yes')
+
+      npm = deploy.calls.grep(/\Anp[mx] /)
+      expect(npm).to eq(['npm ci', 'npx playwright install chromium', 'npm run lint', 'npm test'])
+    end
+
+    it 'stops when npm ci fails' do
+      deploy.rule('npm', '^ci', exit: 1, stderr: "npm error code EUSAGE\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('npm error code EUSAGE')
+      expect(result.output).not_to include('node_modules matches package-lock.json')
+      expect(deploy.calls_to('npx')).to eq([])
+      expect_nothing_changed_in_production
+    end
+
+    it 'stops when the smoke browser cannot be installed' do
+      deploy.rule('npx', '^playwright install', exit: 1, stderr: "Download failed\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('Download failed')
+      expect(deploy.calls_to('npm').grep(/lint|test/)).to eq([])
+      expect_nothing_changed_in_production
     end
 
     it 'stops when a local check fails (RuboCop here)' do
@@ -598,7 +721,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.output).to include('Release phase succeeded', 'Deploy complete!')
-      expect(deploy.calls_to('heroku').grep(/releases -a/).size).to eq(3)
+      # One read before the push, then three after it.
+      expect(deploy.calls_to('heroku').grep(/releases -a/).size).to eq(4)
       expect(deploy.calls_to('sleep').first(2)).to eq(['sleep 5', 'sleep 5'])
     end
 
@@ -612,13 +736,14 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
       expect(result.status).to eq(1)
       expect(result.output).to include('The release phase did not succeed (status: pending). Its output:')
-      expect(deploy.calls_to('heroku').grep(/releases -a/).size).to eq(36)
+      expect(deploy.calls_to('heroku').grep(/releases -a/).size).to eq(1 + 36)
       expect(deploy.calls_to('sleep')).to eq(['sleep 5'] * 36)
     end
 
     # The script stops with Python's error and no line of its own. The code
     # is pushed; the release may have worked. Next step: heroku releases.
-    it 'stops with no message of its own when Heroku cannot list the releases' do
+    it 'stops with no message of its own when Heroku cannot list the releases after the push' do
+      deploy.rule('heroku', '^releases -a', times: 1, stdout: %([{"version":700,"status":"succeeded"}]\n))
       deploy.rule('heroku', '^releases -a', exit: 1, stderr: "releases failed\n")
 
       result = deploy.run('--yes')
@@ -627,6 +752,46 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.output).to include('releases failed', 'JSONDecodeError')
       expect(result.output).not_to include('release phase did not succeed', recovery_banner)
       expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    # Another push of the same commit got there first, or Heroku's git
+    # changed after the check before the push. State left: no
+    # maintenance, web at 1, old code. Next step: heroku releases.
+    it 'stops before the cache clear when the push made no new release' do
+      deploy.rule('git', '^push heroku', stderr: "Everything up-to-date\n", stdout: '')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('The push made no new release: the newest release of comeals-monorepo ' \
+                                       'is still v700.')
+      expect(result.output).not_to include('Release phase succeeded', 'Cache flushed', 'Maintenance stays on')
+      expect(deploy.calls_to('heroku').grep(/run |ps:scale/)).to eq([])
+      expect_production(maintenance: false, web: 1, pushed: false)
+    end
+
+    # A rollback or another deploy ran at the same moment. State left: no
+    # maintenance, web at 1, some other commit. Next step: heroku releases.
+    it 'stops when the new release succeeded but another commit runs' do
+      running = deploy.commits[:second_migration]
+      deploy.rule('heroku', '^config:get HEROKU_SLUG_COMMIT', times: 1, stdout: "#{running}\n")
+      deploy.rule('heroku', '^config:get HEROKU_SLUG_COMMIT', stdout: "#{'b' * 40}\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include("Release v701 succeeded, but comeals-monorepo runs bbbbbbb, not #{head[0, 7]}.")
+      expect(result.output).not_to include('Cache flushed')
+    end
+
+    it 'stops before the backup when Heroku cannot list the releases before the push' do
+      deploy.rule('heroku', '^releases -a', exit: 1, stderr: "releases failed\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('releases failed')
+      expect_nothing_changed_in_production
     end
 
     it 'warns and goes on when the cache clear and the recalculation fail' do
@@ -720,6 +885,21 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_recovery_banner(result)
       expect(deploy.calls_to('heroku').grep(/run --exit-code/)).to eq([])
       expect_production(maintenance: true, web: 0, pushed: true, worker: 0)
+    end
+
+    # State left: maintenance on, web and worker at 0, old code, no
+    # migration ran. Next step: the commands the banner prints.
+    it 'says the old code still runs when the push made no new release' do
+      deploy.rule('git', '^push heroku', stderr: "Everything up-to-date\n", stdout: '')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('The push made no new release',
+                                       'Nothing was deployed and no migration ran. It is safe to bring the old ' \
+                                       'code back up with the commands below.')
+      expect_recovery_banner(result)
+      expect_production(maintenance: true, web: 0, pushed: false, worker: 0)
     end
 
     # State left: maintenance on, web and worker at 0, new code and

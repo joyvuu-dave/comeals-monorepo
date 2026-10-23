@@ -11,7 +11,8 @@ set -euo pipefail
 #      Skips if already up to date.
 #   2. Diffs db/migrate/ between the deployed and local SHAs.
 #      - If migrations changed → maintenance deploy (scale web and the
-#        worker to 0, push, scale up).
+#        worker to 0, push, scale up, and turn maintenance off once web
+#        is up on the new release).
 #      - If no migrations    → push deploy (brief downtime during restart).
 #
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
@@ -34,6 +35,9 @@ MAINTENANCE_ENABLED=false
 DEPLOY_TIMESTAMP=""
 NEEDS_MAINTENANCE=false
 HEROKU_SHA=""
+# The newest release before the push, and the release the push made.
+RELEASE_BEFORE=""
+NEW_RELEASE=""
 
 # --yes (or DEPLOY_YES=1): proceed without the interactive
 # confirmation. The automated pipeline (deploy.yml) runs with this;
@@ -105,6 +109,8 @@ cleanup() {
     echo "  heroku ps:scale worker=1 -a $APP"
     echo "  heroku ps:scale web=1 -a $APP"
     echo "  heroku maintenance:off -a $APP"
+    echo
+    yellow "Turn maintenance off last, once heroku ps -a $APP shows web up."
     echo
   fi
 }
@@ -312,6 +318,26 @@ Every break-glass use gets reviewed. Answer in this issue: what was broken, why 
 preflight_quality() {
   step "Pre-flight: linting & tests"
 
+  # ESLint, Vitest and bin/smoke run with node_modules, and nothing else
+  # makes it match package-lock.json: the pull above can change the
+  # lockfile, and a checkout's node_modules can be older still. On
+  # 2026-10-22 an old Playwright could not start its browser, and the smoke
+  # test asked for a rollback of a good deploy (#241). So install exactly
+  # what the lockfile names, as CI and the Deploy workflow do. npm ci
+  # replaces node_modules, so a bin/dev running from this checkout needs a
+  # restart afterwards.
+  info "Installing the npm packages package-lock.json names (npm ci)..."
+  npm ci
+  ok "node_modules matches package-lock.json"
+
+  # The browser build bin/smoke needs belongs to the Playwright version
+  # npm ci just installed. Installing it here, before anything changes in
+  # production, means a failed download stops the deploy now instead of
+  # looking like a broken app after it.
+  info "Installing the browser bin/smoke uses (Playwright Chromium)..."
+  npx playwright install chromium
+  ok "Playwright Chromium installed"
+
   info "Running RuboCop..."
   bundle exec rubocop --parallel
   ok "RuboCop passed"
@@ -341,14 +367,33 @@ detect_deploy_needs() {
   # migration between the two would be missed.
   heroku_sha=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP" 2>/dev/null || true)
 
+  if [ -n "$heroku_sha" ] && [ "$heroku_sha" = "$local_sha" ]; then
+    ok "Already up to date (${local_sha:0:7})"
+    return 1
+  fi
+
+  # A rollback changes the release that runs, not Heroku's git. So after
+  # one, Heroku's git main can already be this commit while an older
+  # release runs, and a push would print "Everything up-to-date", build
+  # nothing and make no release (#242). Stop now, before anything changes.
+  local git_main
+  if ! git_main=$(git ls-remote "$GIT_TARGET" refs/heads/main); then
+    fail "Cannot read the main branch of Heroku's git (git ls-remote $GIT_TARGET)"
+    exit 1
+  fi
+  if [ "${git_main%%[[:space:]]*}" = "$local_sha" ]; then
+    local running=${heroku_sha:0:7}
+    fail "Heroku's git already has ${local_sha:0:7} on main, but $APP runs ${running:-a commit it cannot read}. A push would build nothing."
+    info "A rollback changes the release that runs, not what Heroku's git holds."
+    info "To deploy this code again, see \"Deploying a commit again after a rollback\" in docs/runbooks/undo-a-deploy.md."
+    exit 1
+  fi
+
   if [ -z "$heroku_sha" ]; then
     warn "Cannot read Heroku SHA (first deploy or endpoint unreachable)"
     info "Will deploy with maintenance mode for safety"
     NEEDS_MAINTENANCE=true
     return 0
-  elif [ "$heroku_sha" = "$local_sha" ]; then
-    ok "Already up to date (${local_sha:0:7})"
-    return 1
   fi
 
   info "heroku=${heroku_sha:0:7} -> local=${local_sha:0:7}"
@@ -432,20 +477,40 @@ save_release_output() {
   fi
 }
 
+# The newest release's version, before the push.
+read_release_before() {
+  RELEASE_BEFORE=$(heroku releases -a "$APP" --json | json "d[0]['version']")
+}
+
 # git push exits 0 even when the release phase fails (bin/staging-rehearsal
 # saw this on 2026-08-17). Ask Heroku what the newest release did, and stop
 # before the web dyno comes back up. Wait while the release is still pending.
+#
+# git push also exits 0 when it builds nothing ("Everything up-to-date").
+# The newest release is then an older one, perhaps a rollback that
+# succeeded (#242), so check that the push made a new release, and that
+# the release runs this commit.
 check_release_status() {
-  local status="" tries=0
+  local status="" version="" release tries=0
   while [ "$tries" -lt 36 ]; do
-    status=$(heroku releases -a "$APP" --json | python3 -c \
-      "import json,sys; print(json.load(sys.stdin)[0]['status'])")
+    release=$(heroku releases -a "$APP" --json | json "'%s %s' % (d[0]['version'], d[0]['status'])")
+    version=${release%% *}
+    status=${release#* }
     if [ "$status" != "pending" ]; then
       break
     fi
     tries=$((tries + 1))
     sleep 5
   done
+  if [ "$version" = "$RELEASE_BEFORE" ]; then
+    fail "The push made no new release: the newest release of $APP is still v$version."
+    info "Heroku's git may have had this commit already. Check: heroku releases -a $APP"
+    if [ "$MAINTENANCE_ENABLED" = true ]; then
+      info "Nothing was deployed and no migration ran. It is safe to bring the old code back up with the commands below."
+    fi
+    exit 1
+  fi
+  NEW_RELEASE=$version
   save_release_output
   if [ "$status" != "succeeded" ]; then
     fail "The release phase did not succeed (status: $status). Its output:"
@@ -455,7 +520,56 @@ check_release_status() {
     fi
     exit 1
   fi
-  ok "Release phase succeeded"
+
+  local sha running
+  sha=$(git rev-parse HEAD)
+  running=$(heroku config:get HEROKU_SLUG_COMMIT -a "$APP")
+  if [ "$running" != "$sha" ]; then
+    fail "Release v$version succeeded, but $APP runs ${running:0:7}, not ${sha:0:7}."
+    info "A rollback or another deploy may have run at the same time. Check: heroku releases -a $APP"
+    exit 1
+  fi
+  ok "Release phase succeeded (v$version runs ${sha:0:7})"
+}
+
+# Heroku marks a web dyno "up" once the process listens on its port, and
+# Puma (one process, no workers: config/puma.rb) listens only after it
+# has loaded the app. So a web dyno that is up on the new release can
+# answer. The app itself cannot be asked: while maintenance is on, Heroku
+# answers every request with the maintenance page. So wait for "up" on
+# the new release, for at most 3 minutes; a web dyno that does not boot
+# within 60 seconds is restarted by Heroku, so that is room for two boots.
+# The health check after maintenance goes off then asks the app itself.
+wait_for_web() {
+  info "Waiting for web to be up on v$NEW_RELEASE..."
+  local states state ready tries=0
+  while :; do
+    # The state of each web dyno on the new release ("starting up").
+    # Ready when there is one and every one is up.
+    states=$(heroku ps -a "$APP" --json | json "' '.join(p['state'] for p in d \
+      if p['type'] == 'web' and str(p['release']['version']) == '$NEW_RELEASE')")
+    ready=false
+    if [ -n "$states" ]; then
+      ready=true
+      for state in $states; do
+        [ "$state" = up ] || ready=false
+      done
+    fi
+    if [ "$ready" = true ]; then
+      break
+    fi
+    tries=$((tries + 1))
+    if [ "$tries" -ge 36 ]; then
+      fail "Web is not up on v$NEW_RELEASE after 3 minutes. Maintenance stays on."
+      info "Find out why: heroku ps -a $APP ; heroku logs -a $APP --dyno web -n 200"
+      info "When heroku ps shows web up on v$NEW_RELEASE, run: heroku maintenance:off -a $APP"
+      info "Then check the site: bin/smoke $APP_URL"
+      exit 1
+    fi
+    info "web on v$NEW_RELEASE: ${states:-no dyno yet} — waiting ($tries/36)"
+    sleep 5
+  done
+  ok "Web is up on v$NEW_RELEASE"
 }
 
 # The push restarts a worker dyno that runs, but one at 0 stays at 0: on
@@ -514,7 +628,7 @@ deploy_maintenance() {
 
   info "Scaling web dyno back up..."
   heroku ps:scale web=1 -a "$APP"
-  ok "Web dyno running"
+  wait_for_web
 }
 
 post_deploy_tasks() {
@@ -730,6 +844,7 @@ main() {
 
   DEPLOY_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%S")
 
+  read_release_before
   capture_backup
 
   if [ "$NEEDS_MAINTENANCE" = true ]; then

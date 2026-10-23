@@ -10,8 +10,10 @@
 #                exit, times or exec), tried in order
 #   state/       the fake production app: maintenance, web, worker (a count,
 #                or none when the release has no worker process type),
-#                config/<VAR>, backups, releases (one status per line),
-#                pushed, heroku_sha
+#                config/<VAR>, backups, release (the newest release's
+#                version), releases (the statuses of the release a push
+#                makes, one per line), pushed, heroku_sha (the main branch
+#                of Heroku's git repository)
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
 #   logs, check_runs, real_git
@@ -158,16 +160,40 @@ heroku_default() {
       printf 'Backing up DATABASE to b%03d... done\n' "$(<"$state/backups")"
       ;;
     pg:backups:info) printf '=== Backup b%03d\nStatus: Completed\n' "$(<"$state/backups")" ;;
+    # The newest release first, like the real one. Before a push it is the
+    # release that runs, which succeeded. After one, each call takes the
+    # next status the spec set up for the new release.
     releases)
       [[ " $* " == *" --json "* ]] || unexpected "$@"
-      local statuses
-      mapfile -t statuses <"$state/releases"
-      printf '[{"version":"v700","status":"%s"}]\n' "${statuses[0]:-succeeded}"
-      if [ "${#statuses[@]}" -gt 1 ]; then
-        printf '%s\n' "${statuses[@]:1}" >"$state/releases"
-      else
-        : >"$state/releases"
+      local statuses status=succeeded
+      if [ -s "$state/pushed" ]; then
+        mapfile -t statuses <"$state/releases"
+        status=${statuses[0]:-succeeded}
+        if [ "${#statuses[@]}" -gt 1 ]; then
+          printf '%s\n' "${statuses[@]:1}" >"$state/releases"
+        else
+          : >"$state/releases"
+        fi
       fi
+      printf '[{"version":%s,"status":"%s"},{"version":%s,"status":"succeeded"}]\n' \
+        "$(<"$state/release")" "$status" "$(($(<"$state/release") - 1))"
+      ;;
+    # heroku ps --json: one dyno per web and worker count, each up on the
+    # newest release.
+    ps)
+      [[ " $* " == *" --json "* ]] || unexpected "$@"
+      local type count i sep=""
+      printf '['
+      for type in web worker; do
+        count=$(<"$state/$type")
+        [ "$count" = none ] && continue
+        for ((i = 1; i <= count; i++)); do
+          printf '%s{"name":"%s.%s","type":"%s","state":"up","release":{"version":%s}}' \
+            "$sep" "$type" "$i" "$type" "$(<"$state/release")"
+          sep=","
+        done
+      done
+      printf ']\n'
       ;;
     releases:output) echo "Running release command... migrating" ;;
     run) echo "one-off dyno: ${*:3}" ;;
@@ -179,13 +205,26 @@ heroku_default() {
 git_default() {
   case "${1:-} ${2:-}" in
     "fetch origin" | "pull --ff-only") ;;
-    "ls-remote heroku")
-      [ -s "$state/heroku_sha" ] && printf '%s\trefs/heads/main\n' "$(<"$state/heroku_sha")"
+    "ls-remote heroku" | "ls-remote https://git.heroku.com/comeals-staging.git")
+      if [ -s "$state/heroku_sha" ]; then
+        printf '%s\trefs/heads/main\n' "$(<"$state/heroku_sha")"
+      fi
       ;;
     # The production remote, or the staging app's git address
-    # (DEPLOY_APP=comeals-staging). Any other target is unexpected.
+    # (DEPLOY_APP=comeals-staging). Any other target is unexpected. Like
+    # the real one, a push of the commit Heroku's git already has builds
+    # nothing and makes no release.
     "push heroku" | "push https://git.heroku.com/comeals-staging.git")
-      "$real_git" rev-parse HEAD >"$state/pushed"
+      local sha
+      sha=$("$real_git" rev-parse HEAD)
+      if [ "$sha" = "$(<"$state/heroku_sha")" ]; then
+        echo "Everything up-to-date" >&2
+        exit 0
+      fi
+      echo "$sha" >"$state/pushed"
+      echo "$sha" >"$state/heroku_sha"
+      echo "$sha" >"$state/config/HEROKU_SLUG_COMMIT"
+      echo $(($(<"$state/release") + 1)) >"$state/release"
       # The new release has a worker process type, at 0 when it is new.
       [ "$(<"$state/worker")" = none ] && echo 0 >"$state/worker"
       echo "remote: Verifying deploy... done."
@@ -211,6 +250,6 @@ case "$name" in
       printf 503
     fi
     ;;
-  bundle | npm | sleep | smoke) ;;
+  bundle | npm | npx | sleep | smoke) ;;
   *) unexpected "$@" ;;
 esac

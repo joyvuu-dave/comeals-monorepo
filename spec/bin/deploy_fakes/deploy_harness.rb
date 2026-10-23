@@ -17,7 +17,7 @@ class DeployHarness
   ROOT = File.expand_path('../../..', __dir__)
   SCRIPT = File.join(ROOT, 'bin/deploy')
   FAKE = File.join(__dir__, 'fake_command.bash')
-  FAKE_NAMES = %w[heroku git gh curl bundle npm sleep].freeze
+  FAKE_NAMES = %w[heroku git gh curl bundle npm npx sleep].freeze
   # The local tools bin/deploy (and the fakes) run. None talks to another
   # machine.
   LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 tail].freeze
@@ -36,7 +36,7 @@ class DeployHarness
     @rules = []
     @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '' }
     @state = {
-      maintenance: 'off', web: 1, worker: 1, backups: 0, releases: [], pushed: '', heroku_sha: '',
+      maintenance: 'off', web: 1, worker: 1, backups: 0, release: 700, releases: [], pushed: '', heroku_sha: '',
       config: {}
     }
     build_path
@@ -62,9 +62,10 @@ class DeployHarness
 
   # The fake production app before the run: maintenance ('on' or 'off'),
   # web, worker (a count, or 'none' when the running release has no worker
-  # process type, as before the first deploy with one), backups, releases
-  # (the statuses `heroku releases` answers, one per call, then
-  # 'succeeded'), heroku_sha (the commit production runs, which
+  # process type, as before the first deploy with one), backups, release
+  # (the version of the newest release; a push that builds adds one),
+  # releases (the statuses `heroku releases` answers for the release a
+  # push made, one per call, then 'succeeded'), heroku_sha (the commit production runs, which
   # `heroku config:get HEROKU_SLUG_COMMIT` answers, and the main branch of
   # Heroku's git repository, which `git ls-remote heroku` answers; '' for
   # nothing), git_sha (Heroku's git main when it is not the commit that
@@ -162,7 +163,8 @@ class DeployHarness
       'count' => '0', 'real_git' => real_git, 'logs' => @scenario[:logs], 'check_runs' => @scenario[:check_runs],
       'state/maintenance' => @state[:maintenance], 'state/web' => @state[:web].to_s,
       'state/worker' => @state[:worker].to_s,
-      'state/backups' => @state[:backups].to_s, 'state/releases' => @state[:releases].map { "#{it}\n" }.join,
+      'state/backups' => @state[:backups].to_s, 'state/release' => @state[:release].to_s,
+      'state/releases' => @state[:releases].map { "#{it}\n" }.join,
       'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha])
     )
     @state[:config].each { |var, value| files["state/config/#{var}"] = value }

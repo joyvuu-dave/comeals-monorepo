@@ -135,6 +135,29 @@ starts web or the worker again by itself.
 - Web is up but maintenance is still on: the old code runs on the
   restored database. Turn maintenance off and run the smoke test.
 
+## Deploying a commit again after a rollback
+
+A rollback changes the release that runs. It does not change Heroku's
+git repository: its main branch still holds the commit that was rolled
+back. A push of that same commit then builds nothing and makes no
+release, so `bin/deploy` refuses it before it changes anything (#242).
+
+To run that code again, push a new commit to `main` and deploy it the
+usual way. When the code does not need to change (say the rollback was
+for bad data, and the data is now fixed), an empty commit is enough:
+
+```bash
+git commit --allow-empty -m "Deploy again after the rollback"
+git push origin main
+# wait for CI, then
+bin/deploy
+```
+
+Do not roll back to the release built from that commit instead. It runs
+the release phase, but none of the steps `bin/deploy` adds: no backup,
+no maintenance mode while a migration runs, no cache clear, no balance
+refresh, and no checks.
+
 ## Practise it on staging
 
 `bin/staging-rehearsal` does not practise the undo. It only deploys the
@@ -180,9 +203,10 @@ step 2.)
    It runs every step of a production deploy, in the same order, on
    staging: the CI check, the local checks, a staging backup (it prints
    the id: this is "the backup before the deploy"), maintenance mode when
-   a migration changed, the push, the release phase, the cache clear and
-   the balance refresh, the worker, the health check, the Solid Queue
-   check and the smoke test. It pushes to staging's own git address,
+   a migration changed (it goes off only once web is up on the new
+   release), the push, the release phase, the cache clear and the
+   balance refresh, the worker, the health check, the Solid Queue check
+   and the smoke test. It pushes to staging's own git address,
    never to the `heroku` remote. It first refuses a staging app that
    could send mail: staging holds real residents' email addresses, and
    the deploy starts the worker.
