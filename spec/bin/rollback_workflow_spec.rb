@@ -142,7 +142,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
   end
 
   describe 'bin/lib/rollback/check-migrations' do
-    let(:diff) { "diff --name-only --diff-filter=A #{good} #{bad} -- db/migrate" }
+    let(:diff) { "diff --name-only --no-renames --diff-filter=A #{good} #{bad} -- db/migrate" }
 
     def check(backup: '', code_only: 'false')
       env = { 'TARGET_SHA' => good, 'BAD_SHA' => bad, 'BACKUP' => backup, 'CODE_ONLY_IS_SAFE' => code_only,

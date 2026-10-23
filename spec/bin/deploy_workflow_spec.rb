@@ -259,7 +259,7 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
 
   describe 'bin/lib/deploy/watch-production' do
     let(:version_url) { 'https://comeals.com/api/v1/version' }
-    let(:diff) { "diff --name-only --diff-filter=A #{live} #{candidate} -- db/migrate" }
+    let(:diff) { "diff --name-only --no-renames --diff-filter=A #{live} #{candidate} -- db/migrate" }
 
     before do
       sandbox.rule('curl', "-sf #{version_url}", out: %({"version":"614","commit":"#{candidate}"}))
