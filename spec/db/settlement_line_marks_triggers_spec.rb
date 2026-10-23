@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20261010125953_create_settlement_line_marks.rb')
 
-# The database's own rules for marks on settlement lines (ADR 0011 rule 8,
-# migration 20261010125953). Each statement here is raw SQL, the way psql
+# The database's own rules for marks on settlement lines (ADR 0011 rule 8):
+# the function comeals_protect_settlement_line_mark and the CHECKs on
+# settlement_line_marks in db/structure.sql. Each statement here is raw SQL, the way psql
 # or update_all writes, so no model rule runs.
 RSpec.describe 'settlement line mark triggers' do
   let(:community) { create(:community) }
@@ -61,18 +61,5 @@ RSpec.describe 'settlement line mark triggers' do
         end
       end
     end.to raise_error(ActiveRecord::InvalidForeignKey)
-  end
-
-  def migrate_down
-    $stdout = StringIO.new
-    CreateSettlementLineMarks.new.migrate(:down)
-  ensure
-    $stdout = STDOUT
-  end
-
-  it 'refuses to roll the migration back while a mark is recorded' do
-    mark
-
-    expect { migrate_down }.to raise_error(StandardError, /settlement_line_marks holds 1 mark\(s\)/)
   end
 end

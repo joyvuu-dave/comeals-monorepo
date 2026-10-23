@@ -7,7 +7,7 @@ require 'rails_helper'
 # The second waits at its FOR UPDATE on the dinner until the first
 # commits. Its transaction began before that commit, and the first
 # correction changed the dinner's row (a write to a dinner's rows updates
-# it, through the trigger of 20261016120000), so PostgreSQL refuses the
+# it, through comeals_reject_settled_child_write), so PostgreSQL refuses the
 # second's lock as a conflict. RetryOnConflict runs the second again, and
 # it works from the dinner as the first correction left it.
 RSpec.describe 'a correction while another correction of the same dinner is saved' do

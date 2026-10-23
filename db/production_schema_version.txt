@@ -1,0 +1,17 @@
+# The version of the newest migration that production has run.
+#
+# After a deploy that runs migrations, in one commit:
+#
+#   1. Put the version of the newest migration that deploy ran here, in
+#      place of the one below.
+#   2. Delete every file in db/migrate/ dated at or before it, and every
+#      spec that loads one of those files (a spec of a one-time data fix
+#      goes; a spec of a trigger, a CHECK or an index tests the schema
+#      instead). db/structure.sql is the record of the schema, and a new
+#      database is built from it, so the files are no longer needed.
+#
+# spec/db/production_schema_version_spec.rb fails while a migration file
+# is dated at or before this version: either step 2 was not done, or a
+# new migration was given an old date, and production would never run it.
+# spec/simplecov_profile.rb reads this as PRODUCTION_SCHEMA_VERSION.
+20261016130000

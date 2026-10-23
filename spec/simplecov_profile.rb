@@ -7,16 +7,18 @@
 
 require 'simplecov'
 
-# The migrations production has run, from db/production_migrations.txt
-# (its comment says when and how to update it), and the newest of them.
-# Every migration after that one has not run there yet, so this suite must
-# run all of its lines and branches before the deploy that runs it; the
-# ones up to it already ran and are left out of the coverage count.
-PRODUCTION_MIGRATIONS = File.readlines(File.expand_path('../db/production_migrations.txt', __dir__), chomp: true)
-                            .reject { |line| line.start_with?('#') || line.strip.empty? }
-                            .map { |line| Integer(line, 10) }
-                            .freeze
-PRODUCTION_SCHEMA_VERSION = PRODUCTION_MIGRATIONS.max
+# The newest migration production has run, from
+# db/production_schema_version.txt (its comment says when and how to
+# update it). Every migration in db/migrate/ is newer, so production has
+# not run it, and this suite must run all of its lines and branches
+# before the deploy that runs it.
+production_versions = File.readlines(File.expand_path('../db/production_schema_version.txt', __dir__), chomp: true)
+                          .reject { |line| line.start_with?('#') || line.strip.empty? }
+if production_versions.size != 1
+  raise "db/production_schema_version.txt must hold one version, not #{production_versions}"
+end
+
+PRODUCTION_SCHEMA_VERSION = Integer(production_versions.first, 10)
 
 # The minimum for a run of the whole suite.
 SIMPLECOV_MINIMUM = { line: 100, branch: 100 }.freeze
@@ -25,18 +27,15 @@ SimpleCov.profiles.define 'comeals' do
   load_profile 'rails'
   enable_coverage :branch
   # The rails profile leaves out all of config/ and db/. This suite counts
-  # config/initializers/ and the migrations production has not run, so
-  # those two rules come out and narrower ones go in below.
+  # config/initializers/ and the migrations, which production has not run
+  # (the ones it ran are deleted), so those two rules come out and
+  # narrower ones go in below.
   remove_filter(%r{\Aconfig/})
   remove_filter(%r{\Adb/})
   skip '/spec/'
   skip '/vendor/'
   skip %r{\Aconfig/(?!initializers/)}
   skip %r{\Adb/(?!migrate/)}
-  skip do |file|
-    version = file.project_filename[%r{\Adb/migrate/(\d+)_}, 1]
-    version && Integer(version, 10) <= PRODUCTION_SCHEMA_VERSION
-  end
 
   # The files this suite answers for. A file here that no spec loads is
   # counted at 0%, not left out: a spec loads a migration only when it

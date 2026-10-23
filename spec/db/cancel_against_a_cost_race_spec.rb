@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # A dinner a cook spent money on cannot be cancelled (ADR 0011 rule 11).
 # The database holds that rule too, for a write that skips the model
-# (20261010125954):
+# (db/structure.sql):
 #
 #   - comeals_protect_settled_meal refuses a cancel when a bill of the
 #     dinner has money on it;
@@ -17,7 +17,7 @@ require 'rails_helper'
 #
 # The cost here is raw SQL on a libpq session of its own, the way psql
 # writes: no model, no lock of its own, at READ COMMITTED. Until
-# 20261016120000 both orders went wrong. The trigger read the meal row
+# 2026-10-16 both orders went wrong. The trigger read the meal row
 # FOR KEY SHARE, which a cancel's UPDATE (FOR NO KEY UPDATE) does not wait
 # for. The app's cancel did wait, at its FOR UPDATE, but it runs at
 # SERIALIZABLE: its snapshot was taken before the wait, a lock changes no

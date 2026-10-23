@@ -1,10 +1,12 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20261010125951_create_meal_corrections.rb')
 
 # The database's own rules for corrections to settled dinners (ADR 0011
-# rule 6), migrations 20261010125951 and 20261010125952. Each statement
+# rule 6): the functions comeals_meal_correction_guard,
+# comeals_meal_correction_line_guard and
+# comeals_meal_correction_lines_sum_zero in db/structure.sql, and the
+# child-write trigger's comeals.correcting setting. Each statement
 # here is raw SQL, the way psql or update_all writes, so no model rule
 # runs: only the triggers and the CHECKs stand between it and the table.
 RSpec.describe 'meal correction triggers' do
@@ -173,7 +175,8 @@ RSpec.describe 'meal correction triggers' do
     end
   end
 
-  # 20261010125952: the dinner being corrected, and only it.
+  # comeals_reject_settled_child_write lets the dinner being corrected be
+  # written, and only it.
   describe 'the rows of a settled dinner' do
     let(:other) { create(:resident, community: community, unit: unit) }
     let(:carried_meal) { carrier.meals.sole }
@@ -211,22 +214,6 @@ RSpec.describe 'meal correction triggers' do
       set('comeals.correcting', '')
 
       expect_refused(add_eater(meal.id), /meal #{meal.id} is reconciled/)
-    end
-  end
-
-  describe 'rolling back the migration' do
-    def migrate_down
-      $stdout = StringIO.new
-      CreateMealCorrections.new.migrate(:down)
-    ensure
-      $stdout = STDOUT
-    end
-
-    it 'refuses to drop the record of a correction' do
-      correction_id
-
-      expect { migrate_down }.to raise_error(StandardError, /meal_corrections holds 1 correction\(s\)/)
-      expect(MealCorrection.count).to eq(1)
     end
   end
 end

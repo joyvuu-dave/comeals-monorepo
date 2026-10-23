@@ -1,10 +1,10 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
-require Rails.root.join('db/migrate/20261010125954_let_a_dinner_be_cancelled.rb')
 
-# The database's own rules for a cancelled dinner (ADR 0011 rule 11,
-# migration 20261010125954). Each statement here is raw SQL, the way psql
+# The database's own rules for a cancelled dinner (ADR 0011 rule 11):
+# the functions comeals_reject_settled_child_write and
+# comeals_protect_settled_meal in db/structure.sql. Each statement here is raw SQL, the way psql
 # or update_all writes, so no model rule runs.
 RSpec.describe 'cancelled dinner triggers' do
   let(:community) { create(:community) }
@@ -77,18 +77,5 @@ RSpec.describe 'cancelled dinner triggers' do
 
     expect_refused("UPDATE meals SET cancelled_at = NULL WHERE id = #{meal.id}",
                    /meal #{meal.id} is reconciled; cap, date, cancelled_at and reconciliation_id are frozen/)
-  end
-
-  def migrate_down
-    $stdout = StringIO.new
-    LetADinnerBeCancelled.new.migrate(:down)
-  ensure
-    $stdout = STDOUT
-  end
-
-  it 'refuses to roll the migration back while a dinner is cancelled' do
-    meal.cancel!
-
-    expect { migrate_down }.to raise_error(StandardError, /1 dinner\(s\) are cancelled/)
   end
 end

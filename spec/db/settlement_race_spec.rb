@@ -23,8 +23,8 @@ require 'rails_helper'
 #      foreign-key check and LocksItsMealFirst take) does not conflict with —
 #      there would be no wait at all.
 #   2. The trigger's NEW.meal_id lookup is unconditional and locks the meal
-#      row (a FOR KEY SHARE read from 20260727120000; an UPDATE of the meal
-#      row since 20261016120000), so an INSERT decides after that wait against
+#      row (a FOR KEY SHARE read from 2026-07-27; an UPDATE of the meal
+#      row since 2026-10-16), so an INSERT decides after that wait against
 #      committed state. Without it the trigger decides first — Postgres fires
 #      BEFORE INSERT triggers before the foreign-key check — and the insert
 #      proceeds once the FK wait ends.

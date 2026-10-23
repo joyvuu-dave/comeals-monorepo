@@ -7,9 +7,9 @@ require 'rails_helper'
 # off. The existing trigger spec covers an insert, a delete and an amount
 # change. This one covers the write the trigger has a special branch for: an
 # UPDATE that moves a line from one settled meal to another. Both meals must
-# still balance afterwards, so both ids are checked (migration
-# 20260917130000, "An UPDATE that moves a line between meals must leave both
-# of them balanced").
+# still balance afterwards, so both ids are checked: the function
+# comeals_meal_charges_sum_zero in db/structure.sql checks OLD.meal_id and
+# NEW.meal_id.
 #
 # Invariant hunt, 2026-09-21. Green when written: a pin, not a finding.
 RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do

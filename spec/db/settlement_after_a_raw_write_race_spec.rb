@@ -12,7 +12,7 @@ require 'rails_helper'
 # The settlement waits at its FOR UPDATE until the write commits, and it
 # must then count the write. It runs at SERIALIZABLE (ADR 0005), so its
 # snapshot was taken when its first statement started, before the wait.
-# Until 20261016120000 the trigger only read the meal row FOR KEY SHARE.
+# Until 2026-10-16 the trigger only read the meal row FOR KEY SHARE.
 # That lock changed no row, so the wait ended with no conflict, and
 # PostgreSQL's conflict check does not see a READ COMMITTED writer either.
 # The settlement then stored balances from the rows as they were before

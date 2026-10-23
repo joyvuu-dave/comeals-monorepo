@@ -261,7 +261,7 @@ RSpec.describe 'settled-meal database triggers' do
         'meal_charges_sum_zero',
         'reconciliation_balances_protect_settled',
         'reconciliation_balances_sum_zero',
-        # From 20260408000002. Lost from the dev database once (a schema.rb
+        # From April 2026. Lost from the dev database once (a schema.rb
         # rebuild cannot carry triggers — the drift that motivated the
         # structure.sql switch), so pin it here with the rest.
         'prevent_community_delete'
@@ -305,8 +305,8 @@ RSpec.describe 'settled-meal database triggers' do
     end
 
     # The INSERT branch locks the parent meal before it decides (a FOR KEY
-    # SHARE read from 20260727120000, issue #43; an UPDATE of the meal row
-    # since 20261016120000). The bypass has to short out that whole branch,
+    # SHARE read from 2026-07-27, issue #43; an UPDATE of the meal row
+    # since 2026-10-16). The bypass has to short out that whole branch,
     # lock included, not just the refusal.
     it 'allows an insert onto a reconciled meal' do
       meal = settled_meal

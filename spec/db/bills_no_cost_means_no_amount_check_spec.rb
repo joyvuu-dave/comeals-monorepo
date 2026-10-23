@@ -7,9 +7,9 @@ require 'rails_helper'
 # this CHECK makes PostgreSQL refuse it from every write that skips the
 # model (update_columns, update_all, a rake task, psql).
 #
-# Added NOT VALID (20261010125900), so it refused every new or changed
-# row at once; then 20261010130000 turned No cost off on every bill that
-# had both, and 20261010130200 validated it.
+# Added NOT VALID in October 2026, so it refused every new or changed
+# row at once; then a one-time data fix turned No cost off on every bill
+# that had both, and the CHECK was validated.
 RSpec.describe 'bills no cost means no amount check constraint' do
   let(:community) { create(:community) }
   let(:meal) { create(:meal, community: community) }

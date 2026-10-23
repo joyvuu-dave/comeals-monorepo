@@ -33,7 +33,7 @@ RSpec.describe 'the migrations production has not run' do
   # The files themselves say which migrations production has not run, and
   # which of those are data migrations. Counting from the files, and not
   # from a number written here, keeps this right after each deploy moves
-  # db/production_migrations.txt.
+  # db/production_schema_version.txt and deletes the files it ran.
   let(:unrun_schema_migration_files) do
     Rails.root.glob('db/migrate/*.rb')
          .select { |path| Integer(path.basename.to_s[/\A\d+/], 10) > PRODUCTION_SCHEMA_VERSION }

@@ -12,7 +12,7 @@ require 'rails_helper'
 # the one the settled-meal trigger takes. The marking's transaction began
 # before the write committed, so its first read of the cost is the old,
 # blank one, and only the database's conflict check stops it from writing
-# over the new cost: the trigger updated the meal row (20261016120000),
+# over the new cost: the trigger updated the meal row (since 2026-10-16),
 # so the marking's FOR UPDATE on the meal fails as a conflict once the
 # cook commits. (Before that migration the trigger left the meal row as
 # it was, and the conflict came later, at the marking's write to the same

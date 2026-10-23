@@ -13,7 +13,7 @@ paths = ARGV.each_with_index.reject do |arg, index|
 end.map(&:first)
 whole_suite = paths.none? { |arg| arg.match?(%r{\A(spec/|\./spec/|/)}) || arg.end_with?('_spec.rb') }
 
-# PRODUCTION_MIGRATIONS, PRODUCTION_SCHEMA_VERSION, SIMPLECOV_MINIMUM and the 'comeals' profile.
+# PRODUCTION_SCHEMA_VERSION, SIMPLECOV_MINIMUM and the 'comeals' profile.
 require_relative 'simplecov_profile'
 
 # Mutant (bin/mutant) runs a few examples at a time in forked workers,

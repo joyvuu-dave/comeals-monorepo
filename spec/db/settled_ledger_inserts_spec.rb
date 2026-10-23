@@ -2,8 +2,9 @@
 
 require 'rails_helper'
 
-# Only a settlement adds line items and settled balances (migration
-# 20261009120000).
+# Only a settlement adds line items and settled balances
+# (comeals_meal_charge_insert_by_settlement and
+# comeals_balance_insert_by_settlement in db/structure.sql).
 #
 # The protect triggers refuse every UPDATE and DELETE on meal_charges and
 # reconciliation_balances. Before this migration they let every INSERT

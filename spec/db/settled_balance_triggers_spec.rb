@@ -2,7 +2,9 @@
 
 require 'rails_helper'
 
-# The database guards on reconciliation_balances (20260731120000).
+# The database guards on reconciliation_balances
+# (comeals_protect_settled_balance and comeals_reconciliation_balances_sum_zero
+# in db/structure.sql).
 #
 # Every write here skips Rails on purpose — update_all, delete_all, raw SQL.
 # The model guards on ReconciliationBalance are what a person using the app

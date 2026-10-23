@@ -3,7 +3,7 @@
 require 'rails_helper'
 
 # The database guard that every meal's stored lines sum to zero
-# (20260917120000). Every write here skips Rails or goes behind the repair
+# (comeals_meal_charges_sum_zero in db/structure.sql). Every write here skips Rails or goes behind the repair
 # bypass on purpose: the trigger exists for the paths a model guard cannot
 # see — a rake task, a console, a psql session.
 RSpec.describe 'meal charges sum-zero trigger' do
