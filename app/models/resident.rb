@@ -63,10 +63,7 @@ class Resident < ApplicationRecord
   # was a column that a nightly job copied from the birthday, so a
   # person's price was wrong from their birthday until the next run, and
   # a sign-up months ahead used the sign-up day's band (#88). The column
-  # stays one release for the rollback story (strong_migrations); nothing
-  # reads or writes it, so after a rollback the old release must run its
-  # rake residents:set_multiplier at once (docs/runbooks/scheduler-cutover.md).
-  self.ignored_columns += %w[multiplier]
+  # was dropped in 20261023120000 (#89).
 
   # The same rule as #age_on, in SQL: full-price age reached on the day,
   # a February 29 birthday counting on March 1 in a non-leap year (the

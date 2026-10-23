@@ -20,8 +20,8 @@
 # The database default for guests.multiplier is FULL, but a schema default
 # cannot reference a Ruby constant, so it is written as the literal 2 in
 # the schema. spec/models/multiplier_spec.rb pins it to this module so it
-# cannot drift. (residents.multiplier is an ignored column, kept one
-# release for the rollback story; a resident's band is computed.)
+# cannot drift. (A resident has no multiplier column; the band is
+# computed from the birthday.)
 module Multiplier
   extend T::Sig
 

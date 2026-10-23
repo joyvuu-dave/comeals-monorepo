@@ -1550,7 +1550,6 @@ CREATE TABLE public.residents (
     created_at timestamp without time zone NOT NULL,
     email character varying,
     keys_valid_since timestamp(6) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
-    multiplier integer DEFAULT 2 NOT NULL,
     name character varying NOT NULL,
     password_digest character varying NOT NULL,
     reset_password_sent_at timestamp(6) without time zone,
@@ -1561,7 +1560,6 @@ CREATE TABLE public.residents (
     phone character varying,
     can_reconcile boolean DEFAULT false NOT NULL,
     CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
-    CONSTRAINT residents_multiplier_non_negative CHECK ((multiplier >= 0)),
     CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text)))
 );
 
@@ -4247,6 +4245,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261023120000'),
 ('20261016130000'),
 ('20261016120000'),
 ('20261015120000'),

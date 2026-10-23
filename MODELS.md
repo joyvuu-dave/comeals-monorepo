@@ -189,11 +189,9 @@ Resident
   (`index_residents_on_lower_email`). Stored lowercased. An empty string is
   turned into NULL before validation.
 - `password_digest` — scrypt hash. `authenticate(password)` checks it.
-- `multiplier` — an ignored column since 2026-09-26 (`ignored_columns`). It
-  is still in the table so a rollback can still read it; issue #89 drops it.
-  A resident's price band is computed
-  from the birthday (`Resident#multiplier_on(date)`), see "The Multiplier
-  System" below.
+- A resident has no `multiplier` column (dropped in 2026-10, #89). The price
+  band is computed from the birthday (`Resident#multiplier_on(date)`), see
+  "The Multiplier System" below.
 - `active` — false for residents who moved away or died
 - `can_cook` — eligible for the cooking rotation
 - `can_reconcile` — may preview and create a settlement through the API
