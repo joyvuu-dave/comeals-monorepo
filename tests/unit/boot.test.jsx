@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
-import { act, screen } from "@testing-library/react";
+import { act, screen, within } from "@testing-library/react";
 
 vi.mock("axios", () => import("./mocks/axios.js"));
 vi.mock("js-cookie", () => import("./mocks/js_cookie.js"));
@@ -32,12 +32,13 @@ let bootedStore = null;
 // The two pages index.jsx loads with React.lazy. Their own tests cover
 // them; here each one only says which page it is. `failingPage` names
 // a page whose code fails to load, the way it does after a deploy.
+const PAGES = {
+  "calendar/show": "the calendar page",
+  "meals/edit": "the meal page",
+};
+
 function mockPages(failingPage) {
-  const pages = {
-    "calendar/show": "the calendar page",
-    "meals/edit": "the meal page",
-  };
-  for (const [page, heading] of Object.entries(pages)) {
+  for (const [page, heading] of Object.entries(PAGES)) {
     vi.doMock(`${SRC}/components/${page}`, () => {
       if (page === failingPage) failingPageLoad();
       return {
@@ -88,6 +89,8 @@ function mockSpies() {
 // for DOMContentLoaded and for load, which jsdom fired before any test
 // ran, so the listeners are taken here. The test calls `pageLoad`.
 // `signedOut` boots with no session cookies.
+//
+// It returns only once the boot's work is done (finishBoot below).
 async function bootApp(path, { failingPage, signedOut = false } = {}) {
   vi.resetModules();
   bootedStore = null;
@@ -108,6 +111,8 @@ async function bootApp(path, { failingPage, signedOut = false } = {}) {
   // The idb-keyval mock keeps one copy across the reset too, with the
   // calls of earlier boots.
   vi.mocked((await import("idb-keyval")).clear).mockClear();
+  const Pusher = (await import("pusher-js")).default;
+  const pushersBefore = Pusher.instances.length;
   window.history.replaceState(null, "", path);
   document.getElementById("root")?.remove();
   const root = document.createElement("div");
@@ -141,7 +146,50 @@ async function bootApp(path, { failingPage, signedOut = false } = {}) {
   documentSpy.mockRestore();
   await act(async () => domReady());
   windowSpy.mockRestore();
+  await finishBoot({ root, Pusher, pushersBefore, failingPage });
   return { store: bootedStore, pageLoad };
+}
+
+// The boot goes on after DOMContentLoaded's listener returns. The store
+// loads Pusher's library on a timer, the calendar's first render waits
+// for the calendar's code, and a lazy page loads its code after the
+// render. A test that ended first left that work running during the
+// next test's boot. There a module load can undo the new boot's
+// vi.doMock calls: Vitest applies the queued vi.doMock and vi.doUnmock
+// calls during module loads, and two loads at once can apply them out of
+// order. The new boot then used the real modules and had no store
+// (#247). So a boot ends only when its work has ended:
+//
+// - Pusher has been made.
+// - A page is on the screen: one of the two lazy pages, the login form,
+//   or the crash page. A page whose code fails to load shows the
+//   Suspense fallback until it loads itself again, so those tests wait
+//   for their own end instead.
+//
+// A browser the browser check turned away starts none of this.
+async function finishBoot({ root, Pusher, pushersBefore, failingPage }) {
+  if (window.comealsBrowserCheck?.result === "failed") return;
+  await vi.waitFor(() =>
+    expect(Pusher.instances).toHaveLength(pushersBefore + 1),
+  );
+  if (failingPage !== undefined) return;
+  await vi.waitFor(() => expect(pageOnScreen(root)).not.toBeNull());
+}
+
+// The page a boot ends on: the calendar page, the meal page, the login
+// form, or the crash page. A signed-in person who lands on the login
+// page is sent on to the calendar, so on that path the wait goes on
+// until the calendar is there.
+function pageOnScreen(root) {
+  const inRoot = within(root);
+  for (const heading of Object.values(PAGES)) {
+    const page = inRoot.queryByRole("heading", { name: heading });
+    if (page !== null) return page;
+  }
+  return (
+    inRoot.queryByLabelText("email") ??
+    inRoot.queryByText("Something went wrong with Comeals.")
+  );
 }
 
 async function loaded(name) {
@@ -150,6 +198,9 @@ async function loaded(name) {
 
 beforeEach(() => {
   vi.stubGlobal("__BUILD_ID__", "test-build");
+  // Without a key the store does not load Pusher (pusher_client.js),
+  // and finishBoot waits for it.
+  vi.stubEnv("VITE_PUSHER_KEY", "test-key");
   localStorage.setItem("cacheVersion", "test-build");
   sessionStorage.clear();
   vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -218,6 +269,7 @@ describe("the calendar's first render", () => {
     observer?.disconnect();
     observer = null;
     vi.doUnmock("react-dom/client");
+    failingPageLoad = () => {};
   });
 
   // Every text React adds to the root, in order.
@@ -285,10 +337,16 @@ describe("the calendar's first render", () => {
     await bootApp("/calendar/all/2026-10-01/", {
       failingPage: "calendar/show",
     });
-    failingPageLoad = () => {};
     // The lazy page shows its fallback while lazy_retry waits for the
     // server, so the app did render.
     expect(await screen.findByText("Loading...")).toBeInTheDocument();
+    // lazy_retry has asked the server, and the answer never comes, so
+    // nothing more runs after this test.
+    await vi.waitFor(() =>
+      expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/v1/version", {
+        cache: "no-store",
+      }),
+    );
   });
 });
 
