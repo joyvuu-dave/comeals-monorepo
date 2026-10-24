@@ -979,6 +979,87 @@ test.describe("Admin accounts", () => {
   });
 });
 
+// The reset email links to /password/edit#reset_password_token=... . The
+// part after the # never leaves the browser, so the token is in no
+// request line, and Heroku's router, which logs every request line, never
+// sees it (spec/requests/admin/password_reset_link_spec.rb).
+test.describe("Admin password reset", () => {
+  reseedBeforeGroup();
+
+  // tests/admin/seed.rb stores the digest of this token for
+  // admin@example.com.
+  const RESET_TOKEN = "admin-e2e-reset-token";
+
+  // Every URL the browser asks the server for. A browser never sends the
+  // part after the #, so it is taken off here: what is left is what the
+  // server, and its router, see.
+  function requestedURLs(page) {
+    const urls = [];
+    page.on("request", (request) => {
+      const url = new URL(request.url());
+      url.hash = "";
+      urls.push(url.toString());
+    });
+    return urls;
+  }
+
+  test("sets a new password from the emailed link, with the token in no request", async ({
+    page,
+  }) => {
+    const urls = requestedURLs(page);
+    await page.goto(`/password/edit#reset_password_token=${RESET_TOKEN}`);
+
+    // The page took the token out of the address bar.
+    await expect(page).toHaveURL(/\/password\/edit$/);
+
+    // A confirmation that does not match: the form comes back with the
+    // token still in it, so the second try works.
+    await page.fill("#admin_user_password", "a-new-password");
+    await page.fill("#admin_user_password_confirmation", "something-else");
+    await page.click('input[type="submit"]');
+    await expect(
+      page.getByText("Password confirmation doesn't match Password"),
+    ).toBeVisible();
+
+    await page.fill("#admin_user_password", "a-new-password");
+    await page.fill("#admin_user_password_confirmation", "a-new-password");
+    await page.click('input[type="submit"]');
+    await expect(notice(page)).toHaveText(
+      "Your password has been changed successfully. You are now signed in.",
+    );
+    await expect(page.locator("#header")).toContainText("admin@example.com");
+
+    // Sign out and back in with the new password.
+    await page.goto("/admin-logout");
+    await page.goto("/login");
+    await page.fill("#admin_user_email", "admin@example.com");
+    await page.fill("#admin_user_password", "a-new-password");
+    await page.click('input[type="submit"]');
+    await expect(page.locator("#header")).toContainText("admin@example.com");
+
+    expect(urls.length).toBeGreaterThan(0);
+    expect(urls.filter((url) => url.includes(RESET_TOKEN))).toEqual([]);
+  });
+
+  test("says to open the emailed link when the page has no token", async ({
+    page,
+  }) => {
+    await page.goto("/password/edit");
+
+    await expect(page.locator("#reset-link-needed")).toBeVisible();
+    await expect(page.locator("#admin_user_password")).toBeHidden();
+  });
+
+  test("turns away an old link with the token in the query", async ({
+    page,
+  }) => {
+    await page.goto(`/password/edit?reset_password_token=${RESET_TOKEN}`);
+
+    await expect(page).toHaveURL(/\/password\/new$/);
+    await expect(alert(page)).toContainText("ask for a new one");
+  });
+});
+
 test.describe("Read-only token", () => {
   reseedBeforeGroup();
 
