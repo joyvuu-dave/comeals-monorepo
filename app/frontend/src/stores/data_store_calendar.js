@@ -65,8 +65,22 @@ export function calendarActions(self) {
     // it is fetched once more (#112). A neighbour is not: that would
     // drop the prefetch made a moment ago, and a visit more than 5
     // seconds after a prefetch fetches the month again anyway.
-    channel.bind("pusher:subscription_succeeded", function () {
-      if (isOnScreen(name)) self.loadMonthAsync();
+    //
+    // While the residents channel's confirmation is still on its way,
+    // the fetch is left to it: it fetches the month on screen when it
+    // comes, after this one (appViews in data_store_app.js).
+    function confirmed() {
+      channel.confirmed = true;
+      if (isOnScreen(name) && !self.residentsConfirmationPending) {
+        self.loadMonthAsync();
+      }
+    }
+    channel.bind("pusher:subscription_succeeded", confirmed);
+    // Pusher refused the channel, so it will never confirm it. The
+    // residents channel's confirmation must not wait for it.
+    channel.bind("pusher:subscription_error", function (error) {
+      console.warn(`Pusher refused ${name}:`, error);
+      confirmed();
     });
     return channel;
   }
@@ -135,7 +149,11 @@ export function calendarActions(self) {
       // which have their own channel.
       self.ensureResidentsChannel();
 
-      // Prefetch adjacent months for instant navigation
+      // Prefetch adjacent months for instant navigation. Not while the
+      // residents channel's confirmation is on its way: it drops every
+      // copy of a month, and the fetch of the month on screen after it
+      // comes back here to prefetch them.
+      if (self.residentsConfirmationPending) return;
       var current = dayjs.utc(self.currentDate);
       monthData.prefetchMonth(
         current.subtract(1, "month").format("YYYY-MM-DD"),

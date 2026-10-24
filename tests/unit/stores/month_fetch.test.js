@@ -209,6 +209,20 @@ describe("month_fetch", () => {
       expect(axios.get).toHaveBeenCalledTimes(1);
     });
 
+    // The boot-time prefetch of the month in the address, on a device
+    // that saved it on an earlier visit.
+    it("takes the copy on the device into memory and asks the server nothing", async () => {
+      idbKeyval.get.mockImplementationOnce(() =>
+        Promise.resolve(payload(2026, 4)),
+      );
+
+      prefetchMonth("2026-04-15");
+      await flush();
+
+      expect(monthCache.get(keyFor(2026, 4))).toEqual(payload(2026, 4));
+      expect(axios.get).not.toHaveBeenCalled();
+    });
+
     it("caches nothing when the fetch gets no answer, and does not throw", async () => {
       axios.get.mockRejectedValueOnce(noAnswer());
 

@@ -301,6 +301,10 @@ describe("DataStore: the community time zone", () => {
     // the copy in memory: a copy holds exact instants, so only how it is
     // drawn was out of date.
     it("draws the month on screen again when a prefetch brings a new zone", async () => {
+      // The prefetch of the months next to the one on screen waits for
+      // Pusher's confirmation of the residents channel, which this test
+      // does not need. Without a key nothing waits for Pusher.
+      vi.stubEnv("VITE_PUSHER_KEY", "");
       idbKeyval.get.mockImplementation((key) =>
         Promise.resolve(
           key === JULY
@@ -340,6 +344,10 @@ describe("DataStore: the community time zone", () => {
     // again. The meal page closed the calendar's channels (#38), so they
     // stay closed, and nothing is fetched again.
     it("draws only the events again when the new zone comes on a meal page", async () => {
+      // The prefetch of the months next to the one on screen waits for
+      // Pusher's confirmation of the residents channel, which this test
+      // does not need. Without a key nothing waits for Pusher.
+      vi.stubEnv("VITE_PUSHER_KEY", "");
       monthCache.set(
         JULY,
         monthPayload({ timezone: "America/Los_Angeles", meals: [JULY_MEAL] }),

@@ -31,7 +31,7 @@ import Guest from "./guest";
 import { communityNow } from "../helpers/helpers";
 import { isZeroAmountString } from "../helpers/money";
 
-import { appVolatile, appActions } from "./data_store_app";
+import { appVolatile, appViews, appActions } from "./data_store_app";
 import { mealPageVolatile, mealPageActions } from "./data_store_meal_page";
 import { billsVolatile, billsViews, billsActions } from "./data_store_bills";
 import { calendarVolatile, calendarActions } from "./data_store_calendar";
@@ -194,6 +194,7 @@ export const DataStore = types
     },
   }))
   .views(billsViews)
+  .views(appViews)
   .actions(appActions)
   .actions(mealPageActions)
   .actions(billsActions)

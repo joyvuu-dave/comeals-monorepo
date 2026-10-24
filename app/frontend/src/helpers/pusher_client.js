@@ -49,7 +49,13 @@
 //    drops every copy of a month and a meal, and fetches again what is
 //    on screen and the hosts list (also one still on the wire).
 //    pusher-js subscribes every channel again after a reconnect, so all
-//    of this also runs then.
+//    of this also runs then. The month on screen is covered by two
+//    confirmations, its own and the residents channel's, which come in
+//    either order. It is fetched once, after the later of the two, and
+//    the months next to it are prefetched only after the residents
+//    channel's, which would drop them (data_store_app.js appViews).
+//    A channel Pusher refuses ("pusher:subscription_error") counts as
+//    confirmed, so nothing waits for it.
 // 8. With no VITE_PUSHER_KEY the client never connects and the app runs
 //    without live updates; nothing else changes.
 //

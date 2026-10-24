@@ -147,10 +147,15 @@ describe("calendar channels through the real Pusher client", () => {
     return axios.get.mock.calls.filter(([url]) => url.endsWith(suffix)).length;
   }
 
-  // July 2024 on screen, June and August open and prefetched.
+  // July 2024 on screen, June and August open and prefetched. Pusher
+  // has confirmed every channel, as it does a moment after page load;
+  // the neighbours are prefetched only after the residents channel's
+  // confirmation ("the first confirmations" below).
   async function julyOnScreen() {
     const store = DataStore.create({ meals: [] });
     store.switchMonths("2024-07-15");
+    await flush();
+    confirmEveryChannel();
     await flush();
     return store;
   }
@@ -357,7 +362,9 @@ describe("calendar channels through the real Pusher client", () => {
     window.requestIdleCallback = (callback) => idle.push(callback);
     FakePusher.instance = undefined;
     try {
-      const store = await julyOnScreen();
+      const store = DataStore.create({ meals: [] });
+      store.switchMonths("2024-07-15");
+      await flush();
       expect(FakePusher.instance).toBeUndefined();
       const julyFetches = fetchesOf(2024, 7);
       titles.set("2024-7", "July, changed while connecting");
@@ -365,7 +372,7 @@ describe("calendar channels through the real Pusher client", () => {
       idle.forEach((callback) => callback());
       await flush();
       expect(openNames()).toContain(monthChannel(2024, 7));
-      fire(monthChannel(2024, 7), "pusher:subscription_succeeded");
+      confirmEveryChannel();
       await flush();
 
       expect(fetchesOf(2024, 7)).toBe(julyFetches + 1);
@@ -376,6 +383,131 @@ describe("calendar channels through the real Pusher client", () => {
       delete window.requestIdleCallback;
       vi.doUnmock("pusher-js");
     }
+  });
+
+  // At page load the month on screen, its two neighbours and the
+  // residents channel are subscribed together, and Pusher confirms each
+  // one. Each confirmation needs a fetch that starts after it (#112).
+  // The residents channel's confirmation fetches the month on screen and
+  // the hosts list, and drops every copy of a month. So while it is on
+  // its way, the month's own confirmation leaves the fetch to it, and the
+  // neighbours wait for it before they are fetched, instead of being
+  // fetched, dropped and fetched again.
+  describe("the first confirmations", () => {
+    async function julyMounted() {
+      const store = DataStore.create({ meals: [] });
+      store.switchMonths("2024-07-15");
+      await store.ensureHosts();
+      await flush();
+      return store;
+    }
+
+    it("fetch the month on screen once and the hosts list once beyond the mount's fetches", async () => {
+      await julyMounted();
+      expect(fetchesOf(2024, 7)).toBe(1);
+      expect(hostsFetches()).toBe(1);
+
+      // The month channels first, the residents channel last.
+      confirmEveryChannel();
+      await flush();
+
+      expect(fetchesOf(2024, 7)).toBe(2);
+      expect(hostsFetches()).toBe(2);
+      expect(fetchesOf(2024, 6)).toBe(1);
+      expect(fetchesOf(2024, 8)).toBe(1);
+    });
+
+    it("still fetch the month after the later of the two confirmations", async () => {
+      const store = await julyMounted();
+      titles.set("2024-7", "July, changed while connecting");
+
+      fire(monthChannel(2024, 7), "pusher:subscription_succeeded");
+      await flush();
+      expect(fetchesOf(2024, 7)).toBe(1);
+
+      fire(RESIDENTS, "pusher:subscription_succeeded");
+      await flush();
+      expect(fetchesOf(2024, 7)).toBe(2);
+      expect(store.calendarEvents[0].title).toBe(
+        "July, changed while connecting",
+      );
+    });
+
+    // The two confirmations come in either order.
+    it("fetch the month once, after the month's own confirmation, when the residents channel confirms first", async () => {
+      const store = await julyMounted();
+
+      fire(RESIDENTS, "pusher:subscription_succeeded");
+      await flush();
+      expect(fetchesOf(2024, 7)).toBe(1);
+      expect(hostsFetches()).toBe(2);
+      titles.set("2024-7", "July, changed while connecting");
+
+      fire(monthChannel(2024, 7), "pusher:subscription_succeeded");
+      await flush();
+      expect(fetchesOf(2024, 7)).toBe(2);
+      expect(store.calendarEvents[0].title).toBe(
+        "July, changed while connecting",
+      );
+      expect(fetchesOf(2024, 6)).toBe(1);
+      expect(fetchesOf(2024, 8)).toBe(1);
+    });
+
+    it("leave a later residents update to fetch the month and the hosts list again", async () => {
+      const store = await julyMounted();
+      confirmEveryChannel();
+      await flush();
+      titles.set("2024-7", "July, renamed");
+      hostRows = [[1, "Robert", "A"]];
+
+      fire(RESIDENTS, "update");
+      await flush();
+
+      expect(fetchesOf(2024, 7)).toBe(3);
+      expect(hostsFetches()).toBe(3);
+      expect(store.calendarEvents[0].title).toBe("July, renamed");
+      expect(store.hosts[0].name).toBe("Robert");
+    });
+
+    // A channel that Pusher refuses never confirms. The other must not
+    // wait for it.
+    it("fetch the month and the neighbours when the residents channel is refused", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      await julyMounted();
+      fire(monthChannel(2024, 7), "pusher:subscription_succeeded");
+      await flush();
+      expect(fetchesOf(2024, 7)).toBe(1);
+
+      fire(RESIDENTS, "pusher:subscription_error");
+      await flush();
+
+      expect(fetchesOf(2024, 7)).toBe(2);
+      expect(fetchesOf(2024, 6)).toBe(1);
+      expect(fetchesOf(2024, 8)).toBe(1);
+    });
+
+    it("fetch the month when the month's own channel is refused", async () => {
+      vi.spyOn(console, "warn").mockImplementation(() => {});
+      await julyMounted();
+      fire(RESIDENTS, "pusher:subscription_succeeded");
+      await flush();
+      expect(fetchesOf(2024, 7)).toBe(1);
+
+      fire(monthChannel(2024, 7), "pusher:subscription_error");
+      await flush();
+
+      expect(fetchesOf(2024, 7)).toBe(2);
+      expect(fetchesOf(2024, 6)).toBe(1);
+    });
+
+    // Without a Pusher key nothing ever confirms (the staging app).
+    it("do not hold back the neighbours when Pusher has no key", async () => {
+      vi.stubEnv("VITE_PUSHER_KEY", "");
+      await julyMounted();
+
+      expect(fetchesOf(2024, 6)).toBe(1);
+      expect(fetchesOf(2024, 8)).toBe(1);
+    });
   });
 
   // pusher-js marks every channel unconfirmed when the connection drops,
@@ -408,10 +540,10 @@ describe("calendar channels through the real Pusher client", () => {
 
     expect(store.calendarEvents[0].title).toBe("July, renamed");
     expect(store.hosts[0].name).toBe("Robert");
-    // One fetch for July's own confirmation (#112) and one for the
-    // residents channel's. The order of the two confirmations is not
-    // known, and the month needs a read after both.
-    expect(fetchesOf(2024, 7)).toBe(julyFetches + 2);
+    // The month needs a read after both July's own confirmation (#112)
+    // and the residents channel's. The order of the two is not known,
+    // so the later one fetches it, once ("the first confirmations").
+    expect(fetchesOf(2024, 7)).toBe(julyFetches + 1);
     expect(hostsFetches()).toBe(hostsFetchesBefore + 1);
   });
 
@@ -439,6 +571,7 @@ describe("calendar channels through the real Pusher client", () => {
     it("from Pusher leaves the calendar's channels closed", async () => {
       const store = await mealPageAfterJuly();
       const mealFetchesBefore = mealFetches();
+      const julyFetches = fetchesOf(2024, 7);
       stateChange()({ previous: "connecting", current: "connected" });
       stateChange()({ previous: "connected", current: "connecting" });
       stateChange()({ previous: "connecting", current: "connected" });
@@ -446,7 +579,7 @@ describe("calendar channels through the real Pusher client", () => {
       await flush();
 
       expect(openNames()).toEqual([RESIDENTS, "meal-1"]);
-      expect(fetchesOf(2024, 7)).toBe(1);
+      expect(fetchesOf(2024, 7)).toBe(julyFetches);
       // The meal is fetched again, by its own confirmation and the
       // residents channel's.
       expect(mealFetches()).toBeGreaterThan(mealFetchesBefore);
@@ -456,12 +589,13 @@ describe("calendar channels through the real Pusher client", () => {
     it("from the browser's online event leaves the calendar's channels closed", async () => {
       const store = await mealPageAfterJuly();
       const before = axios.get.mock.calls.length;
+      const julyFetches = fetchesOf(2024, 7);
 
       store.handleReconnect();
       await flush();
 
       expect(openNames()).toEqual([RESIDENTS, "meal-1"]);
-      expect(fetchesOf(2024, 7)).toBe(1);
+      expect(fetchesOf(2024, 7)).toBe(julyFetches);
       expect(axios.get.mock.calls.slice(before).map(([url]) => url)).toEqual([
         expect.stringMatching(/\/meals\/1\/cooks$/),
       ]);

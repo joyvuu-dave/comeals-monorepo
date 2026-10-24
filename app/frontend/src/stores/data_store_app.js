@@ -51,6 +51,40 @@ export function appVolatile() {
   };
 }
 
+// Pusher confirms each channel a moment after it is subscribed, and
+// again after every reconnect. A push sent before that reached no one,
+// so each confirmation is followed by a fetch of what the channel covers
+// (#112). The month on screen is covered by two channels: its own and
+// the residents channel. When both are on their way (at page load, and
+// after a reconnect), the month is fetched once, after the later of the
+// two, instead of once after each. The pusherClient wrapper of a
+// channel carries `confirmed` (subscribeMonth in data_store_calendar.js
+// and ensureResidentsChannel below set it). Without a Pusher key nothing
+// is ever confirmed (the staging app), so nothing waits.
+function confirmationPending(channel) {
+  return (
+    Boolean(import.meta.env.VITE_PUSHER_KEY) &&
+    channel !== null &&
+    channel.confirmed !== true
+  );
+}
+
+export function appViews(self) {
+  return {
+    // The residents channel's confirmation is on its way. It drops
+    // every copy of a month, so the months next to the one on screen
+    // are not fetched until it has come (loadMonth).
+    get residentsConfirmationPending() {
+      return confirmationPending(self.residentsChannel);
+    },
+    // The month on screen's own confirmation is on its way, and it will
+    // fetch the month.
+    get monthOnScreenConfirmationPending() {
+      return confirmationPending(window.Comeals.calendarChannel);
+    },
+  };
+}
+
 export function appActions(self) {
   return {
     afterCreate() {
@@ -89,6 +123,13 @@ export function appActions(self) {
         }
         // pusher-js subscribes every channel again on this same
         // "connected" event, and Pusher confirms each one a moment later.
+        [
+          self.residentsChannel,
+          window.Comeals.calendarChannel,
+          ...self.adjacentChannels,
+        ].forEach(function (channel) {
+          if (channel !== null) channel.confirmed = false;
+        });
         self.handleReconnect({
           residentsWillConfirm: self.residentsChannel !== null,
         });
@@ -190,7 +231,16 @@ export function appActions(self) {
       // reconnect. A push sent before this reached no one, so any copy
       // of a month, a meal or the hosts list read before it may hold an
       // old name. The confirmation does what a push does.
-      self.residentsChannel.bind("pusher:subscription_succeeded", function () {
+      var channel = self.residentsChannel;
+      channel.bind("pusher:subscription_succeeded", function () {
+        channel.confirmed = true;
+        self.handleResidentsUpdate();
+      });
+      // Pusher refused the channel, so it will never confirm it. What
+      // waited for its confirmation goes on without it.
+      channel.bind("pusher:subscription_error", function (error) {
+        console.warn("Pusher refused the residents channel:", error);
+        channel.confirmed = true;
         self.handleResidentsUpdate();
       });
     },
@@ -204,7 +254,12 @@ export function appActions(self) {
       if (self.meal && self.meal.id) {
         self.loadDataAsync();
       }
-      if (window.Comeals.calendarChannel !== null) {
+      // The month's own confirmation fetches it when it is still on
+      // its way, after this one.
+      if (
+        window.Comeals.calendarChannel !== null &&
+        !self.monthOnScreenConfirmationPending
+      ) {
         self.loadMonthAsync();
       }
     },

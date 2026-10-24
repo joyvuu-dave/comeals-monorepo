@@ -243,6 +243,12 @@ describe("live updates in the store", () => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       await flush();
+      // Pusher confirms July's channel and the residents channel. The
+      // months next to July are prefetched only after the residents
+      // channel's confirmation, which would drop them.
+      confirmSubscription(`community-${COMMUNITY}-calendar-2024-7`);
+      confirmSubscription(RESIDENTS_CHANNEL);
+      await flush();
       // July on screen, June and August prefetched: three copies in RAM
       // and on disk, all holding residents' names.
       expect(monthCache.size()).toBe(3);
@@ -444,10 +450,18 @@ describe("live updates in the store", () => {
       firstJuly({ status: 200, data: julyAsRead });
       await flush();
       expect(store.calendarEvents[0].title).toBe("July");
+      // While the residents channel's confirmation is on its way, July's
+      // own confirmation leaves the fetch to it, and that confirmation
+      // fetches July after both.
+      const julyBefore = calendarRequests(2024, 7);
       confirmSubscription(JULY);
+      await flush();
+      expect(calendarRequests(2024, 7)).toBe(julyBefore);
+      confirmSubscription(RESIDENTS_CHANNEL);
       await flush();
 
       expect(store.calendarEvents[0].title).toBe("July, changed");
+      expect(calendarRequests(2024, 7)).toBe(julyBefore + 1);
     });
   });
 
@@ -497,9 +511,11 @@ describe("live updates in the store", () => {
     const JULY = `community-${COMMUNITY}-calendar-2024-7`;
     const AUGUST = `community-${COMMUNITY}-calendar-2024-8`;
 
-    // July on screen, June and August prefetched, the hosts list loaded.
-    // Pusher has confirmed the three months' channels, which open first,
-    // so July's own confirmation fetched it again before the rename.
+    // July on screen and the hosts list loaded. Pusher has confirmed
+    // the three months' channels, which open first. The residents
+    // channel's confirmation is still on its way, so July's own
+    // confirmation left its fetch to it, and June and August wait for
+    // it before they are prefetched.
     async function julyOnScreen() {
       const store = createStore({ meals: [] });
       store.switchMonths("2024-07-15");
@@ -508,9 +524,9 @@ describe("live updates in the store", () => {
       });
       await store.ensureHosts();
       await flush();
-      expect(monthCache.size()).toBe(3);
       [JULY, JUNE, AUGUST].forEach(confirmSubscription);
       await flush();
+      expect(monthCache.size()).toBe(1);
       expect(store.calendarEvents[0].title).toBe("July");
       return store;
     }
