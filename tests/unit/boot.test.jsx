@@ -198,6 +198,94 @@ describe("the routes", () => {
   });
 });
 
+// React 19 shows a Suspense fallback for a lazy page on its first
+// render, even when the page's code is already loaded, and then waits
+// until 300 ms have passed since it showed the fallback before it shows
+// the page. A page that starts on the calendar loads the calendar's code
+// before the first render, so the calendar is the first thing React
+// draws, without that wait. The static shell in index.html says
+// "Loading..." until then.
+describe("the calendar's first render", () => {
+  let observer = null;
+
+  afterEach(() => {
+    observer?.disconnect();
+    observer = null;
+    vi.doUnmock("react-dom/client");
+  });
+
+  // Every text React adds to the root, in order.
+  function watchRoot() {
+    const added = [];
+    observer = new MutationObserver(function (records) {
+      for (const record of records) {
+        for (const node of record.addedNodes) added.push(node.textContent);
+      }
+    });
+    return {
+      added,
+      start() {
+        observer.observe(document.getElementById("root"), {
+          childList: true,
+          subtree: true,
+        });
+      },
+    };
+  }
+
+  it("never shows the Suspense fallback on a calendar address", async () => {
+    const watch = watchRoot();
+    const realAppend = document.body.appendChild.bind(document.body);
+    vi.spyOn(document.body, "appendChild").mockImplementation((node) => {
+      const result = realAppend(node);
+      if (node.id === "root") watch.start();
+      return result;
+    });
+    await bootApp("/calendar/all/2026-10-01/");
+    expect(await loaded("the calendar page")).toBeInTheDocument();
+    expect(watch.added.join("|")).not.toContain("Loading...");
+  });
+
+  // The render now waits for the calendar's code, so it runs after
+  // startApp's try has ended. A crash in it must still draw the crash
+  // page instead of leaving the screen blank (#162).
+  it("shows the crash page when the first render crashes", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    vi.doMock("react-dom/client", () => ({
+      createRoot() {
+        throw new Error("the render broke");
+      },
+    }));
+    await bootApp("/calendar/all/2026-10-01/");
+    expect(
+      await screen.findByText("Something went wrong with Comeals."),
+    ).toBeInTheDocument();
+    const { notifyError } = await import(`${SRC}/helpers/bugsnag`);
+    expect(vi.mocked(notifyError).mock.lastCall[0].message).toBe(
+      "the render broke",
+    );
+  });
+
+  // If the calendar's code fails to load here, the page renders anyway,
+  // and the lazy page's own retry handles it (the next describe).
+  it("renders the app when the calendar's code fails to load", async () => {
+    failingPageLoad = function () {
+      throw new Error("Failed to fetch dynamically imported module");
+    };
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(() => new Promise(function () {})),
+    );
+    await bootApp("/calendar/all/2026-10-01/", {
+      failingPage: "calendar/show",
+    });
+    failingPageLoad = () => {};
+    // The lazy page shows its fallback while lazy_retry waits for the
+    // server, so the app did render.
+    expect(await screen.findByText("Loading...")).toBeInTheDocument();
+  });
+});
+
 // After a deploy, a page loaded before it can ask for a page's code that
 // the server no longer has. The page then loads itself again, and the
 // bills saves on their way are sent first (#150, helpers/lazy_retry.ts).
@@ -222,12 +310,17 @@ describe("a page whose code fails to load", () => {
         "fetch",
         vi.fn(() => Promise.resolve({ ok: true, status: 200 })),
       );
-      // The page's code is only asked for after the page renders, so
-      // the store is made by then.
+      // The page's code is asked for after the store is made: on a
+      // calendar address before the first render, on a meal address
+      // after it.
       failingPageLoad = function () {
         mst.onAction(bootedStore, (call) => order.push(call.name));
-        // jsdom cannot load a page again; this stands in for it.
+        // jsdom cannot load a page again; this stands in for it. On a
+        // calendar address the router has not read the address yet, so
+        // the stand-in has the parts it reads.
         ({ restore: restoreLocation } = fakeLocation({
+          origin: "http://localhost:3000",
+          href: `http://localhost:3000${path}`,
           pathname: path,
           search: "",
           hash: "",

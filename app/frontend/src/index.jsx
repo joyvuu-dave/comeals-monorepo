@@ -82,11 +82,41 @@ function sendBillsBeforeChunkReload() {
   appStore.sendBillsAgainBeforeClose();
 }
 
-const Calendar = React.lazy(
-  lazyRetry(function () {
-    return import("./components/calendar/show");
-  }, sendBillsBeforeChunkReload),
+// The calendar's code, asked for by startApp before the first render
+// on a calendar address. The lazy page takes this same request instead
+// of asking again, so a failed load goes through lazyRetry once, the
+// same as when the lazy page asks for it itself.
+let bootCalendarImport = null;
+
+function importCalendar() {
+  if (bootCalendarImport !== null) {
+    const asked = bootCalendarImport;
+    bootCalendarImport = null;
+    return asked;
+  }
+  return import("./components/calendar/show");
+}
+
+const LazyCalendar = React.lazy(
+  lazyRetry(importCalendar, sendBillsBeforeChunkReload),
 );
+
+// The calendar page's component, once startApp has loaded it. React 19
+// shows a lazy page's Suspense fallback on the first render even when
+// the page's code is already loaded, and then waits until 300 ms have
+// passed since it showed the fallback before it shows the page. So a
+// page that starts on the calendar loads the calendar's code first and
+// renders after (startApp), and the calendar is the first thing React
+// draws. The static shell in index.html says "Loading..." until then.
+let loadedCalendar = null;
+
+function Calendar() {
+  if (loadedCalendar !== null) {
+    const Show = loadedCalendar;
+    return <Show />;
+  }
+  return <LazyCalendar />;
+}
 
 const MealsEdit = React.lazy(
   lazyRetry(function () {
@@ -186,6 +216,43 @@ function startApp() {
   // loads itself (helpers/crash_reload_wait.ts).
   forgetCrashesAfterAnHourWithout();
 
+  if (calendarBoot && communityId() !== null) {
+    // The calendar's code is preloaded by index.html, so this takes
+    // about as long as the main bundle. If it fails, the app renders
+    // anyway, and the lazy page hands the failure to lazyRetry, as
+    // before. The render runs after startApp's try has ended, so a
+    // crash in it draws the crash page here.
+    bootCalendarImport = import("./components/calendar/show");
+    bootCalendarImport
+      .then(
+        function (module) {
+          loadedCalendar = module.default;
+          bootCalendarImport = null;
+        },
+        function () {},
+      )
+      .then(function () {
+        try {
+          renderApp(store);
+        } catch (error) {
+          showBootCrash(document.getElementById("root"), error);
+        }
+      });
+  } else {
+    renderApp(store);
+  }
+
+  // Unregister any leftover service worker from previous deploys.
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.getRegistrations().then(function (registrations) {
+      registrations.forEach(function (registration) {
+        registration.unregister();
+      });
+    });
+  }
+}
+
+function renderApp(store) {
   // OuterErrorBoundary is around everything, because a crash outside
   // ErrorBoundary (the message stack, the banners, the idle timer) took
   // the whole page away and left the shared screen blank. It reads
@@ -235,12 +302,4 @@ function startApp() {
       </StoreContext.Provider>
     </OuterErrorBoundary>,
   );
-  // Unregister any leftover service worker from previous deploys.
-  if ("serviceWorker" in navigator) {
-    navigator.serviceWorker.getRegistrations().then(function (registrations) {
-      registrations.forEach(function (registration) {
-        registration.unregister();
-      });
-    });
-  }
 }
