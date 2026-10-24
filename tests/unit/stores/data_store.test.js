@@ -1099,28 +1099,40 @@ describe("DataStore", () => {
         return Promise.resolve({ status: 200, data: makeCalendarData(1) });
       });
 
-      // Navigate to July: the IndexedDB read starts but does not resolve
-      store.switchMonths("2024-07-01");
+      // The July read is slow, not lost: it must answer before
+      // readDeviceCopy's 500 ms limit, or it counts as no copy and
+      // warms nothing. On the real clock a slow machine could take that
+      // long to get from the read to its answer, so the limit's timer
+      // is a fake one that never runs here (#247). setImmediate stays
+      // real, and lets the store's promises settle.
+      vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+      const settle = () => new Promise((r) => setImmediate(r));
+      try {
+        // Navigate to July: the IndexedDB read starts but does not resolve
+        store.switchMonths("2024-07-01");
 
-      // Navigate to August before the July read resolves
-      store.switchMonths("2024-08-01");
-      await new Promise((r) => setTimeout(r, 0));
-      expect(store.calendarEvents[0].title).toBe("August event");
+        // Navigate to August before the July read resolves
+        store.switchMonths("2024-08-01");
+        await settle();
+        expect(store.calendarEvents[0].title).toBe("August event");
 
-      const fetchCount = axios.get.mock.calls.length;
+        const fetchCount = axios.get.mock.calls.length;
 
-      // The stale July read resolves: no render, no revalidation fetch
-      julyReads[0](julyCached);
-      await new Promise((r) => setTimeout(r, 0));
+        // The stale July read resolves: no render, no revalidation fetch
+        julyReads[0](julyCached);
+        await settle();
 
-      expect(store.calendarEvents.length).toBe(1);
-      expect(store.calendarEvents[0].title).toBe("August event");
-      expect(axios.get.mock.calls.length).toBe(fetchCount);
+        expect(store.calendarEvents.length).toBe(1);
+        expect(store.calendarEvents[0].title).toBe("August event");
+        expect(axios.get.mock.calls.length).toBe(fetchCount);
 
-      // But the read did warm the in-memory cache: navigating back to July
-      // renders synchronously from monthCache, no IndexedDB wait.
-      store.switchMonths("2024-07-01");
-      expect(store.calendarEvents[0].title).toBe("July event");
+        // But the read did warm the in-memory cache: navigating back to
+        // July renders synchronously from monthCache, no IndexedDB wait.
+        store.switchMonths("2024-07-01");
+        expect(store.calendarEvents[0].title).toBe("July event");
+      } finally {
+        vi.useRealTimers();
+      }
     });
   });
 
