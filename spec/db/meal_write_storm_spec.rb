@@ -42,7 +42,12 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # spec/db/settlement_race_spec.rb pins one interleaving exactly, with two
 # raw sessions. This runs thousands of interleavings loosely, and reports
 # the seed of any that breaks.
-RSpec.describe 'a write storm against one meal, with a settlement in it' do
+#
+# A conflict can be refused at COMMIT, and PostgreSQL then answers Rails'
+# ROLLBACK with REFUSED_COMMIT (spec/db/commit_refused_spec.rb). How many
+# times depends on timing, so the warning is allowed here, not counted.
+RSpec.describe 'a write storm against one meal, with a settlement in it',
+               server_notices: [ServerNotices::REFUSED_COMMIT] do
   include_context 'with no test transaction'
 
   # Five threads need five connections. The pool is two (config/database.yml

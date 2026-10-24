@@ -26,7 +26,11 @@ require 'rails_helper'
 # purpose, and a write that RetryOnConflict runs again repeats its queries
 # from the same lines. That is the retry, not an N+1; the same endpoints
 # are scanned in spec/requests, where nothing conflicts.
-RSpec.describe 'thread-local state across requests and jobs on a reused thread', prosopite: false do
+# For the same reason a COMMIT can be refused, and PostgreSQL warns about
+# the ROLLBACK Rails sends after it (spec/db/commit_refused_spec.rb). How
+# many depends on timing, so that warning is allowed, not counted.
+RSpec.describe 'thread-local state across requests and jobs on a reused thread',
+               prosopite: false, server_notices: [ServerNotices::REFUSED_COMMIT] do
   include_context 'with no test transaction'
 
   # Four threads, sixty requests each; the pool below is sized for them.

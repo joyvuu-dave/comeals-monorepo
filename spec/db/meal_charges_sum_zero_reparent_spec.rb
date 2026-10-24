@@ -61,8 +61,10 @@ RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do
   it 'refuses a repair that moves one line to another meal, because the meal it left is now unbalanced' do
     credit = MealCharge.find_by!(meal_id: first_meal.id, kind: 'credit')
 
-    expect { repair { MealCharge.where(id: credit.id).update_all(meal_id: second_meal.id) } }
-      .to raise_error(ActiveRecord::StatementInvalid, /meal #{first_meal.id} refused: its stored lines sum to -80/)
+    expect_one_refused_commit do
+      expect { repair { MealCharge.where(id: credit.id).update_all(meal_id: second_meal.id) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /meal #{first_meal.id} refused: its stored lines sum to -80/)
+    end
 
     expect(credit.reload.meal_id).to eq(first_meal.id)
   end
@@ -75,12 +77,14 @@ RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do
     credit = MealCharge.find_by!(meal_id: first_meal.id, kind: 'credit')
     copy = credit.attributes.except('id').merge('meal_id' => first_meal.id)
 
-    expect do
-      repair do
-        MealCharge.where(id: credit.id).update_all(meal_id: second_meal.id)
-        MealCharge.insert_all!([copy])
-      end
-    end.to raise_error(ActiveRecord::StatementInvalid, /meal #{second_meal.id} refused: its stored lines sum to 80\b/)
+    expect_one_refused_commit do
+      expect do
+        repair do
+          MealCharge.where(id: credit.id).update_all(meal_id: second_meal.id)
+          MealCharge.insert_all!([copy])
+        end
+      end.to raise_error(ActiveRecord::StatementInvalid, /meal #{second_meal.id} refused: its stored lines sum to 80\b/)
+    end
 
     expect(credit.reload.meal_id).to eq(first_meal.id)
     expect([sum_for(first_meal), sum_for(second_meal)]).to eq([BigDecimal('0'), BigDecimal('0')])
@@ -92,8 +96,10 @@ RSpec.describe 'meal charges sum-zero trigger on a re-parented line' do
     # they left is checked first, and refuses the commit.
     lines = MealCharge.where(meal_id: first_meal.id, kind: 'debit')
 
-    expect { repair { lines.update_all(meal_id: second_meal.id) } }
-      .to raise_error(ActiveRecord::StatementInvalid, /meal #{first_meal.id} refused: its stored lines sum to 80\b/)
+    expect_one_refused_commit do
+      expect { repair { lines.update_all(meal_id: second_meal.id) } }
+        .to raise_error(ActiveRecord::StatementInvalid, /meal #{first_meal.id} refused: its stored lines sum to 80\b/)
+    end
 
     expect([sum_for(first_meal), sum_for(second_meal)]).to eq([BigDecimal('0'), BigDecimal('0')])
   end

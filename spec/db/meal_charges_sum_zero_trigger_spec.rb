@@ -52,22 +52,28 @@ RSpec.describe 'meal charges sum-zero trigger' do
   end
 
   it 'refuses an inserted line that unbalances the meal' do
-    expect { extra_line(BigDecimal('-1')) }
-      .to raise_error(ActiveRecord::StatementInvalid,
-                      /meal #{meal.id} refused: its stored lines sum to -1\.0*, not zero/)
+    expect_one_refused_commit do
+      expect { extra_line(BigDecimal('-1')) }
+        .to raise_error(ActiveRecord::StatementInvalid,
+                        /meal #{meal.id} refused: its stored lines sum to -1\.0*, not zero/)
+    end
   end
 
   it 'stores nothing when an unbalancing insert is refused' do
     before_count = MealCharge.where(meal_id: meal.id).count
 
-    suppress(ActiveRecord::StatementInvalid) { extra_line(BigDecimal('-1')) }
+    expect_one_refused_commit do
+      suppress(ActiveRecord::StatementInvalid) { extra_line(BigDecimal('-1')) }
+    end
 
     expect(MealCharge.where(meal_id: meal.id).count).to eq(before_count)
   end
 
   it 'refuses one unit of the grain off, not only a large error' do
-    expect { extra_line(BigDecimal('0.00000001')) }
-      .to raise_error(ActiveRecord::StatementInvalid, /sum to 0\.00000001, not zero/)
+    expect_one_refused_commit do
+      expect { extra_line(BigDecimal('0.00000001')) }
+        .to raise_error(ActiveRecord::StatementInvalid, /sum to 0\.00000001, not zero/)
+    end
   end
 
   it 'judges the end of the transaction, not each statement' do
@@ -99,9 +105,11 @@ RSpec.describe 'meal charges sum-zero trigger' do
     it 'does not turn the sum-zero check off: a repair that leaves a meal unbalanced is refused' do
       credit = MealCharge.find_by!(meal_id: meal.id, kind: 'credit')
 
-      expect do
-        repair { MealCharge.where(id: credit.id).update_all(amount: BigDecimal('81')) }
-      end.to raise_error(ActiveRecord::StatementInvalid, /sum to 1\.0*, not zero/)
+      expect_one_refused_commit do
+        expect do
+          repair { MealCharge.where(id: credit.id).update_all(amount: BigDecimal('81')) }
+        end.to raise_error(ActiveRecord::StatementInvalid, /sum to 1\.0*, not zero/)
+      end
 
       expect(credit.reload.amount).to eq(BigDecimal('80'))
     end
@@ -109,8 +117,10 @@ RSpec.describe 'meal charges sum-zero trigger' do
     it 'checks a deleted line against the meal it came from' do
       debit = MealCharge.find_by!(meal_id: meal.id, kind: 'debit', resident_id: eater.id)
 
-      expect { repair { MealCharge.where(id: debit.id).delete_all } }
-        .to raise_error(ActiveRecord::StatementInvalid, /meal #{meal.id} refused/)
+      expect_one_refused_commit do
+        expect { repair { MealCharge.where(id: debit.id).delete_all } }
+          .to raise_error(ActiveRecord::StatementInvalid, /meal #{meal.id} refused/)
+      end
     end
   end
 end

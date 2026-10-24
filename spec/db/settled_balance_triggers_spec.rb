@@ -25,11 +25,11 @@ RSpec.describe 'settled balance triggers' do
   # ask what the row looks like afterwards.
   include_context 'with no test transaction'
 
-  # This file prints four "WARNING: there is no transaction in progress" lines
-  # and that is expected, not a problem to chase. A deferred constraint fails
-  # during COMMIT, which ends the transaction on the spot; ActiveRecord then
-  # sends its own ROLLBACK and PostgreSQL says there is nothing to roll back.
-  # One line per example whose commit is refused, and there are four of those.
+  # A deferred constraint fails during COMMIT, which ends the transaction on
+  # the spot; ActiveRecord then sends its own ROLLBACK and PostgreSQL warns
+  # that there is nothing to roll back. expect_one_refused_commit
+  # (spec/support/server_notices.rb) checks that warning, once for each
+  # refused commit, so it does not reach the terminal.
 
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
@@ -97,19 +97,23 @@ RSpec.describe 'settled balance triggers' do
     # only the deferred sum-zero check can refuse them. It is what catches
     # a settlement that writes balances that do not add up.
     it 'refuses an inserted balance that unbalances the reconciliation' do
-      expect do
-        as_settlement_of(reconciliation) do
-          add_balance(new_resident('Stranger'), '10')
-        end
-      end.to raise_error(ActiveRecord::StatementInvalid, /sum to 10\.0*, not zero/)
+      expect_one_refused_commit do
+        expect do
+          as_settlement_of(reconciliation) do
+            add_balance(new_resident('Stranger'), '10')
+          end
+        end.to raise_error(ActiveRecord::StatementInvalid, /sum to 10\.0*, not zero/)
+      end
     end
 
     it 'stores nothing when an unbalancing insert is refused' do
       before_count = reconciliation.reconciliation_balances.count
 
-      suppress(ActiveRecord::StatementInvalid) do
-        as_settlement_of(reconciliation) do
-          add_balance(new_resident('Stranger'), '10')
+      expect_one_refused_commit do
+        suppress(ActiveRecord::StatementInvalid) do
+          as_settlement_of(reconciliation) do
+            add_balance(new_resident('Stranger'), '10')
+          end
         end
       end
 
@@ -162,11 +166,13 @@ RSpec.describe 'settled balance triggers' do
     # exist to let a repair leave the books not adding up, so the zero-sum
     # trigger ignores it. This is the one rule with no way around it.
     it 'still refuses a repair that leaves the reconciliation unbalanced' do
-      expect do
-        repair do
-          ReconciliationBalance.where(id: balance.id).update_all(amount: balance.amount + BigDecimal('1'))
-        end
-      end.to raise_error(ActiveRecord::StatementInvalid, /not zero/)
+      expect_one_refused_commit do
+        expect do
+          repair do
+            ReconciliationBalance.where(id: balance.id).update_all(amount: balance.amount + BigDecimal('1'))
+          end
+        end.to raise_error(ActiveRecord::StatementInvalid, /not zero/)
+      end
     end
 
     # The rebuild recipe in docs/runbooks/settled-data-repair.md, run exactly
@@ -231,9 +237,11 @@ RSpec.describe 'settled balance triggers' do
     it 'keeps the original amounts when an unbalanced repair is refused' do
       before_amount = balance.amount
 
-      suppress(ActiveRecord::StatementInvalid) do
-        repair do
-          ReconciliationBalance.where(id: balance.id).update_all(amount: before_amount + BigDecimal('1'))
+      expect_one_refused_commit do
+        suppress(ActiveRecord::StatementInvalid) do
+          repair do
+            ReconciliationBalance.where(id: balance.id).update_all(amount: before_amount + BigDecimal('1'))
+          end
         end
       end
 

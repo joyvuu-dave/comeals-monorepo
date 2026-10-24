@@ -37,11 +37,13 @@ require 'rails_helper'
 #     client sent some, rows were written under them, and a settlement
 #     won while they did.
 #
-# A run prints "WARNING:  there is no transaction in progress" many times
-# (about 60 at the defaults). Each is one COMMIT PostgreSQL refused for a
-# conflict: the refusal ends the transaction, and Rails sends a ROLLBACK
-# after it anyway. Nothing was saved, and the caller saw the conflict
-# (spec/db/commit_refused_spec.rb, #164).
+# PostgreSQL sends "WARNING:  there is no transaction in progress" many
+# times a run (about 60 at the defaults). Each is one COMMIT PostgreSQL
+# refused for a conflict: the refusal ends the transaction, and Rails
+# sends a ROLLBACK after it anyway. Nothing was saved, and the caller saw
+# the conflict (spec/db/commit_refused_spec.rb, #164). How many depends on
+# timing, so the group allows that warning (server_notices below) rather
+# than counting it.
 #
 # Knobs, for turning it up: STORM_SECONDS (15), STORM_CLIENTS (24),
 # STORM_SEED (1). Every client thread needs a connection, so the pool is
@@ -49,7 +51,7 @@ require 'rails_helper'
 # prosopite: false, for the reason in recycled_thread_spec.rb: a write
 # that RetryOnConflict runs again repeats its queries from the same lines.
 RSpec.describe 'a request storm against the whole API, with the nightly jobs and a settlement in it',
-               prosopite: false do
+               prosopite: false, server_notices: [ServerNotices::REFUSED_COMMIT] do
   include_context 'with no test transaction'
 
   before(:all) do

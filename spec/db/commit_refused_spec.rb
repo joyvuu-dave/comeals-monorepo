@@ -11,7 +11,9 @@ require 'rails_helper'
 # "WARNING:  there is no transaction in progress". The request storm
 # prints that warning about 60 times a run, one for each COMMIT it gets
 # refused (#164). This pins what the warning means: nothing was saved,
-# the caller sees the conflict, and RetryOnConflict tries again.
+# the caller sees the conflict, and RetryOnConflict tries again. The
+# examples check the warnings with capture_server_notices
+# (spec/support/server_notices.rb), so none reaches the terminal.
 RSpec.describe 'a COMMIT that PostgreSQL refuses' do
   include_context 'with no test transaction'
 
@@ -48,24 +50,13 @@ RSpec.describe 'a COMMIT that PostgreSQL refuses' do
     end
   end
 
-  # What PostgreSQL tells the app's connection, other than errors.
-  def capturing_notices
-    connection = ActiveRecord::Base.connection.raw_connection
-    notices = []
-    connection.set_notice_processor { |message| notices << message }
-    yield
-    notices
-  ensure
-    connection&.set_notice_processor { |message| warn message }
-  end
-
   it 'saves nothing, raises the conflict, and leaves exactly one "no transaction in progress" warning' do
     other = open_session
-    notices = capturing_notices do
+    notices = capture_server_notices do
       expect { write_second(other, cross: true) }.to raise_error(ActiveRecord::SerializationFailure)
     end
 
-    expect(notices).to eq(["WARNING:  there is no transaction in progress\n"])
+    expect(notices).to eq([ServerNotices::REFUSED_COMMIT])
     expect(Meal.where(id: [first.id, second.id]).order(:id).pluck(:description)).to eq(%w[other second])
     expect(ActiveRecord::Base.connection.transaction_open?).to be(false)
   ensure
@@ -80,7 +71,7 @@ RSpec.describe 'a COMMIT that PostgreSQL refuses' do
     other = open_session
     tries = 0
 
-    notices = capturing_notices do
+    notices = capture_server_notices do
       RetryOnConflict.call(base_delay: 0.0) do
         tries += 1
         write_second(other, cross: tries == 1)
@@ -88,7 +79,7 @@ RSpec.describe 'a COMMIT that PostgreSQL refuses' do
     end
 
     expect(tries).to eq(2)
-    expect(notices).to eq(["WARNING:  there is no transaction in progress\n"])
+    expect(notices).to eq([ServerNotices::REFUSED_COMMIT])
     expect(Meal.where(id: [first.id, second.id]).order(:id).pluck(:description)).to eq(%w[other app])
     expect(Rails.error).to have_received(:report)
       .with(an_instance_of(ActiveRecord::SerializationFailure), hash_including(handled: true)).once
@@ -106,16 +97,19 @@ RSpec.describe 'a COMMIT that PostgreSQL refuses' do
     other = open_session
     tries = 0
 
-    expect do
-      RetryOnConflict.call(base_delay: 0.0) do
-        tries += 1
-        raise "tried #{tries} times" if tries > RetryOnConflict::MAX_ATTEMPTS
+    notices = capture_server_notices do
+      expect do
+        RetryOnConflict.call(base_delay: 0.0) do
+          tries += 1
+          raise "tried #{tries} times" if tries > RetryOnConflict::MAX_ATTEMPTS
 
-        write_second(other, cross: true)
-      end
-    end.to raise_error(ActiveRecord::SerializationFailure)
+          write_second(other, cross: true)
+        end
+      end.to raise_error(ActiveRecord::SerializationFailure)
+    end
 
     expect(tries).to eq(RetryOnConflict::MAX_ATTEMPTS)
+    expect(notices).to eq([ServerNotices::REFUSED_COMMIT] * RetryOnConflict::MAX_ATTEMPTS)
     expect(Meal.where(id: [first.id, second.id]).order(:id).pluck(:description)).to eq(%w[other second])
   ensure
     other&.close

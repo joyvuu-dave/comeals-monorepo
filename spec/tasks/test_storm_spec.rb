@@ -15,7 +15,10 @@ require 'net/http'
 #
 # The task commits from many threads, so this group runs with no test
 # transaction. prosopite: false for the reason in recycled_thread_spec.rb.
-RSpec.describe 'test:storm', prosopite: false, type: :task do
+# Its writes conflict, and a COMMIT PostgreSQL refuses is followed by a
+# ROLLBACK it warns about (spec/db/commit_refused_spec.rb). How many depends
+# on timing, so that warning is allowed, not counted.
+RSpec.describe 'test:storm', prosopite: false, server_notices: [ServerNotices::REFUSED_COMMIT], type: :task do
   include_context 'with no test transaction'
 
   # A stand-in for a Net::HTTP connection to the server bin/storm starts.
