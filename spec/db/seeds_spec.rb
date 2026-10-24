@@ -24,6 +24,11 @@ RSpec.describe 'db/seeds.rb' do
     expect { Rails.application.load_seed }.to change(Community, :count).from(0).to(1)
     expect(Reconciliation.count).to eq(1)
     expect(Meal.unreconciled).to exist
+    # Rake runs a task once per process. A seed that ran billing:recalculate
+    # left it marked as run, so a later spec's invoke did nothing (CI, seed
+    # 60132, 2026-10-23).
+    expect(Rake::Task.task_defined?('billing:recalculate') && Rake::Task['billing:recalculate'].already_invoked)
+      .to be_falsey
   ensure
     srand(previous)
   end
