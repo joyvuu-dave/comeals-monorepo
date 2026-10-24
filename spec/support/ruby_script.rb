@@ -6,24 +6,15 @@ require 'open3'
 # measured (spec/bin/preload/child_coverage.rb) and with any of the other
 # files in spec/bin/preload loaded first, such as a fake for an outside
 # command. Returns the output (standard and error together) and the status.
-#
-# bundled: false runs the script outside Bundler, the way bin/bundle runs:
-# none of the suite's Bundler settings reach it, so nothing in it can
-# resolve the Gemfile or write a lockfile.
 module RubyScript
   PRELOAD = File.expand_path('../bin/preload', __dir__)
 
-  def run_ruby_script(*command, env: {}, preload: [], chdir: Rails.root.to_s, bundled: true)
+  def run_ruby_script(*command, env: {}, preload: [], chdir: Rails.root.to_s)
     files = ['child_coverage', *preload].map { |name| "-r#{File.join(PRELOAD, name)}" }
     dir = ENV.fetch('CHILD_COVERAGE_DIR', nil)
-    run = lambda do
-      rubyopt = [(ENV.fetch('RUBYOPT', nil) if bundled), *files].compact.join(' ')
-      # Named here: Bundler.with_unbundled_env puts back the environment
-      # from before Bundler, which has no CHILD_COVERAGE_DIR yet.
-      base = { 'RUBYOPT' => rubyopt, 'CHILD_COVERAGE_DIR' => dir }
-      Open3.capture2e(base.merge(env), *command, chdir: chdir)
-    end
-    bundled ? run.call : Bundler.with_unbundled_env(&run)
+    rubyopt = [ENV.fetch('RUBYOPT', nil), *files].compact.join(' ')
+    base = { 'RUBYOPT' => rubyopt, 'CHILD_COVERAGE_DIR' => dir }
+    Open3.capture2e(base.merge(env), *command, chdir: chdir)
   end
 end
 
