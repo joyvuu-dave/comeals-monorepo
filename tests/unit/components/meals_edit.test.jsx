@@ -94,8 +94,15 @@ describe("MealsEdit", () => {
       ),
     ).toBeInTheDocument();
     expect(screen.getByText("OPEN")).toBeInTheDocument();
-    expect(screen.getByLabelText("Enter meal description")).toHaveDisplayValue(
-      "Pasta night with garlic bread",
+    // The menu box copies the description into its own state in an
+    // effect (menu_box.jsx), so the text shows one draw after Jane's
+    // row. findByRole stops when the row is there and then waits for
+    // one setTimeout(0), and under load React had not run that effect
+    // and drawn again by then (#247).
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText("Enter meal description"),
+      ).toHaveDisplayValue("Pasta night with garlic bread"),
     );
     expect(screen.getByText("Cooks")).toBeInTheDocument();
     expect(screen.getByText("Signed Up")).toBeInTheDocument();
