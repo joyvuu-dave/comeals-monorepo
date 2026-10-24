@@ -78,11 +78,19 @@ module NonTransactionalCleanup
   # runs at SERIALIZABLE, some of these groups leave a second session that
   # has just written the same rows, and a refused cleanup would leave rows
   # behind for every later example.
+  #
+  # In its own transaction, with no statement timeout for that transaction
+  # (SET LOCAL ends with it). The 10 s limit is for the code under test; on
+  # the shared local server, with several test runs at once, this TRUNCATE
+  # ran past it and failed specs that had nothing to do with it
+  # (spec/config/housekeeping_statement_timeout_spec.rb).
   def self.call
     RetryOnConflict.call do
-      ActiveRecord::Base.connection.execute(
-        "TRUNCATE #{TABLES.join(', ')} CASCADE"
-      )
+      ActiveRecord::Base.transaction do
+        connection = ActiveRecord::Base.connection
+        connection.execute('SET LOCAL statement_timeout = 0')
+        connection.execute("TRUNCATE #{TABLES.join(', ')} CASCADE")
+      end
     end
   end
 end

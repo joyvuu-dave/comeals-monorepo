@@ -25,8 +25,9 @@ require 'rspec/rails'
 Rails.root.glob('spec/support/**/*.rb').each { |f| require f }
 
 # Checks for pending migration and applies them before tests are run.
-# If you are not using ActiveRecord, you can remove this line.
-ActiveRecord::Migration.maintain_test_schema!
+# With no statement timeout: this is the suite's housekeeping, not code
+# under test (spec/support/test_housekeeping.rb).
+TestHousekeeping.without_statement_timeout { ActiveRecord::Migration.maintain_test_schema! }
 
 RSpec.configure do |config|
   config.include FactoryBot::Syntax::Methods
