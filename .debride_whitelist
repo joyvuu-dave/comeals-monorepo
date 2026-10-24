@@ -112,3 +112,7 @@ readonly?
 # Devise's PasswordsController calls it by name, as a before_action on
 # the edit page; AdminUsers::PasswordsController replaces it.
 assert_reset_token_passed
+# ActiveRecord::Tasks::PostgreSQLDatabaseTasks calls it for the connection
+# that runs CREATE and DROP DATABASE; the prepend in
+# config/initializers/database_tasks_statement_timeout.rb overrides it:
+public_schema_config
