@@ -30,6 +30,7 @@ cd "$(dirname "$0")/.."
 
 . bin/lib/output.sh
 . bin/lib/json.sh
+. bin/lib/wait_until_stopped.sh
 
 # The log lines the log check reads: those from this rehearsal, without
 # the boot loop's own H14 lines and the release phase's copy of each
@@ -106,23 +107,15 @@ step "Restore into staging"
 # it is missing.
 heroku ps:scale web=0 -a "$STAGING_APP" 2>/dev/null || true
 heroku ps:scale worker=0 -a "$STAGING_APP" 2>/dev/null || true
-# A dyno takes up to 30 seconds to stop after ps:scale returns. Restore
-# only when no web or worker dyno runs: a worker still running would
-# shut down on production's database, which may not have its tables
-# yet. The same wait as bin/lib/rollback/restore-backup.
-tries=0
-while :; do
-  running=$(heroku ps -a "$STAGING_APP" --json | json "sum(1 for p in d if p.get('type') in ('web', 'worker'))")
-  if [ "$running" = "0" ]; then
-    break
-  fi
-  tries=$((tries + 1))
-  if [ "$tries" -ge 36 ]; then
-    fail "A web or worker dyno still runs 3 minutes after they were scaled to 0, so the backup was not restored."
-    exit 1
-  fi
-  sleep 5
-done
+# Restore only when no web or worker dyno and no Solid Queue process is
+# left: a worker still running would run its jobs on production's
+# database, and shut down on it, when it may not have its tables yet
+# (#245). The same wait as
+# bin/lib/rollback/restore-backup.
+if ! wait_until_stopped "$STAGING_APP"; then
+  fail "So the backup was not restored."
+  exit 1
+fi
 heroku pg:backups:restore "$backup_url" DATABASE_URL \
   -a "$STAGING_APP" --confirm "$STAGING_APP"
 ok "Production backup restored into staging"

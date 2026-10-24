@@ -97,7 +97,10 @@ jobs:
       # nobody writes to the restored database through the new code.
       # Maintenance stops web requests only. The jobs run on the worker
       # dyno, so web and the worker go to 0 before the restore: no job of
-      # the new code runs on the restored database (#179). Web comes back
+      # the new code runs on the restored database (#179). The restore
+      # waits until no Solid Queue process sends heartbeats too, because
+      # heroku ps can list no worker while one still runs (#245,
+      # bin/lib/wait_until_stopped.sh). Web comes back
       # in "Start the web dyno"; the worker comes back in "Roll back", and
       # only when the release it goes back to has a worker process type.
       # The maintenance page shows with no web dyno too.

@@ -55,6 +55,7 @@ fi
 
 . "$(dirname "$0")/lib/output.sh"
 . "$(dirname "$0")/lib/json.sh"
+. "$(dirname "$0")/lib/wait_until_stopped.sh"
 . "$(dirname "$0")/lib/staging_forbidden_vars.sh"
 
 # --- The target app -----------------------------------------------------------
@@ -603,7 +604,9 @@ deploy_push() {
   start_worker
 }
 
-# No job may run while the migrations run, so the worker stops with web.
+# No job may run while the migrations run, so the worker stops with web,
+# and the push waits until no web or worker dyno and no Solid Queue
+# process is left (bin/lib/wait_until_stopped.sh).
 # A release from before the worker dyno has no worker process type, and
 # Heroku refuses to scale one, so ask Heroku first ("web=1:Basic
 # worker=1:Basic").
@@ -633,6 +636,16 @@ deploy_maintenance() {
     info "Scaling web dynos to 0 (the running release has no worker dyno)..."
     heroku ps:scale web=0 -a "$APP"
     ok "Web dynos scaled to 0"
+  fi
+  # No process of the old code may run beside the migrations. heroku ps
+  # can list no worker while a worker process still runs Solid Queue
+  # (#245), so this also waits for the Solid Queue heartbeats to stop.
+  if ! wait_until_stopped "$APP"; then
+    fail "Nothing was pushed, so no migration ran. Maintenance stays on."
+    info "Find out what still runs: heroku ps -a $APP ; heroku logs -a $APP --dyno worker -n 200"
+    info "and: heroku pg:psql -a $APP -c \"SELECT kind, hostname, pid, last_heartbeat_at FROM solid_queue_processes\""
+    info "When nothing runs, run bin/deploy again. To give up the deploy instead, run the commands below."
+    exit 1
   fi
 
   info "Pushing main to Heroku (release phase runs migrations)..."

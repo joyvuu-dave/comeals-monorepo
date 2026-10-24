@@ -52,7 +52,8 @@ class BashCoverage
     'bin/lib/rollback/restore-backup' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/roll-back' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/say-what-to-do' => 'spec/bin/rollback_workflow_spec.rb',
-    'bin/lib/rollback/start-web' => 'spec/bin/rollback_workflow_spec.rb'
+    'bin/lib/rollback/start-web' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/wait_until_stopped.sh' => 'spec/bin/rollback_workflow_spec.rb'
   }.freeze
 
   # bashcov marks a line that holds a whole function, `red() { ...; }`, as

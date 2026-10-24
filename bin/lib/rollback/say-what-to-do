@@ -29,6 +29,9 @@ if [ "$RESTORE" != "success" ]; then
   echo "(heroku pg:backups -a $APP), capture one if not, then run:"
   echo "  heroku ps:scale web=0 -a $APP"
   echo "  heroku ps:scale worker=0 -a $APP   (when heroku ps lists a worker)"
+  echo "  (wait until heroku ps lists no web or worker dyno, and until this prints 0 or"
+  echo "  says the table does not exist: no Solid Queue process sent a heartbeat lately)"
+  echo "  heroku pg:psql -a $APP -c \"SELECT count(*) FROM solid_queue_processes WHERE last_heartbeat_at > (now() AT TIME ZONE 'UTC') - interval '75 seconds'\""
   echo "  heroku pg:backups:restore $BACKUP DATABASE_URL -a $APP --confirm $APP"
   echo "  heroku rollback $TARGET -a $APP"
 elif [ "$ROLL" != "success" ]; then

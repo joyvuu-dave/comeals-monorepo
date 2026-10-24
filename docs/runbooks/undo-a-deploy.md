@@ -67,8 +67,8 @@ day of sign-ups and costs that nobody can type in again from memory.
    - `backup`: the id from step 1.
 
    It turns maintenance mode on, captures a backup of the database as it
-   is, scales web and the worker to 0, waits until neither runs, restores
-   the backup from step 1, and rolls back the code. It waits for the
+   is, scales web and the worker to 0, waits until neither runs and no
+   Solid Queue process is left (below), restores the backup from step 1, and rolls back the code. It waits for the
    rollback's release phase to succeed, scales the worker to 1 when the
    release it went back to has a worker process type, scales web back to
    the number of web dynos it had, waits until they are up, turns
@@ -79,7 +79,15 @@ day of sign-ups and costs that nobody can type in again from memory.
    The worker goes to 0 because maintenance mode does not stop the
    background jobs: Solid Queue runs on the worker dyno, which keeps
    running under maintenance mode. With it at 0, no job of the new code
-   runs on the restored database (#179). A release from before the
+   runs on the restored database (#179). `heroku ps` alone does not show
+   that the worker stopped: on staging it once listed no worker while a
+   worker process that Heroku had restarted still ran Solid Queue for 2
+   more minutes (#245). So the restore also waits until no row of
+   `solid_queue_processes` has a heartbeat from the last 75 seconds
+   (Solid Queue writes one every 60 seconds). A process that stops
+   cleanly deletes its row, so this wait is usually over at once. Both
+   waits give up after 3 minutes, and then nothing is restored. A
+   release from before the
    worker dyno has no worker process type; the workflow then stops the
    worker before the rollback, leaves it at 0, and says so. The
    maintenance page still shows with no web dyno. Heroku Scheduler jobs
@@ -119,7 +127,12 @@ starts web or the worker again by itself.
   then run by hand, in this order:
   `heroku ps:scale web=0 -a comeals-monorepo`, and
   `heroku ps:scale worker=0 -a comeals-monorepo` when `heroku ps` lists a
-  worker,
+  worker. Wait until `heroku ps -a comeals-monorepo` lists no web or
+  worker dyno and this prints 0 (no Solid Queue process sent a heartbeat
+  in the last 75 seconds):
+  `heroku pg:psql -a comeals-monorepo -c "SELECT count(*) FROM solid_queue_processes WHERE last_heartbeat_at > (now() AT TIME ZONE 'UTC') - interval '75 seconds'"`.
+  An error that the table does not exist means no Solid Queue process
+  runs. Then
   `heroku pg:backups:restore <id> DATABASE_URL -a comeals-monorepo --confirm comeals-monorepo`,
   `heroku rollback <release> -a comeals-monorepo`, wait until
   `heroku releases -a comeals-monorepo` shows that release as succeeded,
@@ -180,6 +193,9 @@ step 2.)
    heroku pg:backups:capture -a comeals-monorepo
    heroku ps:scale web=0 -a comeals-staging
    heroku ps:scale worker=0 -a comeals-staging  # fails, harmless, when staging has no worker
+   # Wait until this lists no web or worker dyno, and until the heartbeat
+   # query in "If it stops half way" prints 0 for -a comeals-staging.
+   heroku ps -a comeals-staging
    heroku pg:backups:restore "$(heroku pg:backups:url -a comeals-monorepo)" \
      DATABASE_URL -a comeals-staging --confirm comeals-staging
    git push --force https://git.heroku.com/comeals-staging.git \

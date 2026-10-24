@@ -265,7 +265,9 @@ runs the commit production runs now, and when `bin/rollback-check`
 finds a migration since the target and it has neither a backup nor
 `code_only_is_safe`. With a backup, it turns maintenance mode on,
 captures a backup of the database as it is, scales web and the worker
-to 0 so no background job runs (#179), and restores the given one. Then
+to 0 so no background job runs (#179), waits until no web or worker
+dyno and no Solid Queue process is left (#245,
+`bin/lib/wait_until_stopped.sh`), and restores the given one. Then
 it runs `heroku rollback`, waits for its release phase to succeed,
 checks that the running commit changed, scales the worker back to 1 when
 the release it went back to has a worker process type, scales web back

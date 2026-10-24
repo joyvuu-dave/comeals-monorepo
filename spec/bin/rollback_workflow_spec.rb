@@ -574,8 +574,11 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.out).to include('Maintenance mode is on. Web and the worker may be at 0')
       expect(result.out).to include("  heroku ps:scale web=0 -a comeals-monorepo\n  " \
                                     "heroku ps:scale worker=0 -a comeals-monorepo   (when heroku ps lists a worker)\n")
-      expect(result.out)
-        .to include('  heroku pg:backups:restore b245 DATABASE_URL -a comeals-monorepo --confirm comeals-monorepo')
+      expect(result.out).to include(
+        '  heroku pg:psql -a comeals-monorepo -c "SELECT count(*) FROM solid_queue_processes ' \
+        "WHERE last_heartbeat_at > (now() AT TIME ZONE 'UTC') - interval '75 seconds'\"\n  " \
+        'heroku pg:backups:restore b245 DATABASE_URL -a comeals-monorepo --confirm comeals-monorepo'
+      )
       expect(result.out).to include('  heroku rollback v612 -a comeals-monorepo')
       expect(result.out).to include("  heroku ps:scale worker=1 -a comeals-monorepo\n  " \
                                     'heroku ps:scale web=2 -a comeals-monorepo')
