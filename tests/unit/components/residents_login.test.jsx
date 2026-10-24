@@ -261,12 +261,17 @@ describe("ResidentsLogin", () => {
     typeCredentials();
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
+    // One wait for both. The refusal frees the form (a React state
+    // change, drawn on a later task) and then shows the toast (a MobX
+    // change, seen at once). Under load the wait's next check could run
+    // between the two and find the toast while the button was still
+    // disabled (#247).
     await vi.waitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         "Incorrect password",
       ]);
+      expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
     });
-    expect(screen.getByRole("button", { name: "Submit" })).toBeEnabled();
   });
 
   it("a refusal that lands after the page is gone touches nothing", async () => {
@@ -524,14 +529,16 @@ describe("ResidentsLogin", () => {
       screen.getByRole("button", { name: "Reset your password" }),
     );
 
+    // One wait for both, as in "a refused login shows the reason and
+    // frees the form".
     await vi.waitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         "No resident with that email address.",
       ]);
+      expect(
+        screen.getByRole("button", { name: "Reset your password" }),
+      ).toBeEnabled();
     });
-    expect(
-      screen.getByRole("button", { name: "Reset your password" }),
-    ).toBeEnabled();
   });
 
   it("a password reset answer after the page is gone touches nothing", async () => {
