@@ -22,6 +22,14 @@ function monthChannelName(communityId, month) {
 }
 
 export function calendarActions(self) {
+  // The zone and the month drawEvents drew last. Each Pusher
+  // confirmation fetches the month on screen again (#112), and the
+  // answer is almost always the month already drawn. Drawing it again
+  // replaced every event and drew the whole calendar again, which was
+  // most of the page's blocking time on a slow phone. The zone is part
+  // of it because the same month reads differently in another zone.
+  var lastDrawn = null;
+
   // Whether a channel is the one for the month on screen. Read when a
   // handler fires: the month on screen changes as soon as a navigation
   // starts (switchMonths), before its answer arrives.
@@ -137,6 +145,10 @@ export function calendarActions(self) {
     // Turn a month's events into the calendar's events, in the zone the
     // cookie has now.
     drawEvents(data) {
+      var drawing = Cookie.get("timezone") + "|" + JSON.stringify(data);
+      if (drawing === lastDrawn) return;
+      lastDrawn = drawing;
+
       // Build the full events array as plain JS, then replace the
       // observable in one shot for a single MobX notification.
       var allEvents = [];
@@ -232,6 +244,7 @@ export function calendarActions(self) {
       self.adjacentChannels = channels.slice(1);
     },
     clearCalendarEvents() {
+      lastDrawn = null;
       self.calendarEvents.clear();
       self.calendarEventsVersion += 1;
     },

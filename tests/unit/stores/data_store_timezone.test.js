@@ -116,6 +116,77 @@ describe("DataStore: the community time zone", () => {
     await settle();
   }
 
+  // Each Pusher confirmation fetches the month on screen again (#112),
+  // and the answer is almost always the month already drawn. Drawing it
+  // again replaced every event and drew the whole calendar again, which
+  // was most of the page's blocking time on a slow phone. So the same
+  // month in the same zone is not drawn again.
+  describe("drawing a month again", () => {
+    it("skips a month that is the same as the one drawn", async () => {
+      serverAnswers(monthPayload({ meals: [JULY_MEAL] }));
+      const store = createDataStore();
+      await showJuly(store);
+      const version = store.calendarEventsVersion;
+      const events = store.calendarEvents.slice();
+
+      store.loadMonthAsync();
+      await settle();
+
+      expect(axios.get).toHaveBeenCalledWith(
+        expect.stringMatching(/\/calendar\/2026-07-15$/),
+      );
+      expect(store.calendarEventsVersion).toBe(version);
+      expect(store.calendarEvents.slice()).toEqual(events);
+    });
+
+    it("draws a month that changed", async () => {
+      serverAnswers(monthPayload({ meals: [JULY_MEAL] }));
+      const store = createDataStore();
+      await showJuly(store);
+      const version = store.calendarEventsVersion;
+
+      serverAnswers(
+        monthPayload({ meals: [{ ...JULY_MEAL, title: "Dinner, moved" }] }),
+      );
+      store.loadMonthAsync();
+      await settle();
+
+      expect(store.calendarEventsVersion).toBe(version + 1);
+      expect(store.calendarEvents[0].title).toBe("Dinner, moved");
+    });
+
+    // The same month reads differently in another zone.
+    it("draws the same month again after the zone changed", async () => {
+      const july = monthPayload({ meals: [JULY_MEAL] });
+      serverAnswers(july);
+      const store = createDataStore();
+      await showJuly(store);
+      expect(store.calendarEvents[0].start.getUTCHours()).toBe(18);
+      const version = store.calendarEventsVersion;
+
+      Cookie.set("timezone", "America/New_York");
+      store.drawEvents(july);
+
+      expect(store.calendarEventsVersion).toBe(version + 1);
+      expect(store.calendarEvents[0].start.getUTCHours()).toBe(21);
+    });
+
+    // A month change clears the events before it draws the new month,
+    // so coming back draws it even though it was the last one drawn.
+    it("draws the same month again after the events were cleared", async () => {
+      const july = monthPayload({ meals: [JULY_MEAL] });
+      serverAnswers(july);
+      const store = createDataStore();
+      await showJuly(store);
+
+      store.clearCalendarEvents();
+      expect(store.calendarEvents).toHaveLength(0);
+      store.drawEvents(july);
+
+      expect(store.calendarEvents).toHaveLength(1);
+    });
+  });
+
   describe("a month the server sends", () => {
     // The fixture cookie says Los Angeles. The cookie mock keeps what
     // the store writes, so what the store reads next is the new zone.
