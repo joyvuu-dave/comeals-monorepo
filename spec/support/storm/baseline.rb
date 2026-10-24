@@ -53,9 +53,13 @@ module Storm
     end
 
     # On its own thread, the way a storm client runs, so it checks out a
-    # connection of its own.
+    # connection of its own. `value` raises the thread's error again here,
+    # so Ruby's own report of it would only print a copy.
     def call
-      Thread.new { measure }.value
+      Thread.new do
+        Thread.current.report_on_exception = false
+        measure
+      end.value
     end
 
     private
