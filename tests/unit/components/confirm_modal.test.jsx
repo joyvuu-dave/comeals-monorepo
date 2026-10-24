@@ -164,10 +164,22 @@ describe("ConfirmModal", () => {
   });
 
   describe("armMs", () => {
+    // The dialog reads the time with performance.now(). On the real
+    // clock this test passed only if the machine got from the open to
+    // the click in less than 400 ms, and under load it did not (#247).
+    // So the clock stands still here, and moves 399 ms by hand.
     it("a confirm inside armMs does nothing — the second tap of a double-tap cannot confirm", () => {
-      const { onConfirm } = renderModal({ armMs: 400 });
-      fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-      expect(onConfirm).not.toHaveBeenCalled();
+      let now = 10_000;
+      const nowSpy = vi.spyOn(performance, "now").mockImplementation(() => now);
+      try {
+        const { onConfirm } = renderModal({ armMs: 400 });
+        const confirm = screen.getByRole("button", { name: "Delete" });
+        now += 399;
+        fireEvent.click(confirm);
+        expect(onConfirm).not.toHaveBeenCalled();
+      } finally {
+        nowSpy.mockRestore();
+      }
     });
 
     it("a confirm after armMs goes through", () => {
