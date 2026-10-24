@@ -321,10 +321,12 @@ Rails.logger.debug do
   "#{community.common_house_reservations.count} CommonHouseReservation#{'s' unless CommonHouseReservation.one?} created"
 end
 
-# Balances cache — in production the daily billing:recalculate task
-# refreshes it. A fresh dev database should not have to wait for 3am.
-Rails.application.load_tasks unless Rake::Task.task_defined?('billing:recalculate')
-Rake::Task['billing:recalculate'].invoke
+# Balances cache — in production the daily RefreshBalancesJob refreshes
+# it. A fresh dev database should not have to wait for the night. The job
+# itself, not the billing:recalculate task that wraps it: Rake runs a task
+# once per process, so a seed run inside a spec left the task marked as
+# run for every later spec.
+RefreshBalancesJob.perform_now
 
 Rails.logger.debug { "#{ResidentBalance.count} ResidentBalances computed" }
 
