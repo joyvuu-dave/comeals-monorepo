@@ -243,6 +243,23 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.out).to include('comeals-monorepo runs 2 web dyno(s) and no worker dyno. Scaling web to 0.')
     end
 
+    # bin/deploy leaves web and the worker at 0 when a maintenance deploy
+    # stops: a failed release phase, a failed ledger check. A rollback
+    # from there must still end with the site serving. With web_count 0,
+    # "Start the web dyno" scaled web to 0, found 0 up, and maintenance
+    # went off with no web dyno.
+    it 'brings web back as one dyno when web was at 0, and says so' do
+      sandbox.rule('curl', '* https://api.heroku.com/apps/comeals-monorepo/formation',
+                   out: '[{"type":"web","quantity":0},{"type":"worker","quantity":0}]')
+
+      result = restore
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.outputs).to eq('web_count' => '1')
+      expect(result.out).to include('comeals-monorepo runs 0 web dyno(s) and a worker dyno. Scaling both to 0.',
+                                    'Web will come back as 1 dyno, so the site serves after the rollback.')
+    end
+
     # #245. heroku ps can list no worker while a worker process that
     # Heroku restarted still runs Solid Queue. Such a process writes a
     # heartbeat to solid_queue_processes every 60 seconds, so the restore

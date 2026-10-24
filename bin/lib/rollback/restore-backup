@@ -22,7 +22,15 @@ formation=$(api "https://api.heroku.com/apps/$APP/formation")
 # one.
 web_count=$(json "sum(f['quantity'] for f in d if f['type'] == 'web')" <<< "$formation")
 has_worker=$(json "str(any(f['type'] == 'worker' for f in d)).lower()" <<< "$formation")
-echo "web_count=$web_count" >> "$GITHUB_OUTPUT"
+# bin/deploy leaves web at 0 when a maintenance deploy stops part way.
+# The rollback must still end with the site serving, so bring back one.
+if [ "$web_count" = 0 ]; then
+  echo "Web will come back as 1 dyno, so the site serves after the rollback."
+  start_count=1
+else
+  start_count=$web_count
+fi
+echo "web_count=$start_count" >> "$GITHUB_OUTPUT"
 # No job of the new code may run on the restored database, so the worker
 # stops too. A release from before the worker dyno has no worker
 # process type, and Heroku refuses to scale one.

@@ -71,7 +71,8 @@ day of sign-ups and costs that nobody can type in again from memory.
    Solid Queue process is left (below), restores the backup from step 1, and rolls back the code. It waits for the
    rollback's release phase to succeed, scales the worker to 1 when the
    release it went back to has a worker process type, scales web back to
-   the number of web dynos it had, waits until they are up, turns
+   the number of web dynos it had (one when it had none, as after a
+   maintenance deploy that stopped part way), waits until they are up, turns
    maintenance off, and runs the smoke test. Then it does the same bookkeeping as a code-only rollback.
    While maintenance is on, Heroku answers every web request with the
    maintenance page, so nobody can write through a page or the API.
