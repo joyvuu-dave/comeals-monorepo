@@ -370,7 +370,9 @@ describe("calendar channels through the real Pusher client", () => {
       titles.set("2024-7", "July, changed while connecting");
 
       idle.forEach((callback) => callback());
-      await flush();
+      // The idle callback starts the import of pusher-js. Under load it
+      // can take longer than flush(), so wait for the Pusher it makes.
+      await vi.waitFor(() => expect(FakePusher.instance).toBeDefined());
       expect(openNames()).toContain(monthChannel(2024, 7));
       confirmEveryChannel();
       await flush();
