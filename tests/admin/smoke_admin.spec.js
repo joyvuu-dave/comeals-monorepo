@@ -6,10 +6,20 @@ const { test, expect } = require("../helpers/test");
 const { checkAdmin, ADMIN_REFUSED } = require("../smoke/checks");
 
 test.describe("the smoke test's admin check", () => {
-  test("signs in, opens the dashboard and the reconciliations, and changes nothing it can avoid", async ({
+  test("signs in, opens the dashboard and the reconciliations, and does not ask to be remembered", async ({
     page,
     baseURL,
   }) => {
+    const logins = [];
+    page.on("request", (request) => {
+      if (
+        request.method() === "POST" &&
+        new URL(request.url()).pathname === "/login"
+      ) {
+        logins.push(request.postData());
+      }
+    });
+
     const passed = await checkAdmin(
       page,
       baseURL,
@@ -22,12 +32,12 @@ test.describe("the smoke test's admin check", () => {
       "admin dashboard renders",
       "admin reconciliations page renders",
     ]);
-    // "Remember me" is on by default. Left on, the login would write a
-    // remember token to the admin's row; the smoke test unticks it.
-    const cookies = await page.context().cookies();
-    expect(cookies.map((c) => c.name)).not.toContain(
-      "remember_admin_user_token",
-    );
+    // One login. "Remember me" is ticked by default (active_admin.js);
+    // sent ticked, Devise would write a remember time on the admin's row.
+    // A ticked box sends remember_me=1 after the hidden 0.
+    expect(logins).toHaveLength(1);
+    expect(logins[0]).toContain("admin_user%5Bremember_me%5D=0");
+    expect(logins[0]).not.toContain("admin_user%5Bremember_me%5D=1");
   });
 
   test("fails with what to update when the login is refused", async ({
