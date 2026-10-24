@@ -54,7 +54,8 @@
 //    without live updates; nothing else changes.
 //
 // This file is only the transport. It loads pusher-js outside the main
-// bundle, so first paint does not wait for it (#44 item 1). The library
+// bundle, so first paint does not wait for it (#44 item 1), and only
+// after the page has loaded, when the main thread is idle. The library
 // is 60 KB and nothing on screen needs it.
 //
 // The rest of the app talks to `pusherClient`, which has the same shape
@@ -155,7 +156,27 @@ export function startPusher() {
     connect(window.Pusher);
     return;
   }
-  import("pusher-js").then(function (mod) {
-    connect(mod.default);
-  });
+  // The library loads after the page's load event, when the main thread
+  // is idle, so its download does not compete with the first screen.
+  // Nothing is missed meanwhile: subscriptions wait in the queue, and
+  // each confirmation fetches its data again (#112). An idle moment is
+  // not waited for longer than 2 seconds. Safari has no
+  // requestIdleCallback; there it loads on the next turn.
+  function load() {
+    import("pusher-js").then(function (mod) {
+      connect(mod.default);
+    });
+  }
+  function whenIdle() {
+    if (typeof window.requestIdleCallback === "function") {
+      window.requestIdleCallback(load, { timeout: 2000 });
+    } else {
+      setTimeout(load, 0);
+    }
+  }
+  if (document.readyState === "complete") {
+    whenIdle();
+  } else {
+    window.addEventListener("load", whenIdle, { once: true });
+  }
 }

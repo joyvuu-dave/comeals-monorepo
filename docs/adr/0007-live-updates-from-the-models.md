@@ -207,6 +207,13 @@ on the wire drops its answer instead of storing it. Meal fetches carry
 a version token, so the newest fetch's answer is the only one that
 reaches the screen or the cache. Midnight refetches the month.
 
+The browser loads the Pusher library only after the page's load event,
+when the main thread is idle (at most 2 seconds later), so its download
+does not slow the first screen (2026-10-24). A push sent before a
+channel is confirmed reaches no one, so each confirmation fetches what
+the channel covers once more (#112). That holds however late the
+library connects.
+
 ## Consequences
 
 - A new model that appears on a screen needs two things: its table in

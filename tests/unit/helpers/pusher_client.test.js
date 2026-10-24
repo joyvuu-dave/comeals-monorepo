@@ -145,6 +145,72 @@ describe("pusherClient", () => {
     ]);
   });
 
+  // The library loads after the page's load event, when the main thread
+  // is idle, so its download does not compete with the first screen.
+  describe("when pusher-js loads", () => {
+    let Fake;
+
+    beforeEach(() => {
+      Fake = fakePusherClass();
+      vi.doMock("pusher-js", () => ({ default: Fake }));
+    });
+
+    afterEach(() => {
+      vi.doUnmock("pusher-js");
+      vi.restoreAllMocks();
+      delete window.requestIdleCallback;
+    });
+
+    async function settle() {
+      for (let i = 0; i < 5; i++) await new Promise((r) => setTimeout(r, 0));
+    }
+
+    it("waits for the load event, then for an idle moment", async () => {
+      const readyState = vi
+        .spyOn(document, "readyState", "get")
+        .mockReturnValue("loading");
+      const idle = [];
+      window.requestIdleCallback = vi.fn((callback, options) => {
+        idle.push([callback, options]);
+      });
+      const { pusherClient, startPusher } = await freshClient({ key: "k" });
+      pusherClient.subscribe("meal-4");
+
+      startPusher();
+      await settle();
+      expect(window.requestIdleCallback).not.toHaveBeenCalled();
+
+      readyState.mockReturnValue("complete");
+      window.dispatchEvent(new Event("load"));
+      expect(idle).toHaveLength(1);
+      // An idle moment may never come on a busy page, so it is not
+      // waited for longer than this.
+      expect(idle[0][1]).toEqual({ timeout: 2000 });
+      await settle();
+      expect(Fake.instances).toHaveLength(0);
+
+      idle[0][0]();
+      await vi.waitFor(() => expect(Fake.instances).toHaveLength(1));
+      // What was asked for while it loaded is sent once it connects.
+      expect(Fake.instances[0].calls).toEqual([["subscribe", "meal-4"]]);
+    });
+
+    it("waits only for an idle moment when the page has already loaded", async () => {
+      const idle = [];
+      window.requestIdleCallback = vi.fn((callback) => idle.push(callback));
+      const { startPusher } = await freshClient({ key: "k" });
+
+      startPusher();
+      expect(idle).toHaveLength(1);
+      await settle();
+      expect(Fake.instances).toHaveLength(0);
+
+      idle[0]();
+      await vi.waitFor(() => expect(Fake.instances).toHaveLength(1));
+    });
+  });
+
+  // Safari has no requestIdleCallback; there it loads on the next turn.
   it("loads pusher-js itself when no stub is present", async () => {
     const Fake = fakePusherClass();
     vi.doMock("pusher-js", () => ({ default: Fake }));

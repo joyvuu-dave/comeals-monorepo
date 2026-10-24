@@ -345,6 +345,39 @@ describe("calendar channels through the real Pusher client", () => {
     expect(monthCache.get(juneKey)).toBeDefined();
   });
 
+  // The real library loads after the page's load event, when the main
+  // thread is idle (pusher_client.js). The month is drawn before then.
+  // The subscriptions wait in the queue, and when Pusher confirms them,
+  // the month on screen is fetched once more, so a change made while
+  // the page was connecting is not lost (#112).
+  it("a Pusher that connects after the month is drawn still fetches the month on screen when it confirms", async () => {
+    delete window.Pusher;
+    vi.doMock("pusher-js", () => ({ default: FakePusher }));
+    const idle = [];
+    window.requestIdleCallback = (callback) => idle.push(callback);
+    FakePusher.instance = undefined;
+    try {
+      const store = await julyOnScreen();
+      expect(FakePusher.instance).toBeUndefined();
+      const julyFetches = fetchesOf(2024, 7);
+      titles.set("2024-7", "July, changed while connecting");
+
+      idle.forEach((callback) => callback());
+      await flush();
+      expect(openNames()).toContain(monthChannel(2024, 7));
+      fire(monthChannel(2024, 7), "pusher:subscription_succeeded");
+      await flush();
+
+      expect(fetchesOf(2024, 7)).toBe(julyFetches + 1);
+      expect(store.calendarEvents[0].title).toBe(
+        "July, changed while connecting",
+      );
+    } finally {
+      delete window.requestIdleCallback;
+      vi.doUnmock("pusher-js");
+    }
+  });
+
   // pusher-js marks every channel unconfirmed when the connection drops,
   // subscribes them all again when it is back, and Pusher confirms each
   // one again. A rename pushed in between reaches no one. The residents
