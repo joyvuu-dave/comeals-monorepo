@@ -162,22 +162,4 @@ $(function () {
       $rotationMenu.val(containing.length === 1 ? containing.val() : "");
     });
   }
-
-  // Say which login this is, and point residents at theirs. The
-  // resident app lives on this same host minus the admin subdomain —
-  // true in production (comeals.com) and in dev (lvh.me:3000).
-  if (window.location.pathname === "/login") {
-    var userUrl =
-      window.location.protocol +
-      "//" +
-      window.location.host.replace(/^admin\./, "");
-    $("body").prepend(
-      '<div class="admin-login-banner">' +
-        "<h3>Admin Login</h3>" +
-        '<a href="' +
-        userUrl +
-        '">Looking for the resident login?</a>' +
-        "</div>",
-    );
-  }
 });
