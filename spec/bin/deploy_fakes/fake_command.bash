@@ -16,7 +16,7 @@
 #                of Heroku's git repository)
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
-#   logs, check_runs, real_git
+#   logs, check_runs, push_output, real_git
 set +x
 
 name=${0##*/}
@@ -230,6 +230,8 @@ git_default() {
       echo $(($(<"$state/release") + 1)) >"$state/release"
       # The new release has a worker process type, at 0 when it is new.
       [ "$(<"$state/worker")" = none ] && echo 0 >"$state/worker"
+      # Heroku's build output reaches git push's standard error.
+      cat "$home/push_output" >&2
       echo "remote: Verifying deploy... done."
       ;;
     "remote get-url") exec "$real_git" "$@" ;;

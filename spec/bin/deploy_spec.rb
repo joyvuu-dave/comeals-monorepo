@@ -848,7 +848,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
-      expect(result.output).to include('The release phase did not succeed (status: failed). Its output:',
+      expect(result.output).to include('The release phase did not succeed (status: failed). Its output is above.',
                                        'Running release command... migrating')
       expect(result.output).not_to include('Maintenance stays on', recovery_banner, 'Cache flushed')
       expect(deploy.calls).to include('heroku releases:output -a comeals-monorepo')
@@ -875,7 +875,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
-      expect(result.output).to include('The release phase did not succeed (status: pending). Its output:')
+      expect(result.output).to include('The release phase did not succeed (status: pending). Its output is above.')
       expect(deploy.calls_to('heroku').grep(/releases -a/).size).to eq(1 + 36)
       expect(deploy.calls_to('sleep')).to eq(['sleep 5'] * 36)
     end
@@ -1018,7 +1018,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
       expect(result.status).to eq(1)
       expect(result.output).to include(
-        'The release phase did not succeed (status: failed). Its output:',
+        'The release phase did not succeed (status: failed). Its output is above.',
         'Maintenance stays on and web and the worker stay at 0. Do not scale them up until you know which ' \
         'migrations ran: the old code may not work on the new schema.'
       )
@@ -1232,6 +1232,104 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                      'SMOKE TEST FAILED — the deployed app is broken. Roll back.')
     expect(result.output).not_to include('Deploy complete!', recovery_banner)
     expect_production(maintenance: false, web: 1, pushed: true)
+  end
+
+  # Everything the run prints, the build output Heroku sends back through
+  # git push and the release phase output included, also goes to one file
+  # per run. The person running the deploy keeps it.
+  describe 'the deploy log' do
+    it 'saves everything it prints to tmp/deploy/deploy-<time>-<app>.log, and still prints it' do
+      deploy.set(push_output: "remote: Building source\nremote: Compiling assets\n")
+
+      result = deploy.run('--yes')
+
+      expect(deploy.deploy_logs.size).to eq(1)
+      log = deploy.deploy_logs.first
+      expect(File.basename(log)).to match(/\Adeploy-\d{8}T\d{6}Z-comeals-monorepo\.log\z/)
+      expect(File.read(log).gsub(/\e\[[0-9;]*m/, '')).to eq(result.output)
+      expect(result.output).to include('Comeals Deploy', 'remote: Building source', 'remote: Compiling assets',
+                                       'Release phase output:', 'Running release command... migrating',
+                                       'Deploy complete!',
+                                       "The whole output of this run is in #{log.delete_prefix("#{deploy.repo}/")}")
+    end
+
+    it 'saves the log of a run that fails' do
+      deploy.rule('heroku', '^pg:backups:capture', exit: 1, stderr: "backup failed\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(File.read(deploy.deploy_logs.first)).to include('backup failed', 'Warnings seen during this deploy')
+    end
+
+    it 'names the staging app in the file name on staging' do
+      deploy.production(config: { 'COMEALS_STAGING' => '1' })
+
+      deploy.run('--yes', env: { 'DEPLOY_APP' => 'comeals-staging' })
+
+      expect(File.basename(deploy.deploy_logs.first)).to match(/\Adeploy-\d{8}T\d{6}Z-comeals-staging\.log\z/)
+    end
+  end
+
+  # At the end of every run, worked or not, the warnings in the run's
+  # output and in the app log lines the log check read, each one once,
+  # against docs/deploy-known-warnings.txt. Warnings never change the exit
+  # status: the deploy is already done.
+  describe 'the warnings section' do
+    let(:buildpack_warning) do
+      "remote: ###### WARNING:\nremote:\nremote:        Your app's bin/bundle is not the one Bundler made\n"
+    end
+
+    it 'lists new and known warnings from the output and the app log, and still succeeds' do
+      deploy.set(push_output: buildpack_warning)
+      deploy.rule('heroku', '^pg:backups:capture', stdout: "Backing up DATABASE to b001... done\n",
+                                                   stderr: ' ›   Warning: Logical backups of large databases ' \
+                                                           "are likely to fail.\n")
+      deploy.set(logs: "2999-01-01T00:00:00.000000+00:00 app[web.1]: W, [x #2]  WARN -- slow query\n" * 2)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      section = result.output[/Warnings seen during this deploy.*\z/m]
+      expect(section).to include("NEW: ###### WARNING: Your app's bin/bundle is not the one Bundler made",
+                                 'NEW: WARN -- slow query (seen 2 times)', 'known (Heroku says this',
+                                 '2 new, 1 known')
+      expect(result.output.index('Warnings seen')).to be > result.output.index('Deploy complete!')
+    end
+
+    it 'runs after a failure, and the exit status stays the failure' do
+      deploy.rule('git', '^push heroku', stdout: buildpack_warning, exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('Warnings seen during this deploy', 'NEW: ###### WARNING:')
+    end
+
+    it 'says so when there is none' do
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('Warnings seen during this deploy', 'No warning lines.')
+    end
+
+    it 'runs when there is nothing to deploy' do
+      deploy.production(heroku_sha: head)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Already up to date', 'No warning lines.')
+    end
+
+    it 'says so, and keeps the exit status, when the search fails' do
+      deploy.break_tool('python3')
+      deploy.production(heroku_sha: head)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Could not search this run\'s output for warnings')
+    end
   end
 
   # DEPLOY_APP=comeals-staging runs the same deploy on the staging app, so

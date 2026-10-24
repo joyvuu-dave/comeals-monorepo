@@ -20,7 +20,7 @@ class DeployHarness
   FAKE_NAMES = %w[heroku git gh curl bundle npm npx sleep].freeze
   # The local tools bin/deploy (and the fakes) run. None talks to another
   # machine.
-  LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 tail].freeze
+  LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 tail tee].freeze
   RULE_OPTIONS = %i[stdout stderr exit times].freeze
 
   Result = Struct.new(:output, :status)
@@ -34,7 +34,7 @@ class DeployHarness
     @dir = File.realpath(Dir.mktmpdir('deploy-spec'))
     @repo = File.join(@dir, 'repo')
     @rules = []
-    @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '' }
+    @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '', push_output: '' }
     @state = {
       maintenance: 'off', web: 1, worker: 1, backups: 0, release: 700, releases: [], pushed: '', heroku_sha: '',
       config: {}
@@ -57,7 +57,8 @@ class DeployHarness
     @rules << { cmd:, match: }.merge(options)
   end
 
-  # logs: what `heroku logs` prints; check_runs: what `gh api` prints.
+  # logs: what `heroku logs` prints; check_runs: what `gh api` prints;
+  # push_output: what Heroku's build prints during a push that builds.
   def set(**values) = @scenario.merge!(values)
 
   # The fake production app before the run: maintenance ('on' or 'off'),
@@ -156,6 +157,18 @@ class DeployHarness
     File.exist?(path) ? File.read(path) : ''
   end
 
+  # The files under tmp/deploy/ that hold a whole run's output.
+  def deploy_logs = Dir[File.join(@repo, 'tmp/deploy/deploy-*.log')]
+
+  # Puts `false` in the place of a local tool, so it fails every time, as
+  # if it were broken. Not a shell script: a shell would see the trace
+  # settings bashcov exports and write to the trace.
+  def break_tool(name)
+    path = File.join(@dir, 'tools', name)
+    File.delete(path)
+    File.symlink(which('false'), path)
+  end
+
   # Takes a fake off the PATH, as if that command were not installed.
   def uninstall(name) = File.delete(File.join(@dir, 'fake-bin', name))
 
@@ -165,6 +178,7 @@ class DeployHarness
     FileUtils.mkdir_p(%w[calls rules state/config].map { |sub| File.join(fake_home, sub) })
     files = rule_files.merge(
       'count' => '0', 'real_git' => real_git, 'logs' => @scenario[:logs], 'check_runs' => @scenario[:check_runs],
+      'push_output' => @scenario[:push_output],
       'state/maintenance' => @state[:maintenance], 'state/web' => @state[:web].to_s,
       'state/worker' => @state[:worker].to_s,
       'state/backups' => @state[:backups].to_s, 'state/release' => @state[:release].to_s,
@@ -226,6 +240,9 @@ class DeployHarness
     @commits[:first_migration] = commit({ 'db/migrate/20260101000000_first.rb' => '', 'app/a.rb' => '1' }, 'first')
     @commits[:second_migration] = commit({ 'db/migrate/20260201000000_second.rb' => '' }, 'second')
     @commits[:head] = commit({ 'app/a.rb' => '2' }, 'only app code')
+    # The real repository ignores both (.gitignore), and bin/deploy writes
+    # its log under tmp/ before it checks that the tree is clean.
+    File.write(File.join(@repo, '.git/info/exclude'), "/tmp/\n.env\n")
     git('remote', 'add', 'origin', 'https://github.com/example/comeals.git')
     git('remote', 'add', 'heroku', 'https://git.heroku.com/comeals-monorepo.git')
     git('update-ref', 'refs/remotes/origin/main', @commits[:head])

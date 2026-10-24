@@ -31,6 +31,11 @@ set -euo pipefail
 # could send mail (COMEALS_STAGING, bin/lib/staging_forbidden_vars.sh).
 # Any other value of DEPLOY_APP, an empty one included, is refused before
 # anything runs.
+#
+# Every run writes everything it prints, Heroku's build output and the
+# release phase output included, to tmp/deploy/deploy-<UTC time>-<app>.log,
+# and ends with "Warnings seen during this deploy": each warning line once,
+# known ones (docs/deploy-known-warnings.txt) in short and new ones in red.
 # ==============================================================================
 
 MAINTENANCE_ENABLED=false
@@ -43,6 +48,8 @@ NEW_RELEASE=""
 # How many web dynos a maintenance deploy brings back. deploy_maintenance
 # sets it from the count that ran before (#244).
 WEB_COUNT=1
+# The app log lines check_logs read, for the warnings section.
+APP_LOGS=""
 
 # --yes (or DEPLOY_YES=1): proceed without the interactive
 # confirmation. The automated pipeline (deploy.yml) runs with this;
@@ -98,10 +105,52 @@ case "$APP" in
     ;;
 esac
 
+# --- The deploy log -----------------------------------------------------------
+
+# Everything this run prints goes to the terminal, as before, and to one
+# file, so the output Heroku sends back (the build, the release phase,
+# the one-off dynos) is kept after the terminal is closed. Standard error
+# goes the same way, in the same order. Nothing the script prints holds a
+# password: the smoke credentials go to bin/smoke only through the
+# environment, and bin/smoke never prints them.
+#
+# tee ignores Ctrl-C, so the recovery banner below still reaches the
+# file and the terminal when the person running the deploy stops it.
+DEPLOY_LOG="tmp/deploy/deploy-$(date -u +%Y%m%dT%H%M%SZ)-$APP.log"
+KNOWN_WARNINGS="$(dirname "$0")/../docs/deploy-known-warnings.txt"
+mkdir -p tmp/deploy
+exec {TERMINAL_OUT}>&1 {TERMINAL_ERR}>&2
+exec > >(trap '' INT; exec tee -a "$DEPLOY_LOG") 2>&1
+TEE_PID=$!
+
+# Runs last, on success and on failure. The warning search reads the
+# whole file, so the first tee must have written all of it: give the
+# terminal back, wait for tee to end, search, and only then print the
+# section to the terminal and add it to the file.
+finish_deploy_log() {
+  exec 1>&"$TERMINAL_OUT" 2>&"$TERMINAL_ERR"
+  wait "$TEE_PID"
+  local report searched=true
+  report=$(printf '%s\n' "$APP_LOGS" \
+    | python3 "$(dirname "$0")/lib/deploy-warnings" "$APP" "$KNOWN_WARNINGS" "$DEPLOY_LOG" - 2>&1) || searched=false
+  {
+    step "Warnings seen during this deploy"
+    printf '%s\n' "$report"
+    if [ "$searched" = false ]; then
+      warn "Could not search this run's output for warnings. Read $DEPLOY_LOG for lines with WARN in them."
+    fi
+    echo
+    info "The whole output of this run is in $DEPLOY_LOG (keep this file)."
+  } 2>&1 | tee -a "$DEPLOY_LOG"
+}
+
 # --- Cleanup trap -------------------------------------------------------------
 
 cleanup() {
   local exit_code=$?
+  # Nothing here may change the exit status: a grep that finds nothing
+  # must not end the trap.
+  set +e
   if [ $exit_code -ne 0 ] && [ "$MAINTENANCE_ENABLED" = true ]; then
     echo
     red "============================================"
@@ -119,6 +168,8 @@ cleanup() {
     yellow "Turn maintenance off last, once heroku ps -a $APP shows web up."
     echo
   fi
+  finish_deploy_log
+  exit "$exit_code"
 }
 trap cleanup EXIT
 
@@ -481,6 +532,11 @@ save_release_output() {
   mkdir -p tmp/deploy
   if heroku releases:output -a "$APP" >"$RELEASE_OUTPUT_FILE" 2>&1; then
     ok "Release phase output saved to $RELEASE_OUTPUT_FILE (keep this file)"
+    info "Release phase output:"
+    local line
+    while IFS= read -r line || [ -n "$line" ]; do
+      echo "      $line"
+    done <"$RELEASE_OUTPUT_FILE"
   else
     warn "Could not read the release phase output. Save it by hand now:"
     warn "  heroku releases:output -a $APP > $RELEASE_OUTPUT_FILE"
@@ -523,8 +579,7 @@ check_release_status() {
   NEW_RELEASE=$version
   save_release_output
   if [ "$status" != "succeeded" ]; then
-    fail "The release phase did not succeed (status: $status). Its output:"
-    tail -30 "$RELEASE_OUTPUT_FILE"
+    fail "The release phase did not succeed (status: $status). Its output is above."
     if [ "$MAINTENANCE_ENABLED" = true ]; then
       info "Maintenance stays on and web and the worker stay at 0. Do not scale them up until you know which migrations ran: the old code may not work on the new schema."
     fi
@@ -697,6 +752,8 @@ check_logs() {
 
   local app_logs
   app_logs=$(echo "$logs" | awk -v ts="$DEPLOY_TIMESTAMP" '$1 >= ts' || true)
+  # All of them, for the warnings section at the end.
+  APP_LOGS=$app_logs
 
   if [ -z "$app_logs" ]; then
     ok "No application log output since deploy"

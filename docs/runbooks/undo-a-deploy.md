@@ -53,7 +53,8 @@ day of sign-ups and costs that nobody can type in again from memory.
 ### Restore and roll back
 
 1. Find the backup. `bin/deploy` captures one just before it pushes, and
-   prints its id. To find it again:
+   prints its id. Its whole output is also saved in
+   `tmp/deploy/deploy-<time>-<app>.log`. To find it again:
    `heroku pg:backups -a comeals-monorepo`; it is the newest one made
    before the deploy began.
 2. Run the **Rollback** workflow with:

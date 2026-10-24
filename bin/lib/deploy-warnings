@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+# The "Warnings seen during this deploy" section that bin/deploy prints at
+# the end of every run, whether the deploy worked or not.
+#
+# Usage: deploy-warnings APP KNOWN_LIST DEPLOY_LOG [APP_LOG | -]
+#
+# It reads the deploy's saved output (DEPLOY_LOG) and the app log lines
+# bin/deploy read in its log check (APP_LOG, or standard input for "-"),
+# keeps the warning lines, counts each one once however often it came,
+# and compares it with KNOWN_LIST (docs/deploy-known-warnings.txt, which
+# says how to write an entry). A known warning gets one short line with
+# the reason it is accepted. Any other warning is printed in full, in
+# red, as NEW.
+#
+# It never fails the deploy: by the time it runs, the deploy is done. A
+# list it cannot read is reported, and every warning is then NEW.
+#
+# Tested by spec/bin/deploy_warnings_spec.rb.
+import re
+import sys
+
+# "###### WARNING" (a Heroku buildpack) is matched by "warning".
+WARNING = re.compile(r"warning|warn --|warn:|deprecat", re.IGNORECASE)
+BUILDPACK_WARNING = re.compile(r"^#+ WARNING:?$")
+ANSI = re.compile(r"\x1b\[[0-9;]*m")
+# What comes before the warning itself and differs from one copy of it to
+# the next: the "remote:" of git push output, Heroku's log prefix
+# ("2026-10-24T12:00:01.000000+00:00 app[web.1]: "), and the Ruby
+# logger's ("W, [2026-10-22T14:14:08.923216 #19]  ").
+PREFIXES = [
+    re.compile(r"^remote:\s*"),
+    re.compile(r"^\S+ (?:app|heroku)\[[^\]]+\]:\s*"),
+    re.compile(r"^[DIWEFAU], \[[^\]]*\]\s+"),
+]
+APPS = {"comeals-monorepo": "production", "comeals-staging": "staging"}
+# bin/deploy prints this heading before the app log lines it found. The
+# same lines come in again on standard input, all of them, not only the
+# first 30, so the section is skipped here.
+LOG_CHECK = "==> Checking post-deploy logs"
+SHORT = 100
+RED = "\033[0;31m"
+YELLOW = "\033[0;33m"
+PLAIN = "\033[0m"
+
+
+def clean(line):
+    line = ANSI.sub("", line).strip()
+    for prefix in PREFIXES:
+        line = prefix.sub("", line).strip()
+    return line
+
+
+def read_lines(path, skip_log_check):
+    if path == "-":
+        text = sys.stdin.read()
+    else:
+        with open(path, encoding="utf-8", errors="replace") as f:
+            text = f.read()
+    skipping = False
+    for raw in text.splitlines():
+        line = clean(raw)
+        if line.startswith("==> "):
+            skipping = skip_log_check and line == LOG_CHECK
+        if not skipping:
+            yield line
+
+
+def warnings(lines):
+    """The warning lines, in the order first seen, each with its count."""
+    counts = {}
+    waiting = None
+    for line in lines:
+        if waiting is not None:
+            if not line:
+                continue
+            counts[f"{waiting} {line}"] = counts.get(f"{waiting} {line}", 0) + 1
+            waiting = None
+            continue
+        if BUILDPACK_WARNING.match(line):
+            waiting = line if line.endswith(":") else line + ":"
+            continue
+        if WARNING.search(line):
+            counts[line] = counts.get(line, 0) + 1
+    if waiting is not None:
+        counts[waiting] = counts.get(waiting, 0) + 1
+    return counts
+
+
+def read_known(path, app):
+    """The entries of the known list that apply to this app."""
+    entries = []
+    entry = {}
+
+    def close(number):
+        if not entry:
+            return
+        for field in ("app", "why"):
+            if field not in entry:
+                raise ValueError(f"entry {number} has no {field}:")
+        if "fixed" not in entry and "regex" not in entry:
+            raise ValueError(f"entry {number} has no fixed: or regex:")
+        if entry["app"] not in ("production", "staging", "both"):
+            raise ValueError(f"entry {number}: app must be production, staging or both")
+        if entry["app"] in ("both", APPS.get(app)):
+            entries.append(dict(entry))
+
+    with open(path, encoding="utf-8") as f:
+        lines = f.read().splitlines()
+    number = 0
+    for index, line in enumerate(lines, start=1):
+        if line.startswith("#"):
+            continue
+        if not line.strip():
+            close(number)
+            entry = {}
+            continue
+        if not entry:
+            number += 1
+        field, sep, value = line.partition(":")
+        if not sep or field not in ("fixed", "regex", "app", "why"):
+            raise ValueError(f'line {index}: unknown field "{field}"')
+        value = value.strip()
+        entry[field] = re.compile(value) if field == "regex" else value
+    close(number)
+    return entries
+
+
+def reason_for(line, entries):
+    for entry in entries:
+        if "fixed" in entry and entry["fixed"] in line:
+            return entry["why"]
+        if "regex" in entry and entry["regex"].search(line):
+            return entry["why"]
+    return None
+
+
+def main(argv):
+    app, known_path, deploy_log = argv[1], argv[2], argv[3]
+    app_log = argv[4] if len(argv) > 4 else None
+
+    lines = list(read_lines(deploy_log, skip_log_check=app_log is not None))
+    if app_log is not None:
+        lines += list(read_lines(app_log, skip_log_check=False))
+    found = warnings(lines)
+
+    try:
+        entries = read_known(known_path, app)
+    except (OSError, ValueError, re.error) as error:
+        print(f"{YELLOW}    Could not read {known_path}: {error}. Every warning is shown as NEW.{PLAIN}")
+        entries = []
+
+    if not found:
+        print("    No warning lines.")
+        return 0
+
+    new = known = 0
+    for line, count in found.items():
+        seen = f" (seen {count} times)" if count > 1 else ""
+        why = reason_for(line, entries)
+        if why is None:
+            new += 1
+            print(f"{RED}    NEW: {line}{seen}{PLAIN}")
+        else:
+            known += 1
+            short = line if len(line) <= SHORT else line[:SHORT] + "…"
+            print(f"    known ({why}): {short}{seen}")
+    print(f"    {new} new, {known} known. A new warning does not fail the deploy.")
+    if new:
+        print("    Fix each new one, or add it to docs/deploy-known-warnings.txt with the reason it is fine.")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

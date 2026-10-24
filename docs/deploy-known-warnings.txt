@@ -1,0 +1,35 @@
+# Warnings bin/deploy expects to see, and why each one is fine.
+#
+# At the end of every run, bin/deploy lists the warning lines it saw in
+# its own output and in the app's logs ("Warnings seen during this
+# deploy", from bin/lib/deploy-warnings). A warning that matches an entry
+# here gets one short line with the reason. Any other warning is printed
+# in red as NEW. Neither one fails the deploy.
+#
+# One entry per accepted warning, entries apart by a blank line:
+#
+#   fixed: text the warning line contains (exact, case counts)
+#     or
+#   regex: a Python regular expression the warning line matches
+#   app:   production, staging, or both
+#   why:   the reason it is fine, short
+#
+# The line compared is the warning without what comes before it and
+# changes each time: "remote:", Heroku's log time and dyno, and the Ruby
+# logger's time and process number. A buildpack's "###### WARNING:" line
+# is compared together with the next line that is not blank.
+#
+# Add a warning here only once you know why it is fine. A warning being
+# fixed elsewhere stays out, so it shows as NEW until the fix is deployed.
+
+fixed: Skylight: Unable to start Instrumenter due to a configuration error: authentication token required
+app: staging
+why: staging has no Skylight key on purpose
+
+fixed: [Bugsnag]: No valid API key has been set
+app: staging
+why: staging has no Bugsnag key on purpose
+
+fixed: Logical backups of large databases are likely to fail
+app: both
+why: Heroku says this for any pg:backups:capture; our database is about 35 MB
