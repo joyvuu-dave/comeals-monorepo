@@ -1,6 +1,7 @@
 SET statement_timeout = 0;
 SET lock_timeout = 0;
 SET idle_in_transaction_session_timeout = 0;
+SET transaction_timeout = 0;
 SET client_encoding = 'UTF8';
 SET standard_conforming_strings = on;
 SELECT pg_catalog.set_config('search_path', '', false);
@@ -953,10 +954,10 @@ CREATE TABLE public.browser_counts (
     updated_at timestamp(6) without time zone NOT NULL,
     CONSTRAINT browser_counts_browser_length CHECK (((char_length((browser)::text) >= 1) AND (char_length((browser)::text) <= 60))),
     CONSTRAINT browser_counts_count_is_positive CHECK ((count > 0)),
-    CONSTRAINT browser_counts_device_is_known CHECK (((device)::text = ANY ((ARRAY['phone'::character varying, 'tablet'::character varying, 'desktop'::character varying, 'unknown'::character varying])::text[]))),
+    CONSTRAINT browser_counts_device_is_known CHECK (((device)::text = ANY (ARRAY[('phone'::character varying)::text, ('tablet'::character varying)::text, ('desktop'::character varying)::text, ('unknown'::character varying)::text]))),
     CONSTRAINT browser_counts_major_is_positive CHECK (((major IS NULL) OR (major > 0))),
     CONSTRAINT browser_counts_os_length CHECK (((char_length((os)::text) >= 1) AND (char_length((os)::text) <= 60))),
-    CONSTRAINT browser_counts_result_is_known CHECK (((result)::text = ANY ((ARRAY['passed'::character varying, 'failed'::character varying, 'error'::character varying])::text[])))
+    CONSTRAINT browser_counts_result_is_known CHECK (((result)::text = ANY (ARRAY[('passed'::character varying)::text, ('failed'::character varying)::text, ('error'::character varying)::text])))
 );
 
 
