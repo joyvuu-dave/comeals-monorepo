@@ -67,11 +67,12 @@ function report(name, actual, budget) {
 report("first load", firstLoadKB, budgets.firstLoadKB);
 report("total     ", totalKB, budgets.totalKB);
 
-// The calendar chunk must be preloaded from index.html (#44).
-// vite.config's preloadCalendarPlugin finds the chunk by the literal
-// file name calendar/show.jsx, so renaming or moving that file would
-// drop the preload with no error, and the boot-time download would start
-// late — no test would fail. Fail here instead.
+// The calendar chunk must be preloaded from index.html (#44), by the
+// script app/frontend/preload_calendar.mjs writes into it. That plugin
+// finds the chunk by the literal file name calendar/show.jsx, so
+// renaming or moving that file would drop the preload with no error,
+// and the boot-time download would start late — no test would fail.
+// Fail here instead.
 const calendarKey = Object.keys(manifest).find((k) =>
   k.endsWith("calendar/show.jsx"),
 );
@@ -87,13 +88,16 @@ if (!calendarKey || !fs.existsSync(htmlPath)) {
 } else {
   const html = fs.readFileSync(htmlPath, "utf8");
   const preloadHref = "/" + manifest[calendarKey].file;
-  if (html.includes(`rel="modulepreload" href="${preloadHref}"`)) {
+  const script = /<script id="calendar-preload">([\s\S]*?)<\/script>/.exec(
+    html,
+  );
+  if (script && script[1].includes(JSON.stringify(preloadHref))) {
     console.log(`ok     calendar preload: ${preloadHref}`);
   } else {
     failed = true;
     console.error(
       `MISSING calendar preload: index.html has no modulepreload for ${preloadHref}.` +
-        "\nDid calendar/show.jsx move? preloadCalendarPlugin in vite.config.mjs" +
+        "\nDid calendar/show.jsx move? app/frontend/preload_calendar.mjs" +
         "\nfinds the chunk by that file name and must move with it.",
     );
   }

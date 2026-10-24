@@ -62,7 +62,9 @@ function build({
   return root;
 }
 
-const preload = '<link rel="modulepreload" href="/vite-assets/show.js">';
+// The script app/frontend/preload_calendar.mjs writes into index.html.
+const preload =
+  '<script id="calendar-preload">var files = ["/vite-assets/show.js"];</script>';
 // index.jsx imports a shared chunk twice over (directly and through
 // store.js), names one import the manifest does not have, and loads the
 // calendar lazily. The CSS file is not JavaScript and counts for neither.
@@ -143,6 +145,24 @@ test("fails when index.html does not preload the calendar chunk", () => {
   assert.match(
     err,
     /^MISSING calendar preload: index.html has no modulepreload for \/vite-assets\/show.js\.\nDid calendar\/show.jsx move\?/,
+  );
+});
+
+// The script is there, but for a chunk the build no longer has.
+test("fails when the preload script names another file", () => {
+  const { root } = normalBuild({
+    files: {
+      "index.html":
+        '<head><script id="calendar-preload">var files = ["/vite-assets/old.js"];</script></head>',
+    },
+  });
+
+  const { status, err } = run(root);
+
+  assert.equal(status, 1);
+  assert.match(
+    err,
+    /^MISSING calendar preload: index.html has no modulepreload for \/vite-assets\/show.js\./,
   );
 });
 
