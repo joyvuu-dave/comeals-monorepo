@@ -195,6 +195,9 @@ heroku_default() {
       done
       printf ']\n'
       ;;
+    # heroku pg:psql -c SQL: the count of Solid Queue processes with a
+    # fresh heartbeat (bin/lib/wait_until_stopped.sh). None, by default.
+    pg:psql) printf ' solid_queue \n-------------\n fresh=0\n(1 row)\n\n' ;;
     releases:output) echo "Running release command... migrating" ;;
     run) echo "one-off dyno: ${*:3}" ;;
     logs) cat "$home/logs" ;;

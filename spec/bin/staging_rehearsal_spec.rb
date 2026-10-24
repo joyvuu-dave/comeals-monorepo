@@ -17,7 +17,8 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
   # The files the rehearsal runs or sources besides itself, and every
   # call answered the way a good rehearsal sees it.
   before do
-    %w[bin/lib/output.sh bin/lib/json.sh bin/lib/staging_forbidden_vars.sh bin/smoke].each { sandbox.link(it) }
+    %w[bin/lib/output.sh bin/lib/json.sh bin/lib/staging_forbidden_vars.sh bin/lib/wait_until_stopped.sh
+       bin/smoke].each { sandbox.link(it) }
     sandbox.note_env('SMOKE_URL', 'SMOKE_EMAIL', 'SMOKE_PASSWORD', 'SMOKE_MEAL_ID')
     sandbox.rule('heroku', "config #{staging} --json", out: config_json(config_keys))
     sandbox.rule('heroku', "config:get COMEALS_STAGING #{staging}", out: "1\n")
@@ -26,6 +27,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
                  out: "Backing up DATABASE to b101... done\n")
     sandbox.rule('heroku', 'pg:backups:url -a comeals-monorepo', out: "https://backups.example.com/b101\n")
     sandbox.rule('heroku', "ps:scale * #{staging}")
+    sandbox.rule('heroku', "pg:psql -c * #{staging}", out: psql_count(0))
     sandbox.rule('heroku', "pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} " \
                            '--confirm comeals-staging')
     sandbox.rule('heroku', "releases #{staging} --json", out: '[{"status":"succeeded"},{"status":"failed"}]')
@@ -50,6 +52,10 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
   end
 
   def config_json(keys) = "{#{keys.map { %("#{it}": "1") }.join(', ')}}"
+
+  # What heroku pg:psql prints for the count of Solid Queue processes
+  # with a fresh heartbeat (bin/lib/wait_until_stopped.sh).
+  def psql_count(count) = " solid_queue \n-------------\n fresh=#{count}\n(1 row)\n\n"
 
   def rehearse(env = {})
     sandbox.run_script('bin/staging-rehearsal', env:)
@@ -91,6 +97,8 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         "heroku ps:scale web=0 #{staging}",
         "heroku ps:scale worker=0 #{staging}",
         "heroku ps #{staging} --json",
+        "heroku pg:psql -c SELECT 'fresh=' || count(*) AS solid_queue FROM solid_queue_processes " \
+        "WHERE last_heartbeat_at > (now() AT TIME ZONE 'UTC') - interval '75 seconds' #{staging}",
         "heroku pg:backups:restore https://backups.example.com/b101 DATABASE_URL #{staging} --confirm comeals-staging",
         'git rev-parse HEAD',
         'git rev-parse --short HEAD',
@@ -299,6 +307,33 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
 
     expect(result.exitstatus).not_to eq(0)
     expect(result.out).to include('still runs 3 minutes after')
+    expect(heroku_calls.grep(/pg:backups:restore/)).to be_empty
+    expect(sandbox.calls_to('git').map(&:args)).to be_empty
+  end
+
+  # #245. On staging on 2026-10-24 heroku ps listed no worker while a
+  # worker process that Heroku had restarted still ran Solid Queue. It
+  # shut down 3 seconds after the restore had dropped its tables.
+  it 'waits until no Solid Queue process sends heartbeats before it restores' do
+    sandbox.rule('heroku', "pg:psql -c * #{staging}", out: psql_count(2), once: true)
+
+    expect(rehearse.exitstatus).to eq(0)
+
+    lines = heroku_calls
+    psql_calls = lines.each_index.select { lines[it].start_with?('heroku pg:psql') }
+    expect(psql_calls.size).to eq(2)
+    expect(lines.index { it.start_with?('heroku pg:backups:restore') }).to eq(psql_calls.last + 1)
+  end
+
+  # Staging state: web and the worker at 0, the database as it was.
+  it 'stops without restoring when a Solid Queue process still sends heartbeats after 3 minutes' do
+    sandbox.rule('heroku', "pg:psql -c * #{staging}", out: psql_count(1))
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(1)
+    expect(result.out).to include('1 Solid Queue process(es) still sent a heartbeat in the last 75 seconds',
+                                  'So the backup was not restored.')
     expect(heroku_calls.grep(/pg:backups:restore/)).to be_empty
     expect(sandbox.calls_to('git').map(&:args)).to be_empty
   end

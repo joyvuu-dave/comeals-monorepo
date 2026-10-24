@@ -193,11 +193,14 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                        'MAINTENANCE deploy (has migrations)', 'Deploy complete!')
       expect(result.output).not_to include(recovery_banner)
       expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
-      steps = deploy.calls_to('heroku').grep(/maintenance|ps:scale|ps -a|releases|SLUG_COMMIT|cache\.clear|billing/)
+      steps = deploy.calls_to('heroku')
+                    .grep(/maintenance|ps:scale|ps -a|pg:psql|releases|SLUG_COMMIT|cache\.clear|billing/)
+                    .map { it.sub(/^heroku pg:psql .*/, 'heroku pg:psql') }
                     .map { it.delete_suffix(' --json').delete_suffix(' -a comeals-monorepo') }
       expect(steps).to eq([
                             'heroku config:get HEROKU_SLUG_COMMIT', 'heroku releases',
                             'heroku maintenance:on', 'heroku ps:scale', 'heroku ps:scale web=0 worker=0',
+                            'heroku ps', 'heroku pg:psql',
                             'heroku releases', 'heroku releases:output', 'heroku config:get HEROKU_SLUG_COMMIT',
                             'heroku run --exit-code bin/rails runner Rails.cache.clear',
                             'heroku run --exit-code bin/rake billing:recalculate',
@@ -206,17 +209,67 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                           ])
       push = deploy.calls.index('git push heroku main --force')
       expect(push).to be > deploy.calls.index('heroku ps:scale web=0 worker=0 -a comeals-monorepo')
+      expect(push).to be > deploy.calls.rindex { it.start_with?('heroku pg:psql') }
+    end
+
+    # #245. The release phase runs the migrations, and no process of the
+    # old code may run beside them. heroku ps can list no worker while a
+    # worker process that Heroku restarted still runs Solid Queue, so the
+    # push also waits until no Solid Queue process sends heartbeats.
+    it 'pushes only once no web or worker dyno runs and no Solid Queue process sends heartbeats' do
+      deploy.rule('heroku', '^ps -a', times: 1, stdout: '[{"type":"worker","state":"up","release":{"version":700}}]')
+      deploy.rule('heroku', '^pg:psql', times: 1, stdout: " solid_queue \n-------------\n fresh=1\n(1 row)\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('1 Solid Queue process(es) sent a heartbeat in the last 75 seconds',
+                                       'No Solid Queue process sent a heartbeat in the last 75 seconds.')
+      calls = deploy.calls
+      psql = calls.each_index.select { calls[it].start_with?('heroku pg:psql') }
+      expect(psql.size).to eq(2)
+      expect(calls.index('git push heroku main --force')).to be > psql.last
+      expect(calls.each_index.select { calls[it] == 'heroku ps -a comeals-monorepo --json' }.first(2))
+        .to all(be < psql.first)
+    end
+
+    # State left: maintenance on, web and the worker at 0, old code, no
+    # migration run. Next step: what the script prints.
+    it 'leaves maintenance on, pushes nothing, and says what to check when Solid Queue still runs after 3 minutes' do
+      deploy.rule('heroku', '^pg:psql', stdout: " solid_queue \n-------------\n fresh=1\n(1 row)\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        '1 Solid Queue process(es) still sent a heartbeat in the last 75 seconds, 3 minutes after web and ' \
+        'the worker were scaled to 0.',
+        'Nothing was pushed, so no migration ran. Maintenance stays on.',
+        'Find out what still runs: heroku ps -a comeals-monorepo ; ' \
+        'heroku logs -a comeals-monorepo --dyno worker -n 200',
+        'heroku pg:psql -a comeals-monorepo -c ' \
+        '"SELECT kind, hostname, pid, last_heartbeat_at FROM solid_queue_processes"',
+        'When nothing runs, run bin/deploy again. To give up the deploy instead, run the commands below.',
+        recovery_banner
+      )
+      expect(deploy.calls_to('git').grep(/push/)).to eq([])
+      expect_production(maintenance: true, web: 0, pushed: false, worker: 0)
     end
 
     # Production before its first deploy with a worker runs a release with
     # no worker process type, and Heroku refuses to scale one. The push
     # makes the type, so the worker can start after it.
+    # That release runs no Solid Queue, and its database has no
+    # solid_queue_processes table yet: the push's migrations make it.
     it 'stops only web when the running release has no worker process type, and starts the worker after' do
       deploy.production(worker: 'none')
+      deploy.rule('heroku', '^pg:psql', exit: 1, stderr: "ERROR:  relation \"solid_queue_processes\" does not exist\n")
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(0)
+      expect(result.output).to include('The database has no solid_queue_processes table, so no Solid Queue ' \
+                                       'process runs.')
       expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
       expect(deploy.calls_to('heroku').grep(/ps:scale/)).to eq([
                                                                  'heroku ps:scale -a comeals-monorepo',
@@ -269,6 +322,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     # waits on a booting dyno, or fails when the boot fails. On 2026-10-23
     # maintenance went off 13 seconds before web.1 was up.
     it 'turns maintenance off only once web is up on the new release' do
+      # The first answer is for the wait before the push.
+      deploy.rule('heroku', '^ps -a', times: 1, stdout: '[]')
       deploy.rule('heroku', '^ps -a', times: 1,
                                       stdout: '[{"type":"web","state":"starting","release":{"version":701}}]')
       deploy.rule('heroku', '^ps -a', times: 1,
@@ -283,14 +338,16 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_production(maintenance: false, web: 1, pushed: true)
       order = deploy.calls
       polls = order.each_index.select { order[it] == 'heroku ps -a comeals-monorepo --json' }
-      expect(polls.size).to eq(3)
-      expect(polls.first).to be > order.index('heroku ps:scale web=1 -a comeals-monorepo')
+      expect(polls.size).to eq(4)
+      expect(polls[1]).to be > order.index('heroku ps:scale web=1 -a comeals-monorepo')
       expect(polls.last).to be < order.index('heroku maintenance:off -a comeals-monorepo')
     end
 
     # State left: maintenance on, web at 1 but not up, worker at 1, new
     # code and migrations in. Next step: what the script prints.
     it 'leaves maintenance on and says what to do when web is not up after 3 minutes' do
+      # The first answer is for the wait before the push.
+      deploy.rule('heroku', '^ps -a', times: 1, stdout: '[]')
       deploy.rule('heroku', '^ps -a', stdout: '[{"type":"web","state":"crashed","release":{"version":701}}]')
 
       result = deploy.run('--yes')
@@ -302,7 +359,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
         'When heroku ps shows web up on v701, run: heroku maintenance:off -a comeals-monorepo',
         'Then check the site: bin/smoke https://comeals.com'
       )
-      expect(deploy.calls_to('heroku').grep(/ps -a/).size).to eq(36)
+      expect(deploy.calls_to('heroku').grep(/ps -a/).size).to eq(37)
       expect(deploy.calls_to('heroku').grep(/maintenance:off/)).to eq([])
       expect_production(maintenance: true, web: 1, pushed: true)
     end

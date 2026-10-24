@@ -15,7 +15,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
   let(:prod) { '-a comeals-monorepo' }
 
   # The files the scripts source or run besides themselves.
-  before { %w[bin/lib/json.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
+  before { %w[bin/lib/json.sh bin/lib/wait_until_stopped.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
 
   def heroku_calls = sandbox.call_lines('heroku')
 
@@ -199,8 +199,13 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"run"}]')
       sandbox.rule('heroku', "ps #{prod} --json", out: '[{"type":"worker"},{"type":"run"}]', once: true)
       sandbox.rule('heroku', "pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo")
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", out: psql_count(0))
       sandbox.rule('sleep')
     end
+
+    # What heroku pg:psql prints for the count of Solid Queue processes
+    # with a fresh heartbeat.
+    def psql_count(count) = " solid_queue \n-------------\n fresh=#{count}\n(1 row)\n\n"
 
     def restore
       sandbox.run_script('bin/lib/rollback/restore-backup',
@@ -217,8 +222,10 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(heroku_calls).to eq(
         ["heroku maintenance:on #{prod}", "heroku pg:backups:capture #{prod}",
          "heroku ps:scale web=0 worker=0 #{prod}", "heroku ps #{prod} --json", "heroku ps #{prod} --json",
+         heroku_calls.grep(/pg:psql/).first,
          "heroku pg:backups:restore b245 DATABASE_URL #{prod} --confirm comeals-monorepo"]
       )
+      expect(heroku_calls.grep(/pg:psql/).size).to eq(1)
       expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5']])
       expect(result.out).to include('comeals-monorepo runs 2 web dyno(s) and a worker dyno. Scaling both to 0.')
     end
@@ -236,6 +243,131 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.out).to include('comeals-monorepo runs 2 web dyno(s) and no worker dyno. Scaling web to 0.')
     end
 
+    # #245. heroku ps can list no worker while a worker process that
+    # Heroku restarted still runs Solid Queue. Such a process writes a
+    # heartbeat to solid_queue_processes every 60 seconds, so the restore
+    # also waits until no row has one from the last 75 seconds.
+    it 'reads the Solid Queue heartbeats of the last 75 seconds, in UTC' do
+      restore
+
+      sql = sandbox.calls_to('heroku').find { it.args.first == 'pg:psql' }.args
+      expect(sql.first(2)).to eq(['pg:psql', '-c'])
+      expect(sql.last(2)).to eq(['-a', 'comeals-monorepo'])
+      expect(sql[2]).to eq(
+        "SELECT 'fresh=' || count(*) AS solid_queue FROM solid_queue_processes " \
+        "WHERE last_heartbeat_at > (now() AT TIME ZONE 'UTC') - interval '75 seconds'"
+      )
+    end
+
+    # Solid Queue writes each heartbeat every process_heartbeat_interval,
+    # and production sets no other value than the gem's. The wait must
+    # count a row as alive for longer than that, or a running process
+    # could look stopped between two heartbeats.
+    it 'waits longer than one Solid Queue heartbeat interval' do
+      script = Rails.root.join('bin/lib/wait_until_stopped.sh').read
+      seconds = Integer(script[/^SOLID_QUEUE_ALIVE_SECONDS=(\d+)$/, 1])
+
+      expect(seconds).to be > SolidQueue.process_heartbeat_interval.to_i
+      expect(SolidQueue.process_heartbeat_interval).to eq(60.seconds)
+      %w[config/application.rb config/environments/production.rb].each do |file|
+        expect(Rails.root.join(file).read).not_to include('process_heartbeat_interval')
+      end
+    end
+
+    it 'waits while a Solid Queue process still sends heartbeats, then restores' do
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", out: psql_count(1), once: true)
+
+      result = restore
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to include('1 Solid Queue process(es) sent a heartbeat in the last 75 seconds')
+      expect(heroku_calls.grep(/pg:psql/).size).to eq(2)
+      expect(heroku_calls.last).to start_with('heroku pg:backups:restore')
+      expect(sandbox.calls_to('sleep').map(&:args)).to eq([['5'], ['5']])
+    end
+
+    # Production state: maintenance on, web and the worker at 0, the
+    # database as the new code left it. The step that says what to do by
+    # hand runs next.
+    it 'does not restore when a Solid Queue process still sends heartbeats after 3 minutes' do
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", out: psql_count(1))
+
+      result = restore
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include(
+        '1 Solid Queue process(es) still sent a heartbeat in the last 75 seconds, 3 minutes after ' \
+        'web and the worker were scaled to 0.',
+        'So the backup was not restored.'
+      )
+      expect(heroku_calls.grep(/pg:psql/).size).to eq(36)
+      expect(heroku_calls.grep(/restore/)).to be_empty
+    end
+
+    # A database from before Solid Queue has no solid_queue_processes
+    # table. No Solid Queue process can run on it: a process must write
+    # its row there to start.
+    it 'takes a missing solid_queue_processes table to mean no Solid Queue process runs' do
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", exit: 1,
+                                                     err: "ERROR:  relation \"solid_queue_processes\" does not exist\n")
+
+      result = restore
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to include('The database has no solid_queue_processes table, so no Solid Queue process runs.')
+      expect(heroku_calls.last).to start_with('heroku pg:backups:restore')
+    end
+
+    # A query that failed says nothing about what runs, so it is asked
+    # again, and never read as "nothing runs".
+    it 'asks again when the query fails' do
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", exit: 1, err: "connection refused\n", once: true)
+
+      result = restore
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to include('Could not read solid_queue_processes (connection refused). Asking again.')
+      expect(heroku_calls.grep(/pg:psql/).size).to eq(2)
+      expect(heroku_calls.last).to start_with('heroku pg:backups:restore')
+    end
+
+    it 'does not restore when the query fails for 3 minutes' do
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", exit: 1, err: "connection refused\n")
+
+      result = restore
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include(
+        'Could not read solid_queue_processes for 3 minutes, so it is not known whether a Solid Queue ' \
+        'process still runs. The last error: connection refused',
+        'So the backup was not restored.'
+      )
+      expect(heroku_calls.grep(/restore/)).to be_empty
+    end
+
+    # A query that answers but prints no count (say, a psql that prints
+    # only a warning) is a failed query too.
+    it 'does not take an answer with no count to mean nothing runs' do
+      sandbox.rule('heroku', "pg:psql -c * #{prod}", out: "\n")
+
+      result = restore
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Could not read solid_queue_processes (no output). Asking again.')
+      expect(heroku_calls.grep(/restore/)).to be_empty
+    end
+
+    # A failed heroku ps says nothing about what runs either.
+    it 'asks heroku ps again when it fails' do
+      sandbox.rule('heroku', "ps #{prod} --json", exit: 1, err: "Invalid credentials\n", once: true)
+
+      result = restore
+
+      expect(result.exitstatus).to eq(0)
+      expect(heroku_calls.grep(/^heroku ps -a/).size).to eq(3)
+      expect(heroku_calls.last).to start_with('heroku pg:backups:restore')
+    end
+
     # Production state: maintenance on, web at 0, the database as the new
     # code left it. The step that says what to do by hand runs next.
     it 'does not restore when a web or worker dyno still runs after 3 minutes' do
@@ -244,8 +376,9 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       result = restore
 
       expect(result.exitstatus).to eq(1)
-      expect(result.out).to include('A web or worker dyno still runs 3 minutes after they were scaled to 0')
-      expect(heroku_calls.grep(/restore/)).to be_empty
+      expect(result.out).to include('A web or worker dyno still runs 3 minutes after they were scaled to 0.',
+                                    'So the backup was not restored.')
+      expect(heroku_calls.grep(/restore|pg:psql/)).to be_empty
       expect(sandbox.calls_to('sleep').map(&:args).size).to eq(35)
     end
 
