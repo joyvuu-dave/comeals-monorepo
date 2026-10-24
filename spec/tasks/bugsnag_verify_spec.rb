@@ -5,6 +5,9 @@ require 'rake'
 
 # The task exists to prove the two paths to Bugsnag are connected, in
 # production only. Anywhere else it must stop before sending anything.
+# `abort` prints its message to stderr before it raises SystemExit, so the
+# examples that stop also check that message, and it does not reach the
+# terminal.
 RSpec.describe 'bugsnag:verify' do
   before(:all) { RakeTasks.ensure_loaded }
 
@@ -18,14 +21,17 @@ RSpec.describe 'bugsnag:verify' do
     allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('BUGSNAG_API_KEY').and_return(nil)
 
-    expect { run_task }.to raise_error(SystemExit, /BUGSNAG_API_KEY is not set/)
+    expect { expect { run_task }.to raise_error(SystemExit, /BUGSNAG_API_KEY is not set/) }
+      .to output('BUGSNAG_API_KEY is not set, so nothing would be sent. ' \
+                 "Run this on Heroku: heroku run rake bugsnag:verify\n").to_stderr
   end
 
   it 'stops outside production, and says which environment it is in' do
     allow(ENV).to receive(:[]).and_call_original
     allow(ENV).to receive(:[]).with('BUGSNAG_API_KEY').and_return('key')
 
-    expect { run_task }.to raise_error(SystemExit, /nothing would be sent from test/)
+    expect { expect { run_task }.to raise_error(SystemExit, /nothing would be sent from test/) }
+      .to output("enabled_release_stages is production only, so nothing would be sent from test.\n").to_stderr
   end
 
   it 'sends one error each way in production' do
