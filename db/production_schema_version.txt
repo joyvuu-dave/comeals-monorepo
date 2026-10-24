@@ -14,4 +14,4 @@
 # is dated at or before this version: either step 2 was not done, or a
 # new migration was given an old date, and production would never run it.
 # spec/simplecov_profile.rb reads this as PRODUCTION_SCHEMA_VERSION.
-20261016130000
+20261023140000

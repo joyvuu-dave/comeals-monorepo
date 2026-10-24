@@ -46,7 +46,7 @@ class Resident < ApplicationRecord
 
   # Until 2026-10-23 the reset token was stored here as it was mailed. Now
   # only its digest is stored (reset_password_token_digest, PasswordReset),
-  # and migration 20261023130100 emptied this column. It stays one release
+  # and the deploy of 2026-10-24 emptied this column. It stays one release
   # so an undo to the code before can still read it; drop it after that.
   self.ignored_columns += %w[reset_password_token]
 
@@ -82,7 +82,7 @@ class Resident < ApplicationRecord
   # was a column that a nightly job copied from the birthday, so a
   # person's price was wrong from their birthday until the next run, and
   # a sign-up months ahead used the sign-up day's band (#88). The column
-  # was dropped in 20261023120000 (#89).
+  # was dropped on 2026-10-24 (#89).
 
   # The same rule as #age_on, in SQL: full-price age reached on the day,
   # a February 29 birthday counting on March 1 in a non-leap year (the

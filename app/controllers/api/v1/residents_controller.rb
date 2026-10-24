@@ -14,7 +14,7 @@ module Api
 
       # The answer for a reset link of the kind mailed before 2026-10-23,
       # with the token in the path. Those tokens were cleared by the deploy
-      # that changed the link (20261023130100), so none can work.
+      # that changed the link (2026-10-24), so none can work.
       RETIRED_RESET_LINK = 'This password reset link no longer works. Please request a new one.'
 
       before_action :authenticate, only: [:show_id]
