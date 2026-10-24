@@ -7,12 +7,18 @@ const {
 const { setupAuthenticatedPage } = require("../helpers/setup");
 
 // Every test here feeds the app a 401 or a dead network. Expected
-// noise: the browser's request-failed line, plus the two messages
-// handle_axios_error logs on exactly these paths.
+// noise: the browser's request-failed line, plus the messages
+// handle_axios_error logs on exactly these paths. The calendar asks for
+// its month again after the boot-time request was answered with an
+// error (month_fetch.js revalidate), and logs the server's message when
+// that one is refused too. The calendar used to mount 300 ms after the
+// first answer, so the first test had ended by then; since the calendar
+// mounts at once (index.jsx loadedCalendar), the log comes inside it.
 test.use({
   allowedConsoleErrors: combinePatterns(
     httpFailurePattern,
     /^You are not authenticated\.$/,
+    /^You are not authenticated\. Please try signing in and then try again\.$/,
     /^Error: no response received from server\.$/,
   ),
 });
@@ -140,28 +146,33 @@ test.describe("Session Expiry", () => {
   // and the request named the community "undefined" (#153). WebKit
   // reports a request that the page load cuts off, so the test above
   // failed about 2 runs in 25. This test makes that order happen every
-  // time: the calendar's code waits until the banner shows. The answer
-  // to the request for "/" is 204 No Content, so the browser stays on
-  // the old page (HTML spec: a navigation answered 204 is dropped) and
-  // the test can see every request the old page sends.
+  // time. A page that starts on the calendar renders only once the
+  // calendar's code has arrived (index.jsx), so the banner and the grid
+  // come in the same render: the calendar's code waits until the month's
+  // 401 has been answered, so the banner is in that render, and the click
+  // comes as soon as the grid appears. The answer to the request for "/"
+  // is 204 No Content, so the browser stays on the old page (HTML spec:
+  // a navigation answered 204 is dropped) and the test can see every
+  // request the old page sends.
   test("'Sign in' while the calendar mounts sends no request with an undefined community id", async ({
     page,
     context,
   }) => {
     await setupAuthenticatedPage(page, context);
-    await page.route("**/api/v1/communities/*/calendar/*", (route) => {
-      route.fulfill({
+    let monthRefused;
+    const monthAnswered = new Promise((resolve) => {
+      monthRefused = resolve;
+    });
+    await page.route("**/api/v1/communities/*/calendar/*", async (route) => {
+      await route.fulfill({
         status: 401,
         contentType: "application/json",
         body: JSON.stringify({ message: "You are not authenticated." }),
       });
-    });
-    let releaseCalendarCode;
-    const calendarCodeHeld = new Promise((resolve) => {
-      releaseCalendarCode = resolve;
+      monthRefused();
     });
     await page.route(/\/vite-assets\/show-[^/]*\.js$/, async (route) => {
-      await calendarCodeHeld;
+      await monthAnswered;
       await route.continue();
     });
     let newPageAsked = false;
@@ -175,10 +186,12 @@ test.describe("Session Expiry", () => {
     await page.addInitScript(() => {
       new window.MutationObserver(function (_records, observer) {
         if (!window.document.querySelector(".rbc-calendar")) return;
+        const signIn = Array.from(
+          window.document.querySelectorAll("button"),
+        ).find((button) => button.textContent === "Sign in");
+        if (!signIn) return;
         observer.disconnect();
-        Array.from(window.document.querySelectorAll("button"))
-          .find((button) => button.textContent === "Sign in")
-          .click();
+        signIn.click();
       }).observe(window.document, { childList: true, subtree: true });
     });
     const requests = [];
@@ -187,10 +200,6 @@ test.describe("Session Expiry", () => {
     // Not "load": index.html preloads the calendar's code, and the page
     // is not loaded until that arrives.
     await page.goto("/calendar/all/2026-01-15/", { waitUntil: "commit" });
-    await expect(page.locator("button", { hasText: "Sign in" })).toBeVisible({
-      timeout: 10000,
-    });
-    releaseCalendarCode();
     // The click comes only once the calendar's grid is drawn, so the new
     // page is asked for only then. 15 seconds: on a busy machine WebKit
     // once took 7 seconds from here to drawing the calendar.
@@ -201,7 +210,11 @@ test.describe("Session Expiry", () => {
     // WebKit cancels a request sent after the click, and reports it as
     // the error #153 shows, which tests/helpers/test.js fails on.
     await page.waitForTimeout(1000);
-    expect(requests.filter((url) => url.includes("undefined"))).toEqual([]);
+    // The community id came from a cookie read with js-cookie
+    // (undefined when gone) until session.ts, which reads it as null.
+    expect(
+      requests.filter((url) => /\/communities\/(undefined|null)\//.test(url)),
+    ).toEqual([]);
   });
 
   test("401 on meal data fetch also triggers banner", async ({
