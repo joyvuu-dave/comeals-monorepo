@@ -28,6 +28,10 @@ Rails.application.configure do
   # Show full error reports and disable caching.
   config.consider_all_requests_local       = true
   config.action_controller.perform_caching = false
+
+  # The same compressor as production, so the admin browser suites
+  # (tests/admin) run the minified admin script that production serves.
+  config.assets.js_compressor = :terser
   # No cache, except for the storm server (bin/storm), which caches the
   # way production does: solid_cache, in the test database, so the
   # calendar cache and the Rack::Attack counters are real rows under load.

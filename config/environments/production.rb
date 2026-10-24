@@ -29,6 +29,10 @@ Rails.application.configure do
 
   # Compress CSS using a preprocessor.
   # config.assets.css_compressor = :sass
+  # Without a compressor Sprockets only joins the admin script's files:
+  # 659,585 bytes, 172,041 gzipped. Terser cuts that to about 79,000
+  # gzipped (spec/config/admin_script_minified_spec.rb).
+  config.assets.js_compressor = :terser
 
   # Do not fallback to assets pipeline if a precompiled asset is missed.
   config.assets.compile = false

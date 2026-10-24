@@ -16,6 +16,10 @@ gem 'activerecord', '~> 8.1.0'
 gem 'railties',     '~> 8.1.0'
 # The original asset pipeline for Rails [https://github.com/rails/sprockets-rails]
 gem 'sprockets-rails'
+# Minifies the admin script in production (config.assets.js_compressor).
+# Sprockets only joins the files without it. It runs on Node through
+# ExecJS, and the Node buildpack puts Node on the Heroku slug.
+gem 'terser', '~> 1.2'
 # Use postgresql as the database for Active Record
 gem 'pg', '~> 1.5'
 # Use the Puma web server [https://github.com/puma/puma]
