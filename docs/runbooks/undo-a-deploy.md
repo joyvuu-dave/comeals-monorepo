@@ -3,6 +3,25 @@
 Written 2026-10-15 for #133. Use it when production must go back to the
 release before a deploy.
 
+## When bin/deploy stops because the ledger check failed
+
+After the balance refresh, `bin/deploy` runs `rake ledger:verify`, which
+checks every settled balance against its source data. When it fails,
+the deploy stops and prints the Rollback workflow command to run, with
+the release before the deploy and the backup it took:
+
+- After a maintenance deploy (a migration ran), maintenance stays on and
+  web and the worker stay at 0, so nobody can use the site. The command
+  has the backup in it: the workflow restores it, rolls back the code,
+  and turns maintenance off. Do not scale web up first.
+- After a push deploy (no migration), the new code serves. The command
+  rolls back only the code. It also prints the backup id, for when the
+  data must go back too; a restore loses every write since.
+
+First look at the admin Ledger Checks page. If the nightly check failed
+before the deploy too, the deploy did not cause it, and rolling back
+will not fix it.
+
 ## First: did the deploy run a migration?
 
 Rolling back only the code puts the old code on the database the new

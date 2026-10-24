@@ -194,7 +194,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.output).not_to include(recovery_banner)
       expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
       steps = deploy.calls_to('heroku')
-                    .grep(/maintenance|ps:scale|ps -a|pg:psql|releases|SLUG_COMMIT|cache\.clear|billing/)
+                    .grep(/maintenance|ps:scale|ps -a|pg:psql|releases|SLUG_COMMIT|cache\.clear|billing|ledger/)
                     .map { it.sub(/^heroku pg:psql .*/, 'heroku pg:psql') }
                     .map { it.delete_suffix(' --json').delete_suffix(' -a comeals-monorepo') }
       expect(steps).to eq([
@@ -204,6 +204,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                             'heroku releases', 'heroku releases:output', 'heroku config:get HEROKU_SLUG_COMMIT',
                             'heroku run --exit-code bin/rails runner Rails.cache.clear',
                             'heroku run --exit-code bin/rake billing:recalculate',
+                            'heroku run --exit-code bin/rake ledger:verify',
                             'heroku ps:scale worker=1', 'heroku ps:scale web=1', 'heroku ps',
                             'heroku maintenance:off'
                           ])
@@ -1329,6 +1330,71 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
 
       expect(result.status).to eq(0)
       expect(result.output).to include('Could not search this run\'s output for warnings')
+    end
+  end
+
+  # After the balance refresh, check every settled balance against its
+  # source data (rake ledger:verify), the same way the other tasks run.
+  describe 'the ledger check' do
+    it 'runs after the recalculation and before the worker starts' do
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('Ledger check passed')
+      calls = deploy.calls
+      ledger = calls.index('heroku run --exit-code bin/rake ledger:verify -a comeals-monorepo')
+      expect(ledger).to be > calls.index('heroku run --exit-code bin/rake billing:recalculate -a comeals-monorepo')
+      expect(ledger).to be < calls.index('heroku ps:scale worker=1 -a comeals-monorepo')
+    end
+
+    # State left: no maintenance, web at 1, the new code serving. Next
+    # step: the Rollback workflow. No migration ran, so the code alone can
+    # go back; the backup is there if the data must go back too.
+    it 'stops a push deploy, says the site serves the new code, and prints the rollback' do
+      deploy.rule('heroku', '^run --exit-code bin/rake ledger:verify', exit: 1, stderr: "3 balances differ\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        '3 balances differ', 'THE LEDGER CHECK FAILED after the deploy',
+        'Maintenance is off: comeals-monorepo serves the new code now.',
+        'gh workflow run rollback.yml --ref main -f app=comeals-monorepo -f release=v700 ' \
+        "-f reason=\"The ledger check failed after the deploy of #{head[0, 7]}\"",
+        'add: -f backup=b001'
+      )
+      expect(result.output).not_to include('Smoke test passed', 'Deploy complete!', recovery_banner)
+      expect(deploy.calls_to('smoke')).to eq([])
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    # State left: maintenance on, web and the worker at 0, the migrations
+    # run. Next step: the Rollback workflow with the backup. The banner
+    # that says to scale up does not show: the balances may be wrong.
+    it 'stops a maintenance deploy with maintenance on and everything at 0, and prints the rollback with the backup' do
+      deploy.production(heroku_sha: deploy.commits[:first_migration])
+      deploy.rule('heroku', '^run --exit-code bin/rake ledger:verify', exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        'THE LEDGER CHECK FAILED after the deploy',
+        'Maintenance is on, and web and the worker are at 0',
+        'gh workflow run rollback.yml --ref main -f app=comeals-monorepo -f release=v700 -f backup=b001 ' \
+        "-f reason=\"The ledger check failed after the deploy of #{head[0, 7]}\""
+      )
+      expect(result.output).not_to include(recovery_banner, 'Deploy complete!')
+      expect_production(maintenance: true, web: 0, pushed: true, worker: 0)
+    end
+
+    it 'says how to find the backup id when it could not read it' do
+      deploy.production(heroku_sha: deploy.commits[:first_migration])
+      deploy.rule('heroku', '^pg:backups:info', exit: 1, stdout: "info failed\n")
+      deploy.rule('heroku', '^run --exit-code bin/rake ledger:verify', exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('-f backup="<the newest backup in: heroku pg:backups -a comeals-monorepo>"')
     end
   end
 

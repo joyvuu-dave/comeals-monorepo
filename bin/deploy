@@ -36,6 +36,10 @@ set -euo pipefail
 # release phase output included, to tmp/deploy/deploy-<UTC time>-<app>.log,
 # and ends with "Warnings seen during this deploy": each warning line once,
 # known ones (docs/deploy-known-warnings.txt) in short and new ones in red.
+#
+# After the balance refresh, rake ledger:verify checks every settled
+# balance against its source data. If it fails, the deploy stops and
+# prints the Rollback workflow command to run.
 # ==============================================================================
 
 MAINTENANCE_ENABLED=false
@@ -48,6 +52,10 @@ NEW_RELEASE=""
 # How many web dynos a maintenance deploy brings back. deploy_maintenance
 # sets it from the count that ran before (#244).
 WEB_COUNT=1
+# The backup capture_backup took, for the rollback command.
+BACKUP_ID=""
+# True once rake ledger:verify failed after the push.
+LEDGER_FAILED=false
 # The app log lines check_logs read, for the warnings section.
 APP_LOGS=""
 
@@ -151,7 +159,9 @@ cleanup() {
   # Nothing here may change the exit status: a grep that finds nothing
   # must not end the trap.
   set +e
-  if [ $exit_code -ne 0 ] && [ "$MAINTENANCE_ENABLED" = true ]; then
+  # After a failed ledger check, the way out is the rollback it printed,
+  # not scaling the new code back up.
+  if [ $exit_code -ne 0 ] && [ "$MAINTENANCE_ENABLED" = true ] && [ "$LEDGER_FAILED" = false ]; then
     echo
     red "============================================"
     red "  DEPLOY FAILED — MANUAL RECOVERY REQUIRED"
@@ -730,6 +740,47 @@ post_deploy_tasks() {
   else
     warn "billing:recalculate failed — balances may be stale until next daily run"
   fi
+
+  check_ledger
+}
+
+# Every settled balance against its source data (rake ledger:verify, the
+# same check VerifyLedgerJob runs each night). It runs before the worker
+# and, in a maintenance deploy, before web, so a wrong ledger stops the
+# deploy while nobody can use the site.
+check_ledger() {
+  info "Checking the ledger (ledger:verify)..."
+  if heroku run --exit-code bin/rake ledger:verify -a "$APP"; then
+    ok "Ledger check passed"
+    return 0
+  fi
+
+  LEDGER_FAILED=true
+  local sha reason
+  sha=$(git rev-parse --short HEAD)
+  reason="The ledger check failed after the deploy of $sha"
+  echo
+  red "============================================"
+  red "  THE LEDGER CHECK FAILED after the deploy"
+  red "============================================"
+  fail "rake ledger:verify found settled balances that do not match their source data. Its output is above."
+  info "If the nightly check already failed before this deploy (admin: Ledger Checks), the deploy may not be the cause."
+  if [ "$MAINTENANCE_ENABLED" = true ]; then
+    info "Maintenance is on, and web and the worker are at 0: nobody can use the site. Leave it so."
+    info "Migrations ran, so undo the deploy with the backup taken before it. Run the Rollback workflow:"
+    echo
+    echo "  gh workflow run rollback.yml --ref main -f app=$APP -f release=v$RELEASE_BEFORE -f backup=$BACKUP_ID -f reason=\"$reason\""
+    echo
+    info "It restores the backup, rolls back the code, and turns maintenance off (docs/runbooks/undo-a-deploy.md)."
+  else
+    info "Maintenance is off: $APP serves the new code now."
+    info "No migration ran, so the code can go back alone. Run the Rollback workflow:"
+    echo
+    echo "  gh workflow run rollback.yml --ref main -f app=$APP -f release=v$RELEASE_BEFORE -f reason=\"$reason\""
+    echo
+    info "To also put the database back as it was before the deploy (this loses every write since), add: -f backup=$BACKUP_ID"
+  fi
+  exit 1
 }
 
 capture_backup() {
@@ -740,6 +791,11 @@ capture_backup() {
   local backup_info
   backup_info=$(heroku pg:backups:info -a "$APP" 2>&1 || true)
   info "$backup_info"
+  BACKUP_ID="\"<the newest backup in: heroku pg:backups -a $APP>\""
+  local backup_line='=== Backup ([a-z0-9]+)'
+  if [[ $backup_info =~ $backup_line ]]; then
+    BACKUP_ID=${BASH_REMATCH[1]}
+  fi
 }
 
 # --- Post-deploy checks ------------------------------------------------------
