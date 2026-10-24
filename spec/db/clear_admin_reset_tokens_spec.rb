@@ -21,6 +21,12 @@ RSpec.describe ClearAdminResetTokens do
     $stdout = STDOUT
   end
 
+  # Devise's own step that stores a new token's digest and returns the
+  # token, without the email (the test environment has no mail host).
+  def give_reset_token(admin)
+    admin.send(:set_reset_password_token)
+  end
+
   def reset_columns(admin)
     ActiveRecord::Base.connection.select_rows(<<~SQL.squish).first
       SELECT reset_password_token, reset_password_sent_at FROM admin_users WHERE id = #{Integer(admin.id)}
@@ -30,8 +36,8 @@ RSpec.describe ClearAdminResetTokens do
   it 'empties the token and its time on every admin that has one, and says how many' do
     ann = create(:admin_user, community: community)
     bob = create(:admin_user, community: community)
-    ann.send_reset_password_instructions
-    bob.send_reset_password_instructions
+    give_reset_token(ann)
+    give_reset_token(bob)
 
     output = migrate(:up)
 
@@ -42,7 +48,7 @@ RSpec.describe ClearAdminResetTokens do
   it 'makes a token mailed before it unusable' do
     admin = create(:admin_user, community: community, password: 'the-old-password',
                                 password_confirmation: 'the-old-password')
-    token = admin.send_reset_password_instructions
+    token = give_reset_token(admin)
 
     migrate(:up)
 
@@ -54,7 +60,7 @@ RSpec.describe ClearAdminResetTokens do
 
   it 'changes nothing else on the row' do
     admin = create(:admin_user, community: community)
-    admin.send_reset_password_instructions
+    give_reset_token(admin)
     before = admin.reload.attributes.except('reset_password_token', 'reset_password_sent_at')
 
     migrate(:up)
