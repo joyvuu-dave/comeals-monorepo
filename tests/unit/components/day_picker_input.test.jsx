@@ -4,6 +4,7 @@ import { observable } from "mobx";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import DayPickerInput from "../../../app/frontend/src/components/common/day_picker_input.tsx";
 import { useDeviceZone } from "../helpers/device_zone.js";
+import { pickerButton } from "../helpers/day_picker.js";
 
 // The picker marks the community's today, which it reads in the store.
 function renderPicker(props, communityToday = "2026-01-15") {
@@ -44,7 +45,7 @@ describe("DayPickerInput", () => {
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
     expect(screen.getByRole("grid")).toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /January 20/ }));
+    fireEvent.click(pickerButton(/January 20/));
     expect(onDayChange.mock.calls).toEqual([["2026-01-20"]]);
 
     // Choosing a day closes the picker.
@@ -79,7 +80,7 @@ describe("DayPickerInput", () => {
     renderPicker({ value: "2026-01-15", onDayChange });
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
 
-    fireEvent.click(screen.getByRole("button", { name: /January 15/ }));
+    fireEvent.click(pickerButton(/January 15/));
     expect(onDayChange).not.toHaveBeenCalled();
     expect(screen.getByRole("grid")).toBeInTheDocument();
   });
@@ -90,9 +91,7 @@ describe("DayPickerInput", () => {
     renderPicker({ value: "2026-01-15" }, "2026-01-17");
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
 
-    expect(
-      screen.getByRole("button", { name: /^Today, Saturday, January 17th/ }),
-    ).toBeInTheDocument();
+    expect(pickerButton(/^Today, Saturday, January 17th/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Today/ })).toHaveLength(1);
   });
 
@@ -115,8 +114,8 @@ describe("DayPickerInput", () => {
     renderPicker({ value: "2026-01-15", lastDay: "2026-01-20" });
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
 
-    expect(screen.getByRole("button", { name: /January 20th/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /January 21st/ })).toBeDisabled();
+    expect(pickerButton(/January 20th/)).toBeEnabled();
+    expect(pickerButton(/January 21st/)).toBeDisabled();
   });
 
   // The device's zone cannot move a day (#129). Havana's clocks skip
@@ -145,7 +144,7 @@ describe("DayPickerInput", () => {
           }),
         ).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: /March 9th/ }));
+        fireEvent.click(pickerButton(/March 9th/));
         expect(onDayChange.mock.calls).toEqual([["2026-03-09"]]);
       });
     },

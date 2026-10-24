@@ -24,6 +24,7 @@ import GuestRoomReservationsEdit from "../../../app/frontend/src/components/gues
 // app (rake test:generate_fixtures): resident 1 hosts on January 25,
 // 2026. The date is a plain date, with no time or zone.
 import RESERVATION from "../../fixtures/guest_room_reservation.json";
+import { pickerButton } from "../helpers/day_picker.js";
 
 // What the server answers for an id it does not have
 // (ApiController#not_found_api).
@@ -144,10 +145,8 @@ describe("GuestRoomReservationsEdit", () => {
     });
 
     fireEvent.click(screen.getByLabelText("Day"));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Go to the Next Month" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /February 3rd/ }));
+    fireEvent.click(pickerButton("Go to the Next Month"));
+    fireEvent.click(pickerButton(/February 3rd/));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     expect(axios.patch).toHaveBeenCalledWith(

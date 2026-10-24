@@ -11,6 +11,7 @@ import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import GuestRoomReservationsNew from "../../../app/frontend/src/components/guest_room_reservations/new.jsx";
+import { pickerButton } from "../helpers/day_picker.js";
 
 function makeStore(overrides = {}) {
   return observable(
@@ -88,13 +89,9 @@ describe("GuestRoomReservationsNew", () => {
     // Pick a day through the picker so the payload's date comes from
     // real day selection.
     fireEvent.click(document.getElementById("guest-room-new-day"));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Go to the Next Month" }),
-    );
-    fireEvent.click(
-      screen.getByRole("button", { name: "Go to the Next Month" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /March 20/ }));
+    fireEvent.click(pickerButton("Go to the Next Month"));
+    fireEvent.click(pickerButton("Go to the Next Month"));
+    fireEvent.click(pickerButton(/March 20/));
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
@@ -117,12 +114,10 @@ describe("GuestRoomReservationsNew", () => {
     renderForm();
     fireEvent.click(document.getElementById("guest-room-new-day"));
     for (let i = 0; i < 6; i++) {
-      fireEvent.click(
-        screen.getByRole("button", { name: "Go to the Next Month" }),
-      );
+      fireEvent.click(pickerButton("Go to the Next Month"));
     }
-    expect(screen.getByRole("button", { name: /July 15/ })).toBeEnabled();
-    expect(screen.getByRole("button", { name: /July 16/ })).toBeDisabled();
+    expect(pickerButton(/July 15/)).toBeEnabled();
+    expect(pickerButton(/July 16/)).toBeDisabled();
   });
 
   // The discard gate (ADR 0006): an untouched New form is clean, so

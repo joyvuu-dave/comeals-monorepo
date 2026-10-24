@@ -24,6 +24,7 @@ import CommonHouseReservationsEdit from "../../../app/frontend/src/components/co
 // Rails app (rake test:generate_fixtures): resident 1's "Book Club",
 // 7 to 9 PM on January 22, 2026, with the community's -08:00 offset.
 import RESERVATION from "../../fixtures/common_house_reservation.json";
+import { pickerButton } from "../helpers/day_picker.js";
 
 // What the server answers for an id it does not have
 // (ApiController#not_found_api).
@@ -176,10 +177,8 @@ describe("CommonHouseReservationsEdit", () => {
     await screen.findByDisplayValue("Book Club");
 
     fireEvent.click(screen.getByLabelText("Day"));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Go to the Next Month" }),
-    );
-    fireEvent.click(screen.getByRole("button", { name: /February 3rd/ }));
+    fireEvent.click(pickerButton("Go to the Next Month"));
+    fireEvent.click(pickerButton(/February 3rd/));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     expect(axios.patch).toHaveBeenCalledWith(
