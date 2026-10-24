@@ -69,6 +69,9 @@ default: &default
   #
   # Migrations are not governed by these values: strong_migrations sets its
   # own per-migration timeouts (config/initializers/strong_migrations.rb).
+  # CREATE DATABASE and DROP DATABASE in db:create, db:drop and
+  # db:test:purge have no statement timeout
+  # (config/initializers/database_tasks_statement_timeout.rb).
   # A rake task that proves it needs longer may raise its own limit with
   # SET statement_timeout at its start — a visible per-task exception.
   # The two nightly jobs are one: their wait for a snapshot gets
