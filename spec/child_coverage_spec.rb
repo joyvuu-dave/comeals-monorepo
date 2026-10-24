@@ -2,6 +2,9 @@
 
 require 'rails_helper'
 require 'open3'
+# spec_helper.rb loads this file only when MUTANT is unset, and bin/mutant
+# sets it, so without this line the spec fails to load under mutant.
+require_relative 'child_coverage'
 
 # spec/child_coverage.rb: the counts of the bin/ scripts' processes are
 # added to this run's result, and only this run's.
