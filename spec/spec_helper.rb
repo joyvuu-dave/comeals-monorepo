@@ -1,5 +1,9 @@
 # frozen_string_literal: true
 
+# First, so that everything after it that writes to stdout or stderr is
+# seen: Rails booting, the spec files loading, the examples.
+require_relative 'stray_output'
+
 # True when RSpec was started with no file or directory arguments, which is
 # how bin/check and CI run it: `bundle exec rspec`, and `bundle exec rake`,
 # whose spec task runs rspec with `--pattern spec/**{,/*/**}/*_spec.rb`.
