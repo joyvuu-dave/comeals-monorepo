@@ -234,6 +234,15 @@ ActiveAdmin.setup do |config|
   #
   # To load a javascript file:
   #   config.register_javascript 'my_javascript.js'
+  #
+  # ActiveAdmin's own script, with `defer`. In <head> without it, the
+  # browser draws nothing until the script has downloaded and run, and it
+  # is the largest file on every admin page. Every handler in it waits
+  # for jQuery's $(function () { ... }), which a deferred script still
+  # reaches, and the one script written into an admin page
+  # (admin_users/passwords/edit.html.erb) uses no jQuery
+  # (spec/requests/admin/admin_script_deferred_spec.rb).
+  config.register_javascript 'active_admin.js', defer: true
 
   # == CSV options
   #
