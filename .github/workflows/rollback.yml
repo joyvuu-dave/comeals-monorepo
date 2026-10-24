@@ -186,6 +186,8 @@ jobs:
       # The smoke test runs even when a bookkeeping step failed: it is
       # the only check that the old code serves. The install gets 3
       # minutes a try, not 5, so two slow tries still fit in the job's 15.
+      # It signs in with the owner's accounts on production only; on
+      # staging the credentials are empty, and it checks the public pages.
       - name: Set up Node and browsers for the smoke test
         if: ${{ !cancelled() && steps.roll.outcome == 'success' }}
         uses: actions/setup-node@v6
@@ -196,6 +198,10 @@ jobs:
         if: ${{ !cancelled() && steps.roll.outcome == 'success' }}
         env:
           PLAYWRIGHT_INSTALL_MINUTES: 3
+          SMOKE_EMAIL: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_EMAIL || '' }}
+          SMOKE_PASSWORD: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_PASSWORD || '' }}
+          SMOKE_ADMIN_EMAIL: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_ADMIN_EMAIL || '' }}
+          SMOKE_ADMIN_PASSWORD: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_ADMIN_PASSWORD || '' }}
         run: |
           npm ci
           bin/lib/playwright-install install --with-deps chromium

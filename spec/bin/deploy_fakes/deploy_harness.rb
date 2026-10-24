@@ -157,6 +157,18 @@ class DeployHarness
     File.exist?(path) ? File.read(path) : ''
   end
 
+  # The .env file of the throwaway repository. Like the real one, git
+  # ignores it.
+  def env_file(text) = File.write(File.join(@repo, '.env'), text)
+
+  # The SMOKE_* variables (and RESIDENT_PASSWORD, which bin/deploy must
+  # never pass on) that the last call of the fake bin/smoke saw. "<unset>"
+  # for one that was not set. nil when bin/smoke did not run.
+  def smoke_env
+    path = File.join(fake_home, 'smoke_env')
+    File.exist?(path) ? File.read(path).lines.to_h { it.chomp.split('=', 2) } : nil
+  end
+
   # The files under tmp/deploy/ that hold a whole run's output.
   def deploy_logs = Dir[File.join(@repo, 'tmp/deploy/deploy-*.log')]
 

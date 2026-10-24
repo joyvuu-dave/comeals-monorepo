@@ -499,4 +499,23 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(rollbacks).to be_empty
     end
   end
+
+  # Production's smoke test signs in with the owner's resident and admin
+  # accounts. Only the step that smokes production gets them: the staging
+  # rehearsal signs in with its own smoke resident.
+  describe '.github/workflows/deploy.yml' do
+    let(:steps) do
+      YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)['jobs']['daily-deploy']['steps']
+    end
+
+    it 'gives the smoke sign-ins from the secrets to the Watch production step only' do
+      names = %w[SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD]
+      watch = steps.find { it['name'] == 'Watch production' }
+
+      expect(watch['env'].slice(*names)).to eq(names.index_with { "${{ secrets.#{it} }}" })
+      expect(steps.reject { it == watch }.map { it['env'].to_s }.grep(/SMOKE_/)).to eq([])
+      expect(YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)['env'].keys.grep(/SMOKE/))
+        .to eq([])
+    end
+  end
 end

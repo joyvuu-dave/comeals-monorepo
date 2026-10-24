@@ -9,10 +9,20 @@
 # credentials it checks the public surface: the login page renders
 # with no console errors, and the API answers. With SMOKE_EMAIL and
 # SMOKE_PASSWORD set it also logs in and renders the calendar on a
-# daylight-saving month (the November escape) and the meal page.
-# Production never sets them: a smoke resident would be a fake person
-# on the community's shared screen (decided 2026-09-21, #68). The
-# staging rehearsal sets them, so the logged-in checks run there.
+# daylight-saving month (the November escape) and the meal page. With
+# SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD set it signs in to the
+# admin site (admin.<host>) and opens the dashboard and the
+# reconciliations list. Each login is tried once; a refused one fails
+# with the variables to update.
+#
+# On production these are the owner's own resident and admin accounts:
+# bin/deploy reads them from .env, and the Deploy and Rollback workflows
+# from the GitHub secrets. Production never gets a smoke resident: that
+# would be a fake person on the community's shared screen (decided
+# 2026-09-21, #68). The staging rehearsal makes its own smoke resident,
+# so the resident checks run there too. Staging has no admin site.
+#
+# It never prints a password (tests/smoke/checks.js, redact).
 #
 # Usage:
 #   bin/smoke                        # against https://comeals.com

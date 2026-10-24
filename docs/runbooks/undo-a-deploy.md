@@ -169,6 +169,31 @@ starts web or the worker again by itself.
 - Web is up but maintenance is still on: the old code runs on the
   restored database. Turn maintenance off and run the smoke test.
 
+## The smoke test's sign-ins
+
+The smoke test (`bin/smoke`) signs in on production as the owner's own
+resident account, and as the owner's own admin account, when it has
+their credentials. It only reads: the calendar, a meal page, the admin
+dashboard and the reconciliations list. Signing in to admin records the
+sign-in on that admin (time, IP address, count); nothing else is
+written. Without them it checks the public pages only, and `bin/deploy`
+says which are missing.
+
+- `bin/deploy` reads them from `.env`, only on production:
+  `SMOKE_EMAIL`, `SMOKE_PASSWORD`, `SMOKE_ADMIN_EMAIL` and
+  `SMOKE_ADMIN_PASSWORD`, or, when those lines are missing, the owner's
+  `RESIDENT_EMAIL`, `RESIDENT_PASSWORD`, `ADMIN_EMAIL` and
+  `ADMIN_PASSWORD`. A variable already set in the shell wins.
+- The Deploy and Rollback workflows read the same four names from the
+  secrets of the GitHub environment `production`, and give them to the
+  smoke test of production only.
+
+When one of these passwords changes, update `.env` and the secret. A
+refused login fails the smoke test with "smoke login refused for the
+... account" and the names to update. In the Deploy workflow a failed
+smoke test rolls back the code, so a stale password there rolls back a
+good release.
+
 ## Deploying a commit again after a rollback
 
 A rollback changes the release that runs. It does not change Heroku's

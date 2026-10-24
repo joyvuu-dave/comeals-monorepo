@@ -7,8 +7,10 @@ name: Deploy
 # from 2026-08-16 until 2026-10-24, when the schedule was removed: the
 # normal way to deploy is bin/deploy, run by a person.
 #
-# Secrets (GitHub environment "production"): HEROKU_API_KEY and
-# ANTHROPIC_API_KEY.
+# Secrets (GitHub environment "production"): HEROKU_API_KEY,
+# ANTHROPIC_API_KEY, and the smoke test's sign-ins on production:
+# SMOKE_EMAIL, SMOKE_PASSWORD, SMOKE_ADMIN_EMAIL, SMOKE_ADMIN_PASSWORD
+# (docs/runbooks/undo-a-deploy.md, "The smoke test's sign-ins").
 
 on:
   workflow_dispatch:
@@ -147,12 +149,18 @@ jobs:
           CANDIDATE: ${{ steps.compare.outputs.candidate }}
         run: bin/lib/deploy/promote
 
+      # The smoke credentials are given to this step only, so the staging
+      # rehearsal above never signs in with the owner's accounts.
       - name: Watch production
         if: steps.compare.outputs.proceed == 'true'
         env:
           CANDIDATE: ${{ steps.compare.outputs.candidate }}
           PREVIOUS: ${{ steps.promote.outputs.previous }}
           STARTED: ${{ steps.promote.outputs.started }}
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
+          SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
         run: bin/lib/deploy/watch-production
 
       - name: Publish the release

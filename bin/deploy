@@ -40,6 +40,11 @@ set -euo pipefail
 # After the balance refresh, rake ledger:verify checks every settled
 # balance against its source data. If it fails, the deploy stops and
 # prints the Rollback workflow command to run.
+#
+# The smoke test signs in when it has credentials (bin/smoke). On
+# production, bin/deploy reads SMOKE_EMAIL, SMOKE_PASSWORD,
+# SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD from .env when the
+# environment does not set them (load_smoke_credentials).
 # ==============================================================================
 
 MAINTENANCE_ENABLED=false
@@ -182,6 +187,47 @@ cleanup() {
   exit "$exit_code"
 }
 trap cleanup EXIT
+
+# --- Smoke credentials ----------------------------------------------------------
+
+# The value of NAME in .env, the last line that sets it, without the
+# quotes around it. Empty when .env or the line is missing. Reads the
+# file as text and runs none of it, so nothing else in .env reaches this
+# script.
+env_file_value() {
+  local name=$1 line value=""
+  [ -f .env ] || return 0
+  while IFS= read -r line || [ -n "$line" ]; do
+    case "$line" in
+      "$name="* | "export $name="*) value=${line#*=} ;;
+    esac
+  done <.env
+  if [[ $value =~ ^\'(.*)\'$ ]] || [[ $value =~ ^\"(.*)\"$ ]]; then
+    value=${BASH_REMATCH[1]}
+  fi
+  printf '%s' "$value"
+}
+
+# On production, bin/smoke signs in as a resident and as an admin when it
+# has these four. A variable already in the environment wins; then the
+# SMOKE_* line in .env; then the owner's own names for the same accounts,
+# which is what the owner's .env has: RESIDENT_EMAIL, RESIDENT_PASSWORD,
+# ADMIN_EMAIL and ADMIN_PASSWORD. (RESIDENT_USER and ADMIN_USER are not
+# read.) Staging signs in only with its own smoke resident, which
+# bin/staging-rehearsal makes, so .env is not read there.
+load_smoke_credentials() {
+  [ "$APP" = comeals-monorepo ] || return 0
+  local pair var value
+  for pair in SMOKE_EMAIL:RESIDENT_EMAIL SMOKE_PASSWORD:RESIDENT_PASSWORD \
+    SMOKE_ADMIN_EMAIL:ADMIN_EMAIL SMOKE_ADMIN_PASSWORD:ADMIN_PASSWORD; do
+    var=${pair%%:*}
+    [ -z "${!var:-}" ] || continue
+    value=$(env_file_value "$var")
+    [ -n "$value" ] || value=$(env_file_value "${pair#*:}")
+    [ -z "$value" ] || export "$var=$value"
+  done
+}
+load_smoke_credentials
 
 # --- Pre-flight checks --------------------------------------------------------
 
@@ -847,10 +893,23 @@ check_logs() {
 
 # Drive the live site with a real browser (bin/smoke): login page,
 # and with SMOKE_EMAIL/SMOKE_PASSWORD set, login + calendar on a DST
-# month + meal page. curl proves the server answers; this proves the
-# app runs. A failure here means the deploy is bad — roll back.
+# month + meal page; with SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_PASSWORD set, the
+# admin dashboard and the reconciliations page. curl proves the server
+# answers; this proves the app runs. A failure here means the deploy is
+# bad — roll back. On production a missing credential is named, because
+# the checks it would run are then skipped.
 run_smoke() {
   step "Browser smoke test"
+
+  if [ "$APP" = comeals-monorepo ]; then
+    local var missing=()
+    for var in SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD; do
+      [ -n "${!var:-}" ] || missing+=("$var")
+    done
+    if [ "${#missing[@]}" -gt 0 ]; then
+      warn "Some logged-in smoke checks will be skipped. Not set, and not in .env: ${missing[*]}"
+    fi
+  fi
 
   if bin/smoke "$APP_URL"; then
     ok "Smoke test passed"

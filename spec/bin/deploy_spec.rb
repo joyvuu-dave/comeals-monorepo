@@ -1398,6 +1398,82 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     end
   end
 
+  # bin/smoke signs in only with credentials. On production, bin/deploy
+  # takes them from .env when the environment does not have them: only
+  # those four variables, never the whole file.
+  describe 'the smoke credentials' do
+    let(:owner_env) do
+      <<~ENV
+        PUSHER_SECRET=px-canary
+        RESIDENT_USER=user-name
+        RESIDENT_PASSWORD='resident-pass-1'
+        ADMIN_USER=admin-name
+        ADMIN_PASSWORD='admin-pass-1'
+        RESIDENT_EMAIL='resident@example.com'
+        RESIDENT_PASSWORD='resident-pass-1'
+        ADMIN_EMAIL="admin@example.com"
+        ADMIN_PASSWORD='admin-pass-1'
+      ENV
+    end
+    let(:from_owner_env) do
+      { 'SMOKE_EMAIL' => 'resident@example.com', 'SMOKE_PASSWORD' => 'resident-pass-1',
+        'SMOKE_ADMIN_EMAIL' => 'admin@example.com', 'SMOKE_ADMIN_PASSWORD' => 'admin-pass-1',
+        'RESIDENT_PASSWORD' => '<unset>' }
+    end
+
+    it 'reads them from the RESIDENT_* and ADMIN_* lines of .env, without quotes, and passes nothing else' do
+      deploy.env_file(owner_env)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(deploy.smoke_env).to eq(from_owner_env)
+      expect(result.output).not_to include('logged-in smoke checks')
+      expect(File.read(deploy.deploy_logs.first)).not_to include('resident-pass-1', 'admin-pass-1', 'px-canary')
+    end
+
+    it 'prefers SMOKE_* lines in .env, and the environment over .env' do
+      deploy.env_file("#{owner_env}SMOKE_EMAIL=smoke@example.com\nexport SMOKE_PASSWORD=\"smoke-pass\"\n")
+
+      deploy.run('--yes', env: { 'SMOKE_ADMIN_PASSWORD' => 'from-the-environment' })
+
+      expect(deploy.smoke_env).to include('SMOKE_EMAIL' => 'smoke@example.com', 'SMOKE_PASSWORD' => 'smoke-pass',
+                                          'SMOKE_ADMIN_EMAIL' => 'admin@example.com',
+                                          'SMOKE_ADMIN_PASSWORD' => 'from-the-environment')
+    end
+
+    it 'says which variables are missing when the logged-in checks will be skipped' do
+      deploy.env_file("RESIDENT_EMAIL=resident@example.com\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Some logged-in smoke checks will be skipped. Not set, and not in .env: ' \
+                                       'SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD')
+      expect(deploy.smoke_env).to include('SMOKE_EMAIL' => 'resident@example.com', 'SMOKE_PASSWORD' => '<unset>')
+    end
+
+    it 'says all four are missing when there is no .env' do
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('Not set, and not in .env: SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL ' \
+                                       'SMOKE_ADMIN_PASSWORD')
+    end
+
+    # Staging signs in with its own smoke resident (bin/staging-rehearsal),
+    # never with the owner's accounts.
+    it 'does not read .env on staging' do
+      deploy.production(config: { 'COMEALS_STAGING' => '1' })
+      deploy.env_file(owner_env)
+
+      result = deploy.run('--yes', env: { 'DEPLOY_APP' => 'comeals-staging' })
+
+      expect(result.status).to eq(0)
+      expect(deploy.smoke_env.values).to all(eq('<unset>'))
+      expect(result.output).not_to include('logged-in smoke checks')
+    end
+  end
+
   # DEPLOY_APP=comeals-staging runs the same deploy on the staging app, so
   # a deploy can be tried there first, the whole way through. The fake
   # heroku keeps one app's state whatever -a names, so these examples

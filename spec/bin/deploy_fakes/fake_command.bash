@@ -16,6 +16,7 @@
 #                of Heroku's git repository)
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
+#   smoke_env    the credentials the last bin/smoke call was given
 #   logs, check_runs, push_output, real_git
 set +x
 
@@ -255,6 +256,13 @@ case "$name" in
       printf 503
     fi
     ;;
-  bundle | npm | npx | sleep | smoke) ;;
+  # bin/smoke: note the credentials it was given, so a spec can check
+  # them without anything printing them.
+  smoke)
+    for var in SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD RESIDENT_PASSWORD; do
+      printf '%s=%s\n' "$var" "${!var-<unset>}"
+    done >"$home/smoke_env"
+    ;;
+  bundle | npm | npx | sleep) ;;
   *) unexpected "$@" ;;
 esac

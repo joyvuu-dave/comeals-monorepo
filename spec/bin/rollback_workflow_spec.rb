@@ -731,6 +731,19 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(smoke['if']).to eq("${{ !cancelled() && steps.roll.outcome == 'success' }}")
     end
 
+    # The smoke test signs in with the owner's resident and admin accounts
+    # on production. On staging it gets none, and checks the public pages.
+    it 'gives the smoke test the sign-ins from the secrets, on production only' do
+      smoke = steps.find { it['name'] == 'Smoke the rolled-back site' }
+
+      expect(smoke['env'].except('PLAYWRIGHT_INSTALL_MINUTES')).to eq(
+        %w[SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD].index_with do |name|
+          "${{ inputs.app == 'comeals-monorepo' && secrets.#{name} || '' }}"
+        end
+      )
+      expect(steps.reject { it == smoke }.map { it['env'].to_s }.grep(/SMOKE_/)).to eq([])
+    end
+
     it 'gives no other step a way to write to GitHub' do
       others = steps.reject { it.dig('env', 'GH_TOKEN') }
 

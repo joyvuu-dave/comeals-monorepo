@@ -1,12 +1,27 @@
 // The post-deploy smoke test bin/smoke runs. Plain Playwright script,
 // not a test-runner suite: it drives the LIVE site, so it must be
 // read-only — it never submits a form that writes, never touches a
-// meal, never creates anything.
+// meal, never creates anything. The sign-in steps are in ./checks.js,
+// which says what a login itself writes.
 const { chromium } = require("@playwright/test");
+const {
+  adminBaseFor,
+  redact,
+  signInResident,
+  checkAdmin,
+} = require("./checks");
 
 const BASE = process.env.SMOKE_URL || "https://comeals.com";
 const EMAIL = process.env.SMOKE_EMAIL;
 const PASSWORD = process.env.SMOKE_PASSWORD;
+const ADMIN_EMAIL = process.env.SMOKE_ADMIN_EMAIL;
+const ADMIN_PASSWORD = process.env.SMOKE_ADMIN_PASSWORD;
+const SECRETS = [PASSWORD, ADMIN_PASSWORD];
+
+// Every line this script prints goes through redact (./checks.js), so no
+// password reaches the terminal, the deploy log or a GitHub Actions log.
+const say = (text) => console.log(redact(text, SECRETS));
+const sayError = (text) => console.error(redact(text, SECRETS));
 
 // The calendar months to render when logged in: the next November
 // (DST fall-back, where the shipped grid bug lived) and the next
@@ -64,7 +79,7 @@ async function main() {
   const checks = [];
   function pass(name) {
     checks.push(name);
-    console.log(`  ok: ${name}`);
+    say(`  ok: ${name}`);
   }
 
   // 1. The API answers.
@@ -81,9 +96,7 @@ async function main() {
 
   if (EMAIL && PASSWORD) {
     // 3. Log in for real.
-    await page.fill('input[aria-label="email"]', EMAIL);
-    await page.fill('input[aria-label="password"]', PASSWORD);
-    await page.getByRole("button", { name: "Submit" }).click();
+    await signInResident(page, EMAIL, PASSWORD);
     await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
     pass("login works, calendar renders");
 
@@ -98,25 +111,45 @@ async function main() {
     });
     pass("meal page renders");
   } else {
-    console.log(
+    say(
       "  note: SMOKE_EMAIL/SMOKE_PASSWORD not set — skipped the " +
         "logged-in checks (calendar, DST month, meal page)",
     );
+  }
+
+  // 6. The admin site: sign in, the dashboard, the reconciliations list.
+  const adminBase = adminBaseFor(BASE);
+  if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+    say(
+      "  note: SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_PASSWORD not set — skipped " +
+        "the admin checks",
+    );
+  } else if (!adminBase) {
+    say(`  note: ${BASE} has no admin site — skipped the admin checks`);
+  } else {
+    for (const name of await checkAdmin(
+      page,
+      adminBase,
+      ADMIN_EMAIL,
+      ADMIN_PASSWORD,
+    )) {
+      pass(name);
+    }
   }
 
   await browser.close();
 
   // Filter expected noise: nothing is expected on these pages.
   if (problems.length) {
-    console.error("Console/page errors during smoke:");
-    problems.forEach((p) => console.error(`  ${p}`));
+    sayError("Console/page errors during smoke:");
+    problems.forEach((p) => sayError(`  ${p}`));
     throw new Error(`${problems.length} console/page error(s)`);
   }
 
-  console.log(`Smoke passed: ${checks.length} check(s) against ${BASE}`);
+  say(`Smoke passed: ${checks.length} check(s) against ${BASE}`);
 }
 
 main().catch((error) => {
-  console.error(`SMOKE FAILED against ${BASE}: ${error.message || error}`);
+  sayError(`SMOKE FAILED against ${BASE}: ${error.message || error}`);
   process.exit(1);
 });
