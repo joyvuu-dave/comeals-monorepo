@@ -173,6 +173,14 @@ describe("AttendeesBox", () => {
     });
   });
 
+  // The first test in this file does work that runs once per file: the
+  // first real store, the first render of the list, and Testing
+  // Library's first role query, which builds its role tables (about 80
+  // ms). The next test takes about 50 ms after this one and about 185
+  // ms when it runs first. This one takes 180 to 360 ms on an idle
+  // machine, all of it in one go, so there is nothing to wait for. With
+  // six Vitest runs at once it went past Vitest's limit of 5 seconds
+  // (#247), so it gets 30.
   it("lists every resident with attendance shown in green", () => {
     renderBox(defaultStore());
 
@@ -180,7 +188,7 @@ describe("AttendeesBox", () => {
     const bob = screen.getByRole("cell", { name: "Bob Johnson" });
     expect(jane).toHaveClass("background-green");
     expect(bob).not.toHaveClass("background-green");
-  });
+  }, 30_000);
 
   // A retired resident is in the meal form only because they ate,
   // cooked, or have a guest on this meal (MealFormSerializer, #91,
