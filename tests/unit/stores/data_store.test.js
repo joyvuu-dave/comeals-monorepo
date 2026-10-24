@@ -915,6 +915,14 @@ describe("DataStore", () => {
       expect(store.meal.id).toBe(2);
       expect(store.meal.description).toBe("");
       expect(store.residents.size).toBe(0);
+
+      // Leave the meal page. Meal 2's read never answers, so 500 ms
+      // after it started, readDeviceCopy counts it as no copy, and the
+      // store would then fetch meal 2. That fetch used to happen during
+      // a later test and add a call to that test's axios.get, which
+      // "switchMonths skips a stale IndexedDB read" counts (#247). Once
+      // the page is left, the late read finds no meal and does nothing.
+      store.teardownMealPage();
     });
 
     it("loadMonth does not clobber meal Pusher subscription", async () => {
