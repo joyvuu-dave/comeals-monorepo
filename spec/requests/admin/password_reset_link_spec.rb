@@ -112,7 +112,7 @@ RSpec.describe 'Admin password reset link' do
     visit(mailed_link)
 
     set_password(token, 'the-new-password', 'something-else')
-    expect(response).to have_http_status(:unprocessable_content)
+    expect(response).to have_http_status(:ok)
     expect(response.body).to include(%(value="#{token}"))
 
     set_password(token, 'the-new-password')
@@ -131,9 +131,9 @@ RSpec.describe 'Admin password reset link' do
     get "/password/edit?reset_password_token=#{token}"
 
     expect(response).to redirect_to('/password/new')
-    expect(flash[:alert]).to eq(AdminPasswordsController::OLD_LINK)
+    expect(flash[:alert]).to eq(AdminUsers::PasswordsController::OLD_LINK)
     follow_redirect!
-    expect(response.body).to include(AdminPasswordsController::OLD_LINK)
+    expect(response.body).to include(AdminUsers::PasswordsController::OLD_LINK)
     expect(log.string.lines.grep(/#{Regexp.escape(token)}/)).to eq([])
   end
 

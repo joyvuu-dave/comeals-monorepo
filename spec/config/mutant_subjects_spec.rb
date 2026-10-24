@@ -34,10 +34,11 @@ RSpec.describe '.mutant.yml subjects' do # -- a config file
   end
 
   # The first class or module a file opens. A controller under Api::V1
-  # opens the Api and V1 modules first, so its name is joined from those.
+  # opens the Api and V1 modules first, and the admin password controller
+  # opens AdminUsers, so its name is joined from those.
   def class_in(source)
     names = source.scan(/^\s*(?:class|module) ([A-Z][A-Za-z0-9:]*)/).flatten
-    wrappers = %w[Api V1]
+    wrappers = %w[Api V1 AdminUsers]
     namespace = names.take_while { |name| wrappers.include?(name) }
     (namespace + [names.find { |name| wrappers.exclude?(name) }]).compact.join('::')
   end

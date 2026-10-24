@@ -1017,9 +1017,9 @@ test.describe("Admin password reset", () => {
     await page.fill("#admin_user_password", "a-new-password");
     await page.fill("#admin_user_password_confirmation", "something-else");
     await page.click('input[type="submit"]');
-    await expect(
-      page.getByText("Password confirmation doesn't match Password"),
-    ).toBeVisible();
+    await expect(page.locator("#error_explanation")).toContainText(
+      "Password confirmation doesn't match Password",
+    );
 
     await page.fill("#admin_user_password", "a-new-password");
     await page.fill("#admin_user_password_confirmation", "a-new-password");
@@ -1048,6 +1048,21 @@ test.describe("Admin password reset", () => {
 
     await expect(page.locator("#reset-link-needed")).toBeVisible();
     await expect(page.locator("#admin_user_password")).toBeHidden();
+  });
+
+  // The page cannot read the part after the # without JavaScript, so it
+  // says so instead of showing a form that cannot work.
+  test.describe("with JavaScript off", () => {
+    test.use({ javaScriptEnabled: false });
+
+    test("says the page needs JavaScript", async ({ page }) => {
+      await page.goto(`/password/edit#reset_password_token=${RESET_TOKEN}`);
+
+      await expect(page.locator("#reset-link-needed")).toContainText(
+        "needs JavaScript",
+      );
+      await expect(page.locator("#admin_user_password")).toBeHidden();
+    });
   });
 
   test("turns away an old link with the token in the query", async ({

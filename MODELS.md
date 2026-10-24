@@ -1328,6 +1328,14 @@ Key ----> identity (polymorphic: Resident or AdminUser; only residents ever used
 Devise account for the ActiveAdmin interface (`database_authenticatable`,
 `recoverable`, `rememberable`, `trackable`, `validatable`).
 
+The reset email links to `/password/edit#reset_password_token=...`. The
+token is after the #, which a browser never sends, so it is in no request
+line, and Heroku's router, which logs every request line with its query,
+never sees it. The page's script puts the token in the form, and the form
+sends it in the body of `PUT /password`, which Rails logs as `[FILTERED]`
+(`AdminUsers::PasswordsController`). Devise stores only a digest of the
+token in `reset_password_token`.
+
 ```
 AdminUser ----> Community (optional)
 ```

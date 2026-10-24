@@ -6,7 +6,12 @@ Rails.application.routes.draw do
 
   # ActiveAdmin (subdomain-based: admin.comeals.com / admin.lvh.me)
   constraints subdomain: 'admin' do
-    devise_for :admin_users, ActiveAdmin::Devise.config.merge(path: '')
+    # The password pages are AdminUsers::PasswordsController, which keeps the
+    # reset token out of every request line.
+    devise_for :admin_users,
+               ActiveAdmin::Devise.config.merge(
+                 path: '', controllers: ActiveAdmin::Devise.controllers.merge(passwords: 'admin_users/passwords')
+               )
     # ActiveAdmin 3 draws routes for its comments resource even with
     # comments off (config/initializers/active_admin.rb), and that
     # controller crashes because the table does not exist. These answer

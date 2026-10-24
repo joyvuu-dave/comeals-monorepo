@@ -19,7 +19,9 @@ const ADMIN_RESET_TOKEN = "admin-e2e-reset-token";
 const SIGNED_OUT_PAGES = [
   ["login", "/login"],
   ["password-new", "/password/new"],
-  ["password-edit", `/password/edit?reset_password_token=${ADMIN_RESET_TOKEN}`],
+  // The emailed link carries the token after the # (app/views/devise/
+  // mailer/reset_password_instructions.html.erb).
+  ["password-edit", `/password/edit#reset_password_token=${ADMIN_RESET_TOKEN}`],
 ];
 
 const SIGNED_IN_PAGES = [
@@ -94,7 +96,11 @@ async function photograph(page, name, path) {
   await page.waitForLoadState("networkidle");
   // A page that redirected (a refused action, a lost session) is not the
   // page this line names; say so instead of photographing the wrong one.
-  expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(path);
+  // The part after a # is left out: the password page takes it out of
+  // the address bar.
+  expect(new URL(page.url()).pathname + new URL(page.url()).search).toBe(
+    path.split("#")[0],
+  );
   await expect(page).toHaveScreenshot(`${name}.png`, {
     fullPage: true,
     // Devise updates these two on every sign-in, and each test signs in.

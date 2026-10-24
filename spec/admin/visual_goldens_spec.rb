@@ -23,11 +23,13 @@ RSpec.describe 'admin visual goldens' do
   end
 
   # Devise pages carry no resource name; they are named by their path.
+  # The password pages are AdminUsers::PasswordsController, ActiveAdmin's with
+  # the reset token kept out of the request line.
   let(:devise_names) do
     {
       'active_admin/devise/sessions#new' => 'login',
-      'active_admin/devise/passwords#new' => 'password-new',
-      'active_admin/devise/passwords#edit' => 'password-edit'
+      'admin_users/passwords#new' => 'password-new',
+      'admin_users/passwords#edit' => 'password-edit'
     }
   end
 
@@ -39,7 +41,7 @@ RSpec.describe 'admin visual goldens' do
 
       controller = route.requirements[:controller]
       action = route.requirements[:action]
-      next unless controller&.start_with?('admin/', 'active_admin/')
+      next unless controller == 'admin_users/passwords' || controller&.start_with?('admin/', 'active_admin/')
 
       "#{controller}##{action}"
     end.uniq

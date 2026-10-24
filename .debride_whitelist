@@ -109,3 +109,6 @@ password
 # Rails calls it before every save and destroy: AttendanceVersion is
 # read-only, because only a database trigger writes its rows.
 readonly?
+# Devise's PasswordsController calls it by name, as a before_action on
+# the edit page; AdminUsers::PasswordsController replaces it.
+assert_reset_token_passed

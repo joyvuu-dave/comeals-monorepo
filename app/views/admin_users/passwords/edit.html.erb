@@ -1,0 +1,44 @@
+<%# ActiveAdmin's page (active_admin/devise/passwords/edit), with the
+    token read from the address bar. The emailed link carries it after
+    the #, which the browser never sends (AdminUsers::PasswordsController). The
+    script below puts it in the form's hidden field and takes it out of
+    the address bar, and the form sends it in the body of PUT /password.
+
+    The form shows only once there is a token: from the link, or put
+    back by Devise after a refused try. Without one, or without
+    JavaScript, the page says to open the emailed link. %>
+<div id="login">
+  <h2><%= active_admin_application.site_title(self) %> <%= title t('active_admin.devise.change_password.title') %></h2>
+
+  <%= render partial: "active_admin/devise/shared/error_messages", resource: resource %>
+  <p id="reset-link-needed">To set a new password, open the link in your password reset email. This page needs JavaScript turned on to read that link.</p>
+  <div id="reset-password-form" hidden>
+    <%= active_admin_form_for(resource, as: resource_name, url: password_path(resource_name), html: { method: :put }) do |f|
+      f.inputs do
+        f.input :password
+        f.input :password_confirmation
+        f.input :reset_password_token, as: :hidden, input_html: { value: resource.reset_password_token }
+      end
+      f.actions do
+        f.action :submit, label: t('active_admin.devise.change_password.submit'), button_html: { value: t('active_admin.devise.change_password.submit') }
+      end
+    end
+    %>
+  </div>
+  <%= javascript_tag nonce: true do %>
+    (function () {
+      var field = document.getElementById("admin_user_reset_password_token");
+      var found = /^#reset_password_token=([\w-]+)$/.exec(window.location.hash);
+      if (found) {
+        field.value = found[1];
+        history.replaceState(history.state, "", window.location.pathname + window.location.search);
+      }
+      if (field.value) {
+        document.getElementById("reset-link-needed").hidden = true;
+        document.getElementById("reset-password-form").hidden = false;
+      }
+    })();
+  <% end %>
+
+  <%= render 'active_admin/devise/shared/links' %>
+</div>
