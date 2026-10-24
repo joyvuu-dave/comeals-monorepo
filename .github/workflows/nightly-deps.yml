@@ -34,11 +34,8 @@ name: Nightly dependency update
 # requires.
 
 on:
-  # 10:00 UTC — 3am Pacific in summer, 2am in winter. Five hours
-  # before deploy.yml's (currently disabled) 15:00 slot, so a deploy
-  # never races the nightly push.
-  schedule:
-    - cron: "0 10 * * *"
+  # Run by hand only. The nightly schedule was removed on 2026-10-24:
+  # nothing updates main or deploys on its own.
   workflow_dispatch:
 
 concurrency:

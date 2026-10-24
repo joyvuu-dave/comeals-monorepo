@@ -37,7 +37,7 @@ no jobs and can be removed; the schedule lives in git.
 
 ## The deploy does steps 1 and 2 itself
 
-`bin/deploy` and the weekly workflow both scale the worker dyno to 1
+`bin/deploy` and the Deploy workflow (run by hand) both scale the worker dyno to 1
 after the release, and then run `rake deploy:verify_solid_queue`, which
 fails unless the supervisor, dispatcher, worker and scheduler all have a
 heartbeat from the last two minutes, and then

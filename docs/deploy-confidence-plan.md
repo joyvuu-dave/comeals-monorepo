@@ -175,6 +175,11 @@ in the loop. If the pipeline stops at any step, it stops and notifies
 — it never retries on its own, and every deploy it makes publishes a
 release note.
 
+**Status 2026-10-24: no schedule.** The Monday cron was removed on
+2026-10-24, together with its healthchecks.io check; the workflow runs
+only by hand, and `bin/deploy` is the normal way to deploy. What
+follows is the history.
+
 **Status 2026-08-16: the cron is on, weekly.** The design of 2026-08-10
 said daily; the decision (2026-08-16) is once a week instead: every
 Monday at 12:00 UTC — 7am in Chicago in summer, 6am in winter, since

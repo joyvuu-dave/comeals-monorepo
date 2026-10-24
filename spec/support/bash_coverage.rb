@@ -41,7 +41,6 @@ class BashCoverage
     'bin/lib/deploy/compare' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/green-gate' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/hold-check' => 'spec/bin/deploy_workflow_spec.rb',
-    'bin/lib/deploy/ping-healthchecks' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/promote' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/watch-production' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/write-release-note' => 'spec/bin/deploy_workflow_spec.rb',

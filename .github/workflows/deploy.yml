@@ -1,21 +1,16 @@
 name: Deploy
 
-# The weekly automated deploy (docs/deploy-confidence-plan.md, item 8).
-# Runs every Monday at 12:00 UTC — 7am in Chicago in summer, 6am in
-# winter, since Actions cron has no timezone — and on demand via
-# workflow_dispatch (same gates). If any step fails, the run stops
-# and notifies; it never retries, and every deploy it makes publishes
-# a release note. (Decided 2026-08-16: weekly, not daily. The daily
-# cron was off 2026-08-11 to 2026-08-16 while that decision was open.)
+# A deploy run from GitHub (docs/deploy-confidence-plan.md, item 8),
+# by hand only (workflow_dispatch): it rehearses on staging, then
+# promotes. If any step fails, the run stops; it never retries, and
+# every deploy it makes publishes a release note. It ran every Monday
+# from 2026-08-16 until 2026-10-24, when the schedule was removed: the
+# normal way to deploy is bin/deploy, run by a person.
 #
-# Secrets (GitHub environment "production"): HEROKU_API_KEY,
-# ANTHROPIC_API_KEY, and HEALTHCHECKS_DEPLOY_URL — a healthchecks.io
-# ping URL; success pings it and failure pings /fail, so the check's
-# own schedule also catches a Monday where the job never ran.
+# Secrets (GitHub environment "production"): HEROKU_API_KEY and
+# ANTHROPIC_API_KEY.
 
 on:
-  schedule:
-    - cron: "0 12 * * 1"
   workflow_dispatch:
 
 concurrency:
@@ -177,10 +172,3 @@ jobs:
         run: |
           heroku ps:scale web=0 -a "$STAGING_APP" || true
           heroku ps:scale worker=0 -a "$STAGING_APP" || true
-
-      - name: Ping healthchecks
-        if: always()
-        env:
-          HC_URL: ${{ secrets.HEALTHCHECKS_DEPLOY_URL }}
-          JOB_STATUS: ${{ job.status }}
-        run: bin/lib/deploy/ping-healthchecks

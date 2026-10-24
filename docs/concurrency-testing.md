@@ -364,7 +364,7 @@ COMMITTED transaction, and the semaphore give-back is on the list (ADR
 heartbeat check passed on staging while the scheduler failed,
 `rake deploy:verify_recurring_job` now queues a recurring task the way
 the scheduler does and waits for the worker to run it, in `bin/deploy`,
-the staging rehearsal and the weekly workflow.
+the staging rehearsal and the Deploy workflow.
 
 Runs after the fix, 2026-10-20: the default shape, a 1 s heartbeat,
 and two jobs processes, three times each on PostgreSQL 16 and 18, then

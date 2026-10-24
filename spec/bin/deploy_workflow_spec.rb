@@ -499,37 +499,4 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(rollbacks).to be_empty
     end
   end
-
-  describe 'bin/lib/deploy/ping-healthchecks' do
-    def ping(url, status)
-      sandbox.rule('curl')
-      sandbox.run_script('bin/lib/deploy/ping-healthchecks', env: { 'HC_URL' => url, 'JOB_STATUS' => status })
-    end
-
-    it 'pings nothing when there is no URL' do
-      expect(ping('', 'success').exitstatus).to eq(0)
-      expect(sandbox.calls).to be_empty
-    end
-
-    it 'pings the URL when the job succeeded' do
-      expect(ping('https://hc.example.com/abc', 'success').exitstatus).to eq(0)
-      expect(sandbox.call_lines).to eq(['curl -fsS -m 10 --retry 3 https://hc.example.com/abc'])
-    end
-
-    it 'pings /fail when the job failed or was cancelled' do
-      ping('https://hc.example.com/abc', 'failure')
-      ping('https://hc.example.com/abc', 'cancelled')
-
-      expect(sandbox.call_lines).to eq(['curl -fsS -m 10 --retry 3 https://hc.example.com/abc/fail'] * 2)
-    end
-
-    it 'does not fail the run when the ping fails' do
-      sandbox.rule('curl', '*', exit: 28)
-
-      result = sandbox.run_script('bin/lib/deploy/ping-healthchecks',
-                                  env: { 'HC_URL' => 'https://hc.example.com/abc', 'JOB_STATUS' => 'success' })
-
-      expect(result.exitstatus).to eq(0)
-    end
-  end
 end
