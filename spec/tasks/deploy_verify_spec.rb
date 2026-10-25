@@ -32,4 +32,34 @@ RSpec.describe 'deploy:verify_solid_queue' do
         .to raise_error(/the scheduler has not saved its tasks/)
     end
   end
+
+  # The release phase runs it before db:migrate (Procfile). It raises
+  # through SquashedMigrationsCheck, which makes the rake process exit
+  # non-zero, so Heroku does not promote the release.
+  describe 'deploy:verify_schema_version' do
+    after { Rake::Task['deploy:verify_schema_version'].reenable }
+
+    it 'passes and names the version when the database has run every deleted migration' do
+      expect { Rake::Task['deploy:verify_schema_version'].invoke }
+        .to output("deploy:verify_schema_version: the database has run migration #{PRODUCTION_SCHEMA_VERSION}, " \
+                   "so it is not behind db/production_schema_version.txt.\n").to_stdout
+    end
+
+    it 'raises when the database is behind db/production_schema_version.txt' do
+      ActiveRecord::Base.connection.execute(
+        "DELETE FROM schema_migrations WHERE version::bigint >= #{PRODUCTION_SCHEMA_VERSION}"
+      )
+
+      expect { Rake::Task['deploy:verify_schema_version'].invoke }
+        .to raise_error(SquashedMigrationsCheck::DatabaseBehind, /The database is behind/)
+    end
+
+    it 'passes and says so on a new database, which has run no migration' do
+      ActiveRecord::Base.connection.execute('DELETE FROM schema_migrations')
+
+      expect { Rake::Task['deploy:verify_schema_version'].invoke }
+        .to output('deploy:verify_schema_version: the database has run no migration, so it is new. ' \
+                   "db:migrate goes on as usual.\n").to_stdout
+    end
+  end
 end

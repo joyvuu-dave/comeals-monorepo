@@ -115,6 +115,7 @@ matcher:
     - UnknownRouteLog*
     - DatabasePoolCheck*
     - SolidQueueCheck*
+    - SquashedMigrationsCheck*
     - BugsnagErrorSubscriber*
     # models and concerns
     - ApplicationRecord*

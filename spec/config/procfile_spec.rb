@@ -7,7 +7,8 @@ require 'open3'
 # Puma only. The jobs run on a dyno of their own, the worker, which runs
 # bin/jobs: Solid Queue's supervisor, in async mode, with config/queue.yml
 # (spec/config/initializers/solid_queue_spec.rb). The release phase
-# migrates.
+# checks that the database is not behind db/production_schema_version.txt
+# (lib/squashed_migrations_check.rb), then migrates.
 #
 # Async mode runs the dispatcher, the worker and the scheduler as threads
 # of the supervisor's one process, instead of three forked processes. One
@@ -28,8 +29,79 @@ RSpec.describe 'Procfile' do
     expect(processes).to eq(
       'web' => 'bundle exec puma -C config/puma.rb',
       'worker' => 'env RAILS_DB_POOL=12 bin/jobs --mode async',
-      'release' => 'bin/rake db:migrate'
+      'release' => 'bin/rake deploy:verify_schema_version db:migrate'
     )
+  end
+
+  # The release command, run for real on a database of its own. Rake runs
+  # the tasks in the order the line names them and stops at the first that
+  # fails, so a database that is behind is never migrated, and Heroku does
+  # not promote the release.
+  describe 'the release command' do
+    let(:database) { "comeals_test#{ENV.fetch('TEST_DB_SUFFIX', '')}_release" }
+    let(:dump_dir) { Dir.mktmpdir('release-dump') }
+
+    # Runs the SQL on the database `name`, on a connection of its own:
+    # CREATE DATABASE cannot run inside the example's transaction.
+    def on_database(name, *sql)
+      pg = PG.connect(dbname: name)
+      sql.map { pg.exec(it) }.last
+    ensure
+      pg&.close
+    end
+
+    def tables
+      on_database(database, "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1").column_values(0)
+    end
+
+    # SCHEMA sends the schema dump that db:migrate writes in the test
+    # environment to a folder of its own, so db/structure.sql is never
+    # touched.
+    def run_release
+      env = { 'RAILS_ENV' => 'test', 'RUBYOPT' => nil, 'TEST_DB_SUFFIX' => "#{ENV.fetch('TEST_DB_SUFFIX', '')}_release",
+              'SCHEMA' => File.join(dump_dir, 'structure.sql') }
+      Open3.capture2e(env, *processes.fetch('release').split, chdir: Rails.root.to_s)
+    end
+
+    # Not DROP DATABASE IF EXISTS: when there is none, PostgreSQL sends a
+    # notice, and spec/support/server_notices.rb fails the example.
+    def drop_database
+      exists = on_database('postgres', "SELECT 1 FROM pg_database WHERE datname = '#{database}'").ntuples.positive?
+      on_database('postgres', "DROP DATABASE #{database}") if exists
+    end
+
+    before do
+      drop_database
+      on_database('postgres', "CREATE DATABASE #{database}")
+    end
+
+    after do
+      drop_database
+      FileUtils.remove_entry(dump_dir)
+    end
+
+    it 'refuses, and migrates nothing, when the database is behind the deleted migrations' do
+      on_database(database, 'CREATE TABLE schema_migrations (version varchar PRIMARY KEY)',
+                  "INSERT INTO schema_migrations VALUES ('#{PRODUCTION_SCHEMA_VERSION - 1}')")
+
+      output, status = run_release
+
+      expect(status).not_to be_success
+      expect(output).to include('The database is behind db/production_schema_version.txt. ' \
+                                "Its newest migration is #{PRODUCTION_SCHEMA_VERSION - 1}")
+      # db:migrate makes ar_internal_metadata. It did not run.
+      expect(tables).to eq(['schema_migrations'])
+    end
+
+    # A brand new app's database. db:migrate makes the two tables Rails
+    # keeps, as it did before the check. The app's own tables come from
+    # db/structure.sql.
+    it 'migrates an empty database the way it did before the check' do
+      output, status = run_release
+
+      expect(status).to be_success, output
+      expect(tables).to eq(%w[ar_internal_metadata schema_migrations])
+    end
   end
 
   # In async mode every thread of every Solid Queue process shares one
