@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 
 // These tests run the real DataStore with the month cache capped at 2
 // entries (via VITE_MONTH_CACHE_MAX_ENTRIES). Every visit to a month
@@ -99,7 +100,7 @@ function fireCalendarUpdate(year, month) {
 // revalidation chains finish so the next step starts with no request
 // still running.
 async function settleOn(store, year, month) {
-  await vi.waitFor(() => {
+  await vitestWaitFor(() => {
     expect(store.calendarEvents[0].title).toBe(titleFor(year, month));
   });
   for (let i = 0; i < 10; i++) {
@@ -196,7 +197,7 @@ describe("month cache eviction through the store (cap = 2)", () => {
     apiPayloads.set(payloadKey(2024, 8), calendarData(2024, 8, "August fresh"));
 
     store.switchMonths("2024-08-15");
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(store.calendarEvents[0].title).toBe("August fresh");
     });
     expect(monthCache.size()).toBeLessThanOrEqual(2);

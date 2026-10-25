@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import { render, screen, fireEvent } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
 
@@ -63,7 +64,7 @@ describe("SideBar", () => {
     fireEvent.click(screen.getByRole("button", { name: "Next Meal" }));
     expect(axios.get).toHaveBeenCalledWith("/api/v1/meals/next");
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByTestId("location")).toHaveTextContent(
         /^\/meals\/42\/edit$/,
       );
@@ -101,7 +102,7 @@ describe("SideBar", () => {
       renderBar();
 
       fireEvent.click(screen.getByRole("button", { name: "Next Meal" }));
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(toastStore.toasts).toHaveLength(1);
       });
       expect(toastStore.toasts[0]).toMatchObject({ message, type: "error" });

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
@@ -180,7 +181,7 @@ describe("hosts cache", () => {
     mockHostsResponse([[9, "New Person", "B"]]);
     const handler = bind.mock.calls[0][1];
     handler();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(store.hosts.slice()).toEqual([
         { id: 9, name: "New Person", unitName: "B" },
       ]);

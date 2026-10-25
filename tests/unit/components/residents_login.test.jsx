@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import {
   render,
   screen,
@@ -172,7 +173,7 @@ describe("ResidentsLogin", () => {
         typeCredentials();
         fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
-        await vi.waitFor(() => {
+        await vitestWaitFor(() => {
           expect(location.href).toBe("/calendar/all/2026-03-02");
         });
         const expires = { expires: 7300 };
@@ -223,7 +224,7 @@ describe("ResidentsLogin", () => {
         typeCredentials();
         fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
-        await vi.waitFor(() => {
+        await vitestWaitFor(() => {
           expect(location.href).toBe("/meals/42/edit");
         });
         expect(Cookie.set).not.toHaveBeenCalledWith(
@@ -266,7 +267,7 @@ describe("ResidentsLogin", () => {
     // change, seen at once). Under load the wait's next check could run
     // between the two and find the toast while the button was still
     // disabled (#247).
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         "Incorrect password",
       ]);
@@ -382,7 +383,7 @@ describe("ResidentsLogin", () => {
       renderLogin();
       typeCredentials();
       tapSubmit();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messages()).toEqual(["Incorrect password"]);
       });
 
@@ -408,12 +409,12 @@ describe("ResidentsLogin", () => {
       tapReset();
       typeEmail("jane@example.org");
       tapReset();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messages()).toEqual(["No resident with that email address."]);
       });
       typeEmail("jane@example.com");
       tapReset();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messages()).toEqual([
           "Error: no response received from server.",
           "No resident with that email address.",
@@ -422,7 +423,7 @@ describe("ResidentsLogin", () => {
 
       tapReset();
 
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messages()).toEqual(["Check your email."]);
       });
     });
@@ -439,13 +440,13 @@ describe("ResidentsLogin", () => {
       renderLogin();
       typeCredentials();
       tapSubmit();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messages()).toEqual(["Incorrect password"]);
       });
 
       tapReset();
 
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messages()).toEqual(["Check your email.", "Incorrect password"]);
       });
     });
@@ -485,7 +486,7 @@ describe("ResidentsLogin", () => {
   it("a reset link of the old kind says to ask for a new one", async () => {
     renderLogin({ path: "/reset-password/tok-1" });
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         "This password reset link no longer works. Please request a new one.",
       ]);
@@ -506,7 +507,7 @@ describe("ResidentsLogin", () => {
       screen.getByRole("button", { name: "Reset your password" }),
     );
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         "Check your email.",
       ]);
@@ -531,7 +532,7 @@ describe("ResidentsLogin", () => {
 
     // One wait for both, as in "a refused login shows the reason and
     // frees the form".
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(toastStore.toasts.map((t) => t.message)).toEqual([
         "No resident with that email address.",
       ]);
@@ -609,7 +610,7 @@ describe("ResidentsLogin", () => {
     field.blur();
     expect(document.body).toHaveFocus();
 
-    await vi.waitFor(() => expect(dialog).toHaveFocus());
+    await vitestWaitFor(() => expect(dialog).toHaveFocus());
     fireEvent.keyDown(document.activeElement, { key: "Escape", keyCode: 27 });
     expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
   });

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 import { MemoryRouter, Routes, Route } from "react-router";
@@ -101,7 +102,7 @@ describe("GuestRoomReservationsNew", () => {
     });
     // Success clears the new reservation's month from the cache and
     // closes the modal.
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate).toHaveBeenCalledTimes(1);
@@ -154,7 +155,7 @@ describe("GuestRoomReservationsNew", () => {
     const { handleCloseModal } = renderForm();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: ["Date can't be blank"],
         stack: [],

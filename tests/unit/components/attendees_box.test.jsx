@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { stage } from "../helpers/create_data_store.js";
 
@@ -704,7 +705,7 @@ describe("AttendeesBox", () => {
         data: expect.objectContaining({ vegetarian: true }),
       }),
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(store.residents.get("2").attending_at).toEqual(
         new Date("2026-01-14T13:00:00Z"),
       );
@@ -729,7 +730,7 @@ describe("AttendeesBox", () => {
     // The guest row goes when the server confirms the delete.
     expect(store.guests.size).toBe(1);
     fireEvent.click(screen.getByLabelText("Remove Guest of Jane Smith"));
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(store.guests.size).toBe(0);
     });
 

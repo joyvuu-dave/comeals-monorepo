@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import {
   render,
   screen,
@@ -175,7 +176,7 @@ describe("ResidentsPasswordNew", () => {
     fireEvent.change(input, { target: { value: "x" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({ form: [reason], stack: [] });
     });
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -200,7 +201,7 @@ describe("ResidentsPasswordNew", () => {
     const input = await screen.findByPlaceholderText("New Password");
     fireEvent.change(input, { target: { value: "hunter2hunter2" } });
     fireEvent.click(screen.getByRole("button", { name: "Submit" }));
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown().form).toEqual([
         "Error: no response received from server.",
       ]);

@@ -6,16 +6,15 @@ import "@testing-library/jest-dom/vitest";
 import { cleanup, configure } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 import Cookie, { cookies } from "../mocks/js_cookie.js";
+import { WAIT_LIMIT_MS } from "./wait_for.js";
 
 // How long findBy* and waitFor wait before they fail. Testing Library's
 // default is 1 second. With six full Vitest runs at once, waits that
 // end in a few milliseconds on an idle machine took up to 2.7 seconds,
 // and some went past 1 second (#247). 10 seconds leaves room for more
-// load than that, and it is well under the test limit in
-// vitest.config.mjs, so a wait that never ends fails with its own
-// message, not with the test's timeout. vi.waitFor is Vitest's own and
-// keeps its 1 second default.
-configure({ asyncUtilTimeout: 10_000 });
+// load than that. Vitest's own waits get the same limit through
+// wait_for.js, where the number is.
+configure({ asyncUtilTimeout: WAIT_LIMIT_MS });
 
 // jsdom does not scroll, so it has no scrollIntoView. A calendar form
 // scrolls its own messages into view (form_messages.tsx), and every

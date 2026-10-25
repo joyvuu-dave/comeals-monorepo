@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "./wait_for.js";
 import watchDialogFocus from "../../../app/frontend/src/helpers/watch_dialog_focus";
 
 // react-modal listens for Escape only on the dialog itself, so Escape
@@ -34,7 +35,7 @@ describe("watchDialogFocus", () => {
     field.blur();
     expect(document.body).toHaveFocus();
 
-    await vi.waitFor(() => expect(dialog).toHaveFocus());
+    await vitestWaitFor(() => expect(dialog).toHaveFocus());
   });
 
   // WebKit, like jsdom, sends no event when the element that has focus
@@ -45,7 +46,7 @@ describe("watchDialogFocus", () => {
     button.remove();
     expect(document.body).toHaveFocus();
 
-    await vi.waitFor(() => expect(dialog).toHaveFocus());
+    await vitestWaitFor(() => expect(dialog).toHaveFocus());
   });
 
   // While focusout runs, <body> has focus even when focus is moving to

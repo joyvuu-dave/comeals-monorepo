@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "./wait_for.js";
 
 // The Pusher transport. Each test gets a fresh module (the client keeps
 // `started` and the real instance at module level) and its own env.
@@ -190,7 +191,7 @@ describe("pusherClient", () => {
       expect(Fake.instances).toHaveLength(0);
 
       idle[0][0]();
-      await vi.waitFor(() => expect(Fake.instances).toHaveLength(1));
+      await vitestWaitFor(() => expect(Fake.instances).toHaveLength(1));
       // What was asked for while it loaded is sent once it connects.
       expect(Fake.instances[0].calls).toEqual([["subscribe", "meal-4"]]);
     });
@@ -206,7 +207,7 @@ describe("pusherClient", () => {
       expect(Fake.instances).toHaveLength(0);
 
       idle[0]();
-      await vi.waitFor(() => expect(Fake.instances).toHaveLength(1));
+      await vitestWaitFor(() => expect(Fake.instances).toHaveLength(1));
     });
   });
 
@@ -219,7 +220,7 @@ describe("pusherClient", () => {
 
     startPusher();
     // The import resolves a moment later.
-    await vi.waitFor(() => expect(Fake.instances).toHaveLength(1));
+    await vitestWaitFor(() => expect(Fake.instances).toHaveLength(1));
     expect(Fake.instances[0].calls).toEqual([["subscribe", "meal-3"]]);
     expect(pusherClient.connection.socket_id).toBe("socket-1");
     vi.doUnmock("pusher-js");

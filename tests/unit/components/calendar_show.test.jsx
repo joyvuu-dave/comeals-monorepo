@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import {
   render,
   screen,
@@ -110,16 +111,6 @@ function makeStore(overrides = {}) {
     },
   );
 }
-
-// A Create that works closes the form from the request's answer, so the
-// address changes when React has drawn the calendar page again (a
-// transition, react-router's navigate). That draw is the slow step: it
-// took 7 to 9 ms on an idle machine. In 80 runs of this file with 20
-// copies at once and 10 CPU-burning loops, it took 128 ms in the middle
-// run and 650 ms in the slowest, and with six full Vitest runs at once
-// it once went past vi.waitFor's default of 1 second (#247). The two
-// tests that wait for it wait up to 10 seconds.
-const CLOSE_DRAW_WAIT = { timeout: 10_000 };
 
 function LocationEcho() {
   const location = useLocation();
@@ -435,11 +426,11 @@ describe("MainCalendar", () => {
       dirtyEventForm();
       fireEvent.click(form().getByRole("button", { name: "Create" }));
 
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(screen.getByTestId("location")).toHaveTextContent(
           /^\/calendar\/all\/2026-01-15$/,
         );
-      }, CLOSE_DRAW_WAIT);
+      });
       expect(
         screen.queryByText("Discard your changes?"),
       ).not.toBeInTheDocument();
@@ -783,7 +774,7 @@ describe("MainCalendar", () => {
         handleAxiosError({ response: { data: { message: NOT_SAVED } } });
       });
       fireEvent.click(form().getByRole("button", { name: "Create" }));
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(messagesShown()).toEqual({
           form: [REFUSED],
           stack: [NOT_SAVED],
@@ -811,11 +802,11 @@ describe("MainCalendar", () => {
 
       fireEvent.click(form().getByRole("button", { name: "Create" }));
 
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(screen.getByTestId("location")).toHaveTextContent(
           /^\/calendar\/all\/2026-01-15$/,
         );
-      }, CLOSE_DRAW_WAIT);
+      });
       expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
     });
 
@@ -861,7 +852,7 @@ describe("MainCalendar", () => {
       title.blur();
       expect(document.body).toHaveFocus();
 
-      await vi.waitFor(() => expect(dialog).toHaveFocus());
+      await vitestWaitFor(() => expect(dialog).toHaveFocus());
       pressEscape();
       expect(screen.getByTestId("location")).toHaveTextContent(
         /^\/calendar\/all\/2026-01-15$/,
@@ -890,7 +881,7 @@ describe("MainCalendar", () => {
       expect(dismiss).not.toBeInTheDocument();
       expect(document.body).toHaveFocus();
 
-      await vi.waitFor(() => expect(dialog).toHaveFocus());
+      await vitestWaitFor(() => expect(dialog).toHaveFocus());
       pressEscape();
       expect(screen.getByTestId("location")).toHaveTextContent(
         /^\/calendar\/all\/2026-01-15$/,

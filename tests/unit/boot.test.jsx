@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "./helpers/wait_for.js";
 import { act, screen, within } from "@testing-library/react";
 
 vi.mock("axios", () => import("./mocks/axios.js"));
@@ -169,11 +170,11 @@ async function bootApp(path, { failingPage, signedOut = false } = {}) {
 // A browser the browser check turned away starts none of this.
 async function finishBoot({ root, Pusher, pushersBefore, failingPage }) {
   if (window.comealsBrowserCheck?.result === "failed") return;
-  await vi.waitFor(() =>
+  await vitestWaitFor(() =>
     expect(Pusher.instances).toHaveLength(pushersBefore + 1),
   );
   if (failingPage !== undefined) return;
-  await vi.waitFor(() => expect(pageOnScreen(root)).not.toBeNull());
+  await vitestWaitFor(() => expect(pageOnScreen(root)).not.toBeNull());
 }
 
 // The page a boot ends on: the calendar page, the meal page, the login
@@ -342,7 +343,7 @@ describe("the calendar's first render", () => {
     expect(await screen.findByText("Loading...")).toBeInTheDocument();
     // lazy_retry has asked the server, and the answer never comes, so
     // nothing more runs after this test.
-    await vi.waitFor(() =>
+    await vitestWaitFor(() =>
       expect(fetch).toHaveBeenCalledExactlyOnceWith("/api/v1/version", {
         cache: "no-store",
       }),
@@ -395,7 +396,7 @@ describe("a page whose code fails to load", () => {
 
       await bootApp(path, { failingPage: page });
 
-      await vi.waitFor(() =>
+      await vitestWaitFor(() =>
         expect(order).toEqual(["sendBillsAgainBeforeClose", "reload"]),
       );
       expect(sessionStorage.getItem("chunk_retry")).toBe("test-build");
@@ -546,7 +547,7 @@ describe("old service workers", () => {
       value: { getRegistrations: () => Promise.resolve(registrations) },
     });
     await bootApp("/", { signedOut: true });
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       for (const registration of registrations) {
         expect(registration.unregister).toHaveBeenCalledTimes(1);
       }

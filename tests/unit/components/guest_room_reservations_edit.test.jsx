@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 
@@ -101,7 +102,7 @@ describe("GuestRoomReservationsEdit", () => {
     const { store } = renderForm();
 
     expect(store.ensureHosts).toHaveBeenCalledTimes(1);
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
     expect(axios.get).toHaveBeenCalledWith(
@@ -114,7 +115,7 @@ describe("GuestRoomReservationsEdit", () => {
     axios.patch.mockResolvedValue({ status: 200, data: {} });
     const { handleCloseModal, store } = renderForm();
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "2" } });
@@ -124,7 +125,7 @@ describe("GuestRoomReservationsEdit", () => {
       "/api/v1/guest-room-reservations/60/update",
       { resident_id: "2", date: "2026-01-25" },
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     // The cached month the stay was in is stale now (issue #37).
@@ -140,7 +141,7 @@ describe("GuestRoomReservationsEdit", () => {
   it("an Update that moves the reservation to another month clears both months", async () => {
     axios.patch.mockResolvedValue({ status: 200, data: {} });
     const { handleCloseModal, store } = renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
 
@@ -153,7 +154,7 @@ describe("GuestRoomReservationsEdit", () => {
       "/api/v1/guest-room-reservations/60/update",
       { resident_id: 1, date: "2026-02-03" },
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
@@ -165,7 +166,7 @@ describe("GuestRoomReservationsEdit", () => {
   it("Delete asks first, then deletes on confirm", async () => {
     axios.delete.mockResolvedValue({ status: 200, data: {} });
     const { handleCloseModal, store } = renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
 
@@ -180,7 +181,7 @@ describe("GuestRoomReservationsEdit", () => {
     expect(axios.delete).toHaveBeenCalledWith(
       "/api/v1/guest-room-reservations/60/delete",
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([["2026-01-25"]]);
@@ -191,7 +192,7 @@ describe("GuestRoomReservationsEdit", () => {
   // clean again.
   it("reports dirty on an edit and clean when the edit is undone", async () => {
     const { setDirty } = renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
     expect(setDirty).toHaveBeenLastCalledWith(false);
@@ -210,7 +211,7 @@ describe("GuestRoomReservationsEdit", () => {
     toastStore.clearAll();
     axios.get.mockRejectedValue(NOT_FOUND);
     renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: [NOT_FOUND.response.data.message],
         stack: [],
@@ -228,12 +229,12 @@ describe("GuestRoomReservationsEdit", () => {
       },
     });
     const { handleCloseModal } = renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Host")).toHaveValue("1");
     });
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: ["Date has already been taken"],
         stack: [],
@@ -287,7 +288,7 @@ describe("GuestRoomReservationsEdit", () => {
           }),
       );
       const { handleCloseModal } = renderForm();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(screen.getByLabelText("Host")).toHaveValue("1");
       });
       fireEvent.click(screen.getByRole("button", { name: "Update" }));

@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 
 // Mock external modules before importing stores
 vi.mock("axios", () => import("../mocks/axios.js"));
@@ -464,7 +465,7 @@ describe("DataStore", () => {
       expect(store.canAdd).toBe(false);
 
       // The server saved it: the seat stays taken.
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(alice.attending_at).toEqual(new Date("2023-06-15T17:00:00Z"));
       });
       expect(alice.attending).toBe(true);
@@ -906,7 +907,7 @@ describe("DataStore", () => {
       // Now meal 1's answer lands.
       const meal1 = makeMealData(1, { attending: false, late: true });
       answerMeal1({ status: 200, data: meal1 });
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(idbKeyval.set).toHaveBeenCalledWith("1", meal1);
       });
       await new Promise((r) => setTimeout(r, 0));
@@ -1754,7 +1755,7 @@ describe("DataStore", () => {
 
       // Wait for the answer, and check the toasts it left
       // One info toast that carries the server's warning text.
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(toastStore.toasts.map((t) => [t.type, t.message])).toEqual([
           ["info", "Cooks saved. Warning: third cooks should not be added."],
         ]);
@@ -1778,7 +1779,7 @@ describe("DataStore", () => {
       bill.setAmount("26.00");
       store.saveBillRowNow(bill);
 
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(toastStore.toasts.map((t) => t.message)).toEqual([
           "Cooks saved.",
         ]);
@@ -4373,7 +4374,7 @@ describe("DataStore", () => {
       }
       // Polled, not a fixed number of microtask turns: the dynamic import
       // takes more of them on a slow runner (see app_plumbing.test.js).
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         if (calls().length === 0) throw new Error("handler not bound yet");
       });
       return calls()[calls().length - 1][1];
@@ -4458,7 +4459,7 @@ describe("DataStore", () => {
       }
       // Polled, not a fixed number of microtask turns: the dynamic import
       // takes more of them on a slow runner (see app_plumbing.test.js).
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         if (calls().length === 0) throw new Error("handler not bound yet");
       });
       return calls()[calls().length - 1][1];
@@ -4756,7 +4757,7 @@ describe("DataStore", () => {
           }),
       );
       prefetchMonth("2030-03-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(resolveFetch).toBeDefined();
       });
       expect(monthCalls("/calendar/2030-03")).toBe(1);
@@ -4770,7 +4771,7 @@ describe("DataStore", () => {
 
       // When the prefetch lands, its data reaches the screen.
       resolveFetch({ status: 200, data: monthPayload(2030, 3, "adopted") });
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents.length).toBe(1);
         expect(store.calendarEvents[0].title).toBe("adopted");
       });
@@ -4785,7 +4786,7 @@ describe("DataStore", () => {
         data: monthPayload(2030, 5, "fresh"),
       });
       prefetchMonth("2030-05-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(monthCalls("/calendar/2030-05")).toBe(1);
       });
       // Let the prefetch finish writing the cache.
@@ -4812,7 +4813,7 @@ describe("DataStore", () => {
       store.goToMonth("2030-07-15");
       expect(store.calendarEvents[0].title).toBe("stale");
       // The stale-while-revalidate fetch still fires.
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(monthCalls("/calendar/2030-07")).toBe(1);
       });
     });

@@ -259,6 +259,34 @@ module.exports = [
   }),
 
   // -----------------------------------------------------------
+  // Unit tests in any language: Vitest's own waits go through
+  // tests/unit/helpers/wait_for.js, which gives them the same 10 second
+  // limit as Testing Library's waits instead of Vitest's 1 second
+  // (#247). After the TypeScript block, so its rules do not replace
+  // this one.
+  // -----------------------------------------------------------
+  {
+    files: ["tests/unit/**/*.{js,jsx,ts,tsx}"],
+    rules: {
+      "no-restricted-properties": [
+        "error",
+        {
+          object: "vi",
+          property: "waitFor",
+          message:
+            "Use vitestWaitFor from tests/unit/helpers/wait_for.js. It waits up to 10 seconds, not 1 (#247).",
+        },
+        {
+          object: "vi",
+          property: "waitUntil",
+          message:
+            "Use vitestWaitUntil from tests/unit/helpers/wait_for.js. It waits up to 10 seconds, not 1 (#247).",
+        },
+      ],
+    },
+  },
+
+  // -----------------------------------------------------------
   // Ignore build output, dependencies, and this config file
   // -----------------------------------------------------------
   {

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import {
   render,
   screen,
@@ -139,7 +140,7 @@ describe("EventsEdit", () => {
       end_minutes: "00",
       all_day: false,
     });
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     // The cached month the event was in is stale now (issue #37).
@@ -170,7 +171,7 @@ describe("EventsEdit", () => {
         start_day: 3,
       }),
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
@@ -196,7 +197,7 @@ describe("EventsEdit", () => {
     armAndClick(buttons[buttons.length - 1]);
 
     expect(axios.delete).toHaveBeenCalledWith("/api/v1/events/70/delete");
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
@@ -216,7 +217,7 @@ describe("EventsEdit", () => {
     const buttons = screen.getAllByRole("button", { name: "Delete" });
     armAndClick(buttons[buttons.length - 1]);
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: ["This event already happened."],
         stack: [],
@@ -335,7 +336,7 @@ describe("EventsEdit", () => {
     toastStore.clearAll();
     axios.get.mockRejectedValue(NOT_FOUND);
     renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: [NOT_FOUND.response.data.message],
         stack: [],
@@ -353,7 +354,7 @@ describe("EventsEdit", () => {
     await screen.findByDisplayValue("Community Meeting");
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: ["Title can't be blank"],
         stack: [],

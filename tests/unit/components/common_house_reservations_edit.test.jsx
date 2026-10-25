@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import { render, screen, fireEvent, cleanup } from "@testing-library/react";
 import { observable } from "mobx";
 
@@ -126,7 +127,7 @@ describe("CommonHouseReservationsEdit", () => {
     });
     renderForm();
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Resident")).toHaveValue("1");
     });
     expect(screen.getByLabelText("Title")).toHaveValue("");
@@ -158,7 +159,7 @@ describe("CommonHouseReservationsEdit", () => {
         title: "Book Club",
       },
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     // The cached month the booking was in is stale now (issue #37).
@@ -189,7 +190,7 @@ describe("CommonHouseReservationsEdit", () => {
         start_day: 3,
       }),
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
@@ -214,7 +215,7 @@ describe("CommonHouseReservationsEdit", () => {
     expect(axios.delete).toHaveBeenCalledWith(
       "/api/v1/common-house-reservations/50/delete",
     );
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate.mock.calls).toEqual([
@@ -245,7 +246,7 @@ describe("CommonHouseReservationsEdit", () => {
       data: { event: { ...RESERVATION.event, title: null } },
     });
     const { setDirty } = renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(screen.getByLabelText("Resident")).toHaveValue("1");
     });
     expect(setDirty).toHaveBeenLastCalledWith(false);
@@ -294,7 +295,7 @@ describe("CommonHouseReservationsEdit", () => {
       target: { value: "Choir" },
     });
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
 
@@ -313,7 +314,7 @@ describe("CommonHouseReservationsEdit", () => {
     toastStore.clearAll();
     axios.get.mockRejectedValue(NOT_FOUND);
     renderForm();
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: [NOT_FOUND.response.data.message],
         stack: [],
@@ -331,7 +332,7 @@ describe("CommonHouseReservationsEdit", () => {
     await screen.findByDisplayValue("Book Club");
 
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: ["Those hours are taken"],
         stack: [],

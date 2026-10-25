@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 
 // The calendar's Pusher subscriptions through the real pusherClient
 // (helpers/pusher_client.js), which hands back one wrapper per channel
@@ -372,7 +373,7 @@ describe("calendar channels through the real Pusher client", () => {
       idle.forEach((callback) => callback());
       // The idle callback starts the import of pusher-js. Under load it
       // can take longer than flush(), so wait for the Pusher it makes.
-      await vi.waitFor(() => expect(FakePusher.instance).toBeDefined());
+      await vitestWaitFor(() => expect(FakePusher.instance).toBeDefined());
       expect(openNames()).toContain(monthChannel(2024, 7));
       confirmEveryChannel();
       await flush();

@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import {
   render,
   screen,
@@ -138,7 +139,7 @@ describe("CommonHouseReservationsNew", () => {
     );
     // Success clears the new reservation's month from the cache and
     // closes the modal.
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
     expect(store.invalidateMonthForDate).toHaveBeenCalledTimes(1);
@@ -185,7 +186,7 @@ describe("CommonHouseReservationsNew", () => {
     const { handleCloseModal } = renderForm();
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    await vi.waitFor(() => {
+    await vitestWaitFor(() => {
       expect(messagesShown()).toEqual({
         form: ["Error: Invalid date"],
         stack: [],

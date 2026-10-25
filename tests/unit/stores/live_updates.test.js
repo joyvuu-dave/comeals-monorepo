@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 import { stage } from "../helpers/create_data_store.js";
 
 // The client half of the live-update contract (the server half is
@@ -245,7 +246,7 @@ describe("live updates in the store", () => {
       });
 
       store.switchMonths("2024-07-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       await flush();
@@ -269,7 +270,7 @@ describe("live updates in the store", () => {
 
       expect(monthCache.size()).toBe(0);
       expect(idbKeyval.clear).toHaveBeenCalled();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July, renamed");
       });
       expect(calendarRequests(2024, 7)).toBe(julyFetchesBefore + 1);
@@ -277,7 +278,7 @@ describe("live updates in the store", () => {
       // A neighbour that was prefetched before the change is fetched
       // fresh on the next navigation, not served from a copy.
       store.switchMonths("2024-08-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("August, renamed");
       });
     });
@@ -290,7 +291,7 @@ describe("live updates in the store", () => {
       meals.set("1", mealPayload(1, "Menu v2"));
       fireUpdate(RESIDENTS_CHANNEL);
 
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.meal.description).toBe("Menu v2");
       });
     });
@@ -301,7 +302,7 @@ describe("live updates in the store", () => {
     it("an update refetches a hosts list whose first answer is still on the wire", async () => {
       const store = createStore({ meals: [] });
       store.switchMonths("2024-07-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       confirmSubscription(RESIDENTS_CHANNEL);
@@ -325,7 +326,7 @@ describe("live updates in the store", () => {
     it("an update drops a copy that a navigation was reading from disk", async () => {
       const store = createStore({ meals: [] });
       store.switchMonths("2024-07-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       await flush();
@@ -345,7 +346,7 @@ describe("live updates in the store", () => {
 
       store.switchMonths("2024-10-15");
       expect(store.calendarEvents[0].title).not.toBe("October");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("October, renamed");
       });
     });
@@ -355,7 +356,7 @@ describe("live updates in the store", () => {
       store.loadData(mealPayload(1, "Menu v1"), "server");
       store.loadData(mealPayload(1, "Menu v1"), "server");
       store.switchMonths("2024-07-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
 
@@ -413,7 +414,7 @@ describe("live updates in the store", () => {
       // And the fresh fetch the reconnect caused lands.
       expect(requests).toHaveLength(2);
       requests[1]({ status: 200, data: calendarData(2024, 7, "July, new") });
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July, new");
       });
     });
@@ -525,7 +526,7 @@ describe("live updates in the store", () => {
     async function julyOnScreen() {
       const store = createStore({ meals: [] });
       store.switchMonths("2024-07-15");
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       await store.ensureHosts();
@@ -590,7 +591,7 @@ describe("live updates in the store", () => {
       const store = createStore({ meals: [] });
       store.switchMonths("2024-07-15");
       store.ensureHosts();
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       [JULY, JUNE, AUGUST].forEach(confirmSubscription);
@@ -657,7 +658,7 @@ describe("live updates in the store", () => {
       });
       store.switchMonths("2024-07-15");
       await vi.advanceTimersByTimeAsync(0);
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.calendarEvents[0].title).toBe("July");
       });
       const fetchesBefore = calendarRequests(2024, 7);
@@ -690,7 +691,7 @@ describe("live updates in the store", () => {
       expect(requests).toHaveLength(2);
 
       requests[1]({ status: 200, data: mealPayload(1, "Menu v3, newest") });
-      await vi.waitFor(() => {
+      await vitestWaitFor(() => {
         expect(store.meal.description).toBe("Menu v3, newest");
       });
 

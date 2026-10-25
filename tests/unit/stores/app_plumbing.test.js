@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
+import { vitestWaitFor } from "../helpers/wait_for.js";
 
 // The app-wide plumbing in data_store_app.js and the calendar channel
 // in data_store_calendar.js: the socket id, the 401 interceptor, the
@@ -54,7 +55,7 @@ async function connectionHandler(event) {
   // is bound, and advances fake timers when a test uses them. (When the
   // handler is never bound, as without a Pusher key, this fails after a
   // second with a message that says so, instead of a TypeError.)
-  await vi.waitFor(() => {
+  await vitestWaitFor(() => {
     if (calls().length === 0)
       throw new Error("connection handler not bound yet");
   });
