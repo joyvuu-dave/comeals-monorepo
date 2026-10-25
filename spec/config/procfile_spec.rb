@@ -41,10 +41,16 @@ RSpec.describe 'Procfile' do
     let(:database) { "comeals_test#{ENV.fetch('TEST_DB_SUFFIX', '')}_release" }
     let(:dump_dir) { Dir.mktmpdir('release-dump') }
 
+    # The database `name` on the server the specs use: the local socket, or
+    # on CI the host, port and password in DATABASE_URL.
+    def url_for(name)
+      URI(ENV.fetch('DATABASE_URL', 'postgresql:///')).tap { it.path = "/#{name}" }.to_s
+    end
+
     # Runs the SQL on the database `name`, on a connection of its own:
     # CREATE DATABASE cannot run inside the example's transaction.
     def on_database(name, *sql)
-      pg = PG.connect(dbname: name)
+      pg = PG.connect(url_for(name))
       sql.map { pg.exec(it) }.last
     ensure
       pg&.close
@@ -57,8 +63,11 @@ RSpec.describe 'Procfile' do
     # SCHEMA sends the schema dump that db:migrate writes in the test
     # environment to a folder of its own, so db/structure.sql is never
     # touched.
+    # DATABASE_URL names the release database too. On CI it is set and
+    # names comeals_test, and its name wins over config/database.yml's, so
+    # without this the release command would migrate the test database.
     def run_release
-      env = { 'RAILS_ENV' => 'test', 'RUBYOPT' => nil, 'TEST_DB_SUFFIX' => "#{ENV.fetch('TEST_DB_SUFFIX', '')}_release",
+      env = { 'RAILS_ENV' => 'test', 'RUBYOPT' => nil, 'DATABASE_URL' => url_for(database),
               'SCHEMA' => File.join(dump_dir, 'structure.sql') }
       Open3.capture2e(env, *processes.fetch('release').split, chdir: Rails.root.to_s)
     end
