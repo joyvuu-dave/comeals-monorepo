@@ -15,6 +15,20 @@ function renderPicker(props, communityToday = "2026-01-15") {
   );
 }
 
+// The accessible names of the buttons a role query finds, in the
+// same way getAllByRole("button", { name }) works them out: only for
+// buttons a person can reach (not hidden).
+function buttonNames() {
+  const names = [];
+  screen.queryAllByRole("button", {
+    name: (name) => {
+      names.push(name);
+      return false;
+    },
+  });
+  return names;
+}
+
 describe("DayPickerInput", () => {
   it("shows the value as MM/DD/YYYY", () => {
     renderPicker({ value: "2026-01-15" });
@@ -131,18 +145,17 @@ describe("DayPickerInput", () => {
         renderPicker({ value: "2026-03-08", onDayChange }, "2026-03-08");
         fireEvent.click(screen.getByDisplayValue("03/08/2026"));
 
+        // The name of every button, worked out once. A role query for
+        // each day would work out every button's name 31 times, which
+        // was half of this test's time (#247).
+        const names = buttonNames();
         for (let day = 1; day <= 31; day++) {
-          expect(
-            screen.getAllByRole("button", {
-              name: new RegExp(`March ${day}(st|nd|rd|th), 2026`),
-            }),
-          ).toHaveLength(1);
+          const name = new RegExp(`March ${day}(st|nd|rd|th), 2026`);
+          expect(names.filter((n) => name.test(n))).toHaveLength(1);
         }
         expect(
-          screen.getByRole("button", {
-            name: "Today, Sunday, March 8th, 2026, selected",
-          }),
-        ).toBeInTheDocument();
+          names.filter((n) => n === "Today, Sunday, March 8th, 2026, selected"),
+        ).toHaveLength(1);
 
         fireEvent.click(pickerButton(/March 9th/));
         expect(onDayChange.mock.calls).toEqual([["2026-03-09"]]);
