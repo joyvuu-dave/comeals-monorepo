@@ -85,10 +85,10 @@ describe("MealsEdit", () => {
     // meal's data draws: the date box says OPEN while the meal still
     // loads, so a wait for OPEN could end before the data (#167). The
     // long timeout covers a cold first run, where importing the whole
-    // store graph eats most of the default second. It must be shorter
-    // than the test's own limit, or the test limit ends the test first:
-    // both were 5 seconds, and with six Vitest runs at once and two
-    // CPU-burning loops the test hit its limit in 6 runs of 6 (#247).
+    // store graph takes most of the time. It must be shorter than the
+    // test limit (vitest.config.mjs), or the test limit ends the test
+    // first: both were 5 seconds, and with six Vitest runs at once and
+    // two CPU-burning loops the test hit its limit in 6 runs of 6 (#247).
     expect(
       await screen.findByRole(
         "cell",
@@ -113,7 +113,7 @@ describe("MealsEdit", () => {
       screen.getByRole("button", { name: "logout Jane Smith" }),
     ).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "history" })).toBeInTheDocument();
-  }, 30_000);
+  });
 
   // When the first answer for a meal cannot be used, the page used to
   // say "loading..." forever with no notice, the state commit e75aa87c

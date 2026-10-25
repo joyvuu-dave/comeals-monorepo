@@ -117,10 +117,9 @@ function makeStore(overrides = {}) {
 // took 7 to 9 ms on an idle machine. In 80 runs of this file with 20
 // copies at once and 10 CPU-burning loops, it took 128 ms in the middle
 // run and 650 ms in the slowest, and with six full Vitest runs at once
-// it once went past waitFor's default of 1 second (#247). The two tests
-// that wait for it wait up to 10 seconds and get 30 in all.
+// it once went past vi.waitFor's default of 1 second (#247). The two
+// tests that wait for it wait up to 10 seconds.
 const CLOSE_DRAW_WAIT = { timeout: 10_000 };
-const CLOSE_DRAW_TEST_LIMIT = 30_000;
 
 function LocationEcho() {
   const location = useLocation();
@@ -430,25 +429,21 @@ describe("MainCalendar", () => {
 
     // The untouched case is the existing "closing the modal returns to
     // the calendar path" test above; this pins the after-save case.
-    it(
-      "a successful Create closes without asking",
-      async () => {
-        const axios = (await import("axios")).default;
-        axios.post.mockResolvedValue({ status: 200, data: {} });
-        dirtyEventForm();
-        fireEvent.click(form().getByRole("button", { name: "Create" }));
+    it("a successful Create closes without asking", async () => {
+      const axios = (await import("axios")).default;
+      axios.post.mockResolvedValue({ status: 200, data: {} });
+      dirtyEventForm();
+      fireEvent.click(form().getByRole("button", { name: "Create" }));
 
-        await vi.waitFor(() => {
-          expect(screen.getByTestId("location")).toHaveTextContent(
-            /^\/calendar\/all\/2026-01-15$/,
-          );
-        }, CLOSE_DRAW_WAIT);
-        expect(
-          screen.queryByText("Discard your changes?"),
-        ).not.toBeInTheDocument();
-      },
-      CLOSE_DRAW_TEST_LIMIT,
-    );
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          /^\/calendar\/all\/2026-01-15$/,
+        );
+      }, CLOSE_DRAW_WAIT);
+      expect(
+        screen.queryByText("Discard your changes?"),
+      ).not.toBeInTheDocument();
+    });
   });
 
   // The idle timer (back_to_today.tsx) reads the flag the discard gate
@@ -808,25 +803,21 @@ describe("MainCalendar", () => {
       expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
     });
 
-    it(
-      "a Create that works after a refusal takes away the refusal",
-      async () => {
-        renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
-        await formRefused();
-        const axios = (await import("axios")).default;
-        axios.post.mockResolvedValueOnce({ status: 200, data: {} });
+    it("a Create that works after a refusal takes away the refusal", async () => {
+      renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
+      await formRefused();
+      const axios = (await import("axios")).default;
+      axios.post.mockResolvedValueOnce({ status: 200, data: {} });
 
-        fireEvent.click(form().getByRole("button", { name: "Create" }));
+      fireEvent.click(form().getByRole("button", { name: "Create" }));
 
-        await vi.waitFor(() => {
-          expect(screen.getByTestId("location")).toHaveTextContent(
-            /^\/calendar\/all\/2026-01-15$/,
-          );
-        }, CLOSE_DRAW_WAIT);
-        expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
-      },
-      CLOSE_DRAW_TEST_LIMIT,
-    );
+      await vi.waitFor(() => {
+        expect(screen.getByTestId("location")).toHaveTextContent(
+          /^\/calendar\/all\/2026-01-15$/,
+        );
+      }, CLOSE_DRAW_WAIT);
+      expect(messagesShown()).toEqual({ form: [], stack: [NOT_SAVED] });
+    });
 
     // The back button closes the form without the X, and the form's
     // message is just as much about a form that is gone.

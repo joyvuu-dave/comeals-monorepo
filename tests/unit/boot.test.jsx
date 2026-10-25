@@ -13,9 +13,9 @@ vi.mock("../../app/frontend/src/helpers/bugsnag", () => ({
 import { fakeLocation } from "./helpers/fake_location.js";
 
 // Each test here loads the whole app fresh (vi.resetModules, then
-// index.jsx). Under load that takes longer than Vitest's default limit
-// of 5 seconds, and a test stopped at its limit keeps running into the
-// tests after it (#247).
+// index.jsx). With six Vitest runs at once the first one took up to 15
+// seconds, half the default limit in vitest.config.mjs, and a test
+// stopped at its limit keeps running into the tests after it (#247).
 vi.setConfig({ testTimeout: 60_000 });
 
 // How index.jsx starts the app: the router, the store, the boot-time

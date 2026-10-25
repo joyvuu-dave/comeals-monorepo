@@ -7,6 +7,13 @@ export default defineConfig({
     environment: "jsdom",
     include: ["tests/unit/**/*.test.{js,ts,jsx,tsx}"],
     setupFiles: ["tests/unit/helpers/render_setup.js"],
+    // Vitest's default is 5 seconds. With six full Vitest runs at once
+    // on a 10-core laptop, tests that take a fraction of a second on an
+    // idle machine took up to 12 seconds, and many failed at 5 (#247).
+    // 30 seconds leaves room for more load than that. A test that never
+    // ends still fails, only later. The Testing Library wait limit is
+    // in render_setup.js.
+    testTimeout: 30_000,
     coverage: {
       provider: "v8",
       reporter: ["text", "html"],

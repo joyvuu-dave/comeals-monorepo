@@ -3,9 +3,19 @@
 // toBeDisabled, ...) and unmounts rendered components after each test
 // so one test's DOM cannot leak into the next.
 import "@testing-library/jest-dom/vitest";
-import { cleanup } from "@testing-library/react";
+import { cleanup, configure } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 import Cookie, { cookies } from "../mocks/js_cookie.js";
+
+// How long findBy* and waitFor wait before they fail. Testing Library's
+// default is 1 second. With six full Vitest runs at once, waits that
+// end in a few milliseconds on an idle machine took up to 2.7 seconds,
+// and some went past 1 second (#247). 10 seconds leaves room for more
+// load than that, and it is well under the test limit in
+// vitest.config.mjs, so a wait that never ends fails with its own
+// message, not with the test's timeout. vi.waitFor is Vitest's own and
+// keeps its 1 second default.
+configure({ asyncUtilTimeout: 10_000 });
 
 // jsdom does not scroll, so it has no scrollIntoView. A calendar form
 // scrolls its own messages into view (form_messages.tsx), and every
