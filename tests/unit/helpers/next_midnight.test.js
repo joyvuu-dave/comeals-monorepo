@@ -36,13 +36,17 @@ function dayAfter(date) {
     .slice(0, 10);
 }
 
-// The minutes at which the zone's offset changes in 2026.
+// The minutes at which the zone's offset changes in 2026. Each step
+// reads the offset at its end once and keeps it for the next step, so
+// the year is read once, not twice.
 function changesIn2026(zone) {
   const changes = [];
+  let offsetAtT = zoneOffsetMinutes(START, zone);
   for (let t = START; t < END; t += 6 * HOUR) {
-    if (zoneOffsetMinutes(t, zone) === zoneOffsetMinutes(t + 6 * HOUR, zone)) {
-      continue;
-    }
+    const offsetAfter = zoneOffsetMinutes(t + 6 * HOUR, zone);
+    const same = offsetAtT === offsetAfter;
+    offsetAtT = offsetAfter;
+    if (same) continue;
     let low = t;
     let high = t + 6 * HOUR;
     while (high - low > MINUTE) {
@@ -58,7 +62,16 @@ function changesIn2026(zone) {
   return changes;
 }
 
+// The instants depend only on the zone, not on the device's zone, so
+// each zone's list is made once and both devices check the same list.
+const instantLists = new Map();
+
 function instantsToCheck(zone) {
+  if (!instantLists.has(zone)) instantLists.set(zone, makeInstants(zone));
+  return instantLists.get(zone);
+}
+
+function makeInstants(zone) {
   const instants = [];
   for (let t = START + 13 * HOUR + 37 * MINUTE; t < END; t += 7 * DAY) {
     instants.push(t);
