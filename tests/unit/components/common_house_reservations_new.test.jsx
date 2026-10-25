@@ -1,5 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, fireEvent, cleanup } from "@testing-library/react";
+import {
+  render,
+  screen,
+  fireEvent,
+  cleanup,
+  within,
+} from "@testing-library/react";
 import { observable } from "mobx";
 import { MemoryRouter, Routes, Route } from "react-router";
 
@@ -72,13 +78,17 @@ describe("CommonHouseReservationsNew", () => {
     expect(store.ensureHosts).toHaveBeenCalledTimes(1);
   });
 
+  // The options are looked for in the Resident menu. The two time menus
+  // hold more than 100 options, and a role query on the whole form works
+  // out the name of each one (#247).
   it("lists hosts as unit - name options", () => {
     renderForm();
+    const residentMenu = within(screen.getByLabelText("Resident"));
     expect(
-      screen.getByRole("option", { name: "A1 - Jane Smith" }),
+      residentMenu.getByRole("option", { name: "A1 - Jane Smith" }),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("option", { name: "B2 - Bob Johnson" }),
+      residentMenu.getByRole("option", { name: "B2 - Bob Johnson" }),
     ).toBeInTheDocument();
   });
 
