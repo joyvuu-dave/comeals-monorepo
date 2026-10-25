@@ -65,6 +65,20 @@ async function caught(work) {
 
 const EMPTY_ROOT = '<div id="root"></div>';
 
+// With a Pusher key, the store loads pusher-js on a timer, and a test
+// that moves the clock starts that load. Under heavy load the load can
+// end after the test does, during the next test's boot, where a module
+// load can undo that boot's vi.doMock calls (#247, the same problem
+// boot.test.jsx had). No test here is about Pusher, so the file runs
+// with no key, the way CI does (CI has no .env), and nothing is loaded.
+beforeEach(() => {
+  vi.stubEnv("VITE_PUSHER_KEY", "");
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
 function crashPage() {
   return screen.queryByText("Something went wrong with Comeals.");
 }
