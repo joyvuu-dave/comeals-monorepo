@@ -22,6 +22,10 @@ class DeployHarness
   # machine.
   LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 tail tee].freeze
   RULE_OPTIONS = %i[stdout stderr exit times].freeze
+  # The version db/production_schema_version.txt of the throwaway
+  # repository names, and the newest one in the fake database's
+  # schema_migrations unless the spec says otherwise.
+  SCHEMA_VERSION = '20260201000000'
 
   Result = Struct.new(:output, :status)
 
@@ -37,7 +41,7 @@ class DeployHarness
     @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '', push_output: '' }
     @state = {
       maintenance: 'off', web: 1, worker: 1, backups: 0, release: 700, releases: [], pushed: '', heroku_sha: '',
-      config: {}
+      schema_version: SCHEMA_VERSION, config: {}
     }
     build_path
     build_repo
@@ -70,7 +74,9 @@ class DeployHarness
   # `heroku config:get HEROKU_SLUG_COMMIT` answers, and the main branch of
   # Heroku's git repository, which `git ls-remote heroku` answers; '' for
   # nothing), git_sha (Heroku's git main when it is not the commit that
-  # runs, as after a rollback) and config.
+  # runs, as after a rollback), schema_version (the newest version in the
+  # database's schema_migrations, which `heroku pg:psql` answers; 'none'
+  # for a table with no rows) and config.
   def production(**values) = @state.merge!(values)
 
   def git(*)
@@ -195,7 +201,8 @@ class DeployHarness
       'state/worker' => @state[:worker].to_s,
       'state/backups' => @state[:backups].to_s, 'state/release' => @state[:release].to_s,
       'state/releases' => @state[:releases].map { "#{it}\n" }.join,
-      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha])
+      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha]),
+      'state/schema_version' => @state[:schema_version]
     )
     @state[:config].each { |var, value| files["state/config/#{var}"] = value }
     files['state/config/HEROKU_SLUG_COMMIT'] = @state[:heroku_sha]
@@ -249,7 +256,11 @@ class DeployHarness
     git('init', '-q', '-b', 'main')
     File.symlink(File.join(@dir, 'fake-bin', 'smoke'), File.join(@repo, 'bin', 'smoke'))
     @commits = {}
-    @commits[:first_migration] = commit({ 'db/migrate/20260101000000_first.rb' => '', 'app/a.rb' => '1' }, 'first')
+    @commits[:first_migration] = commit(
+      { 'db/migrate/20260101000000_first.rb' => '', 'app/a.rb' => '1',
+        'db/production_schema_version.txt' => "# The newest migration production has run.\n#\n#{SCHEMA_VERSION}\n" },
+      'first'
+    )
     @commits[:second_migration] = commit({ 'db/migrate/20260201000000_second.rb' => '' }, 'second')
     @commits[:head] = commit({ 'app/a.rb' => '2' }, 'only app code')
     # The real repository ignores both (.gitignore), and bin/deploy writes

@@ -14,4 +14,8 @@
 # is dated at or before this version: either step 2 was not done, or a
 # new migration was given an old date, and production would never run it.
 # spec/simplecov_profile.rb reads this as PRODUCTION_SCHEMA_VERSION.
+#
+# The release phase (deploy:verify_schema_version, in the Procfile) and
+# bin/deploy refuse a database whose newest migration is older than this:
+# its missing migrations have no files, so db:migrate would run nothing.
 20261023140000

@@ -16,6 +16,8 @@ set -euo pipefail
 #      - If not → push deploy (brief downtime during restart). A deleted
 #        migration does not count: production ran it, its version stays
 #        in schema_migrations, and the release phase has nothing to run.
+#   3. Refuses a database that is behind db/production_schema_version.txt,
+#      before anything changes (check_database_not_behind).
 #
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
 #
@@ -560,6 +562,54 @@ detect_pending_migrations() {
   fi
 }
 
+# After each deploy that runs migrations, the migrations production ran
+# are deleted from db/migrate/, and db/production_schema_version.txt names
+# the newest of them. A database whose newest migration is older (one
+# restored from an older backup) needs migrations that no longer exist,
+# so the release phase's db:migrate would run nothing, and the new code
+# would run without the tables it needs (staging, 2026-10-24). The release
+# phase refuses such a database (deploy:verify_schema_version in the
+# Procfile, lib/squashed_migrations_check.rb, which says the same words).
+# This asks first, so the deploy stops before the slow local checks, the
+# backup and maintenance. A database with no schema_migrations table, or
+# no row in it, has run no migration: it is new, and goes on.
+# Versions are compared as numbers, as Rails does.
+SCHEMA_VERSION_SQL="SELECT 'newest=' || coalesce(max(version::bigint)::text, 'none') AS schema FROM schema_migrations"
+
+check_database_not_behind() {
+  step "Pre-flight: the database has run the deleted migrations"
+
+  local file=db/production_schema_version.txt versions squashed out newest
+  versions=$(grep -v -e '^#' -e '^[[:space:]]*$' "$file" 2>/dev/null) || true
+  if ! [[ $versions =~ ^[0-9]{14}$ ]]; then
+    fail "$file must hold one version of 14 digits. Nothing was changed."
+    exit 1
+  fi
+  squashed=$versions
+
+  if out=$(heroku pg:psql -c "$SCHEMA_VERSION_SQL" -a "$APP" 2>&1) && [[ $out =~ newest=([0-9]+|none) ]]; then
+    newest=${BASH_REMATCH[1]}
+  elif [[ $out == *'relation "schema_migrations" does not exist'* ]]; then
+    newest=none
+  else
+    # The last line that is not blank, which is where psql and the
+    # Heroku CLI put the error.
+    out=$(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n 1) || true
+    fail "Could not read the newest migration in the database of $APP (${out:-no output}). Nothing was changed."
+    exit 1
+  fi
+  if [ "$newest" = none ]; then
+    ok "The database has run no migration, so it is new"
+    return
+  fi
+  if [ "$newest" -lt "$squashed" ]; then
+    fail "The database is behind $file. Its newest migration is $newest, but the file says $squashed: the migrations up to $squashed were deleted from db/migrate/ after production ran them. db:migrate cannot run a migration that has no file, so this code would run on a database without the tables and columns those migrations made. Do one of these: restore a backup taken after production ran migration $squashed, or deploy a commit whose $file is $newest or older (that commit still has the migration files)."
+    info "Nothing was changed."
+    exit 1
+  fi
+  ok "The database has run migration $newest, which is not behind $file ($squashed)"
+}
+
 # --- Deploy functions ---------------------------------------------------------
 
 enable_maintenance() {
@@ -1013,6 +1063,7 @@ main() {
   fi
 
   detect_pending_migrations
+  check_database_not_behind
 
   preflight_quality
 

@@ -28,7 +28,7 @@ bin/storm                  # Real-server concurrency storm: many Puma threads, m
 
 ### Migrations and db/structure.sql
 
-`db/structure.sql` is the only record of the schema, and a new database is built from it (`bin/rails db:prepare`), never by running migrations from the start. After each deploy that runs migrations, the migrations production ran are deleted and `db/production_schema_version.txt` names the newest of them (its comment lists the steps), so `db/migrate/` holds only what production has not run. Name a trigger, CHECK or function by its name in `db/structure.sql`, never by a migration number. Deleted migrations stay in git history (`git log --diff-filter=D --name-only -- db/migrate/`).
+`db/structure.sql` is the only record of the schema, and a new database is built from it (`bin/rails db:prepare`), never by running migrations from the start. After each deploy that runs migrations, the migrations production ran are deleted and `db/production_schema_version.txt` names the newest of them (its comment lists the steps), so `db/migrate/` holds only what production has not run. The release phase runs `deploy:verify_schema_version` before `db:migrate` and refuses a database whose newest migration is older than that version (one restored from an older backup): db:migrate cannot run a migration whose file was deleted, so it would run nothing and succeed (`lib/squashed_migrations_check.rb`). A database that has run no migration is new and goes through. Name a trigger, CHECK or function by its name in `db/structure.sql`, never by a migration number. Deleted migrations stay in git history (`git log --diff-filter=D --name-only -- db/migrate/`).
 
 ## Parallel agents and worktrees
 
@@ -139,6 +139,7 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
   - `rake billing:recalculate` — refresh resident balances from source data now. The daily run is `RefreshBalancesJob` (`config/recurring.yml`).
   - `rake ledger:verify` — check every settled balance against its source data now. The daily run is `VerifyLedgerJob`. Every run, pass or fail, is recorded in `ledger_check_runs`. See `docs/money-path-observability.md`.
   - `rake reconciliations:create` — run by hand: settle every unreconciled meal up to a cutoff 14 days before today
+  - `rake deploy:verify_schema_version` — the release phase runs it before `db:migrate`: fail when the database is behind `db/production_schema_version.txt` (`lib/squashed_migrations_check.rb`). `bin/deploy` asks the same question before it changes anything.
   - `rake deploy:verify_solid_queue` — after a deploy: fail unless every Solid Queue process has a fresh heartbeat (`lib/solid_queue_check.rb`)
   - `rake deploy:verify_recurring_job` — after that: queue an hourly cleanup the way the scheduler does, and fail unless the worker runs it within two minutes. A heartbeat does not show that the work succeeds.
 - **Job monitoring:** scheduled tasks wrap their body in `Healthcheck.monitor` (`app/services/healthcheck.rb`), which pings healthchecks.io on success or failure. Pings are off unless `HEALTHCHECKS_PING_KEY` is set (production only). A job that stops running entirely triggers a "check is late" email from healthchecks.io.

@@ -13,7 +13,8 @@
 #                config/<VAR>, backups, release (the newest release's
 #                version), releases (the statuses of the release a push
 #                makes, one per line), pushed, heroku_sha (the main branch
-#                of Heroku's git repository)
+#                of Heroku's git repository), schema_version (the newest
+#                version in schema_migrations, or none)
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
 #   smoke_env    the credentials the last bin/smoke call was given
@@ -196,9 +197,17 @@ heroku_default() {
       done
       printf ']\n'
       ;;
-    # heroku pg:psql -c SQL: the count of Solid Queue processes with a
-    # fresh heartbeat (bin/lib/wait_until_stopped.sh). None, by default.
-    pg:psql) printf ' solid_queue \n-------------\n fresh=0\n(1 row)\n\n' ;;
+    # heroku pg:psql -c SQL. For schema_migrations, the newest version
+    # (bin/deploy's check_database_not_behind). Otherwise the count of
+    # Solid Queue processes with a fresh heartbeat
+    # (bin/lib/wait_until_stopped.sh), none by default.
+    pg:psql)
+      if [[ $* == *schema_migrations* ]]; then
+        printf ' schema \n--------\n newest=%s\n(1 row)\n\n' "$(<"$state/schema_version")"
+      else
+        printf ' solid_queue \n-------------\n fresh=0\n(1 row)\n\n'
+      fi
+      ;;
     releases:output) echo "Running release command... migrating" ;;
     run) echo "one-off dyno: ${*:3}" ;;
     logs) cat "$home/logs" ;;
