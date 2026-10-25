@@ -71,9 +71,13 @@ jobs:
       # The runner's PostgreSQL client is 16, and pg_dump refuses a
       # server newer than itself. spec/config/procfile_spec.rb runs
       # db:migrate, which dumps the schema in the test environment.
+      # Ubuntu 24.04 has no 18 client, so this adds the PostgreSQL apt
+      # repository first, with the script postgresql-common ships.
       - name: Install the PostgreSQL 18 client, to match the server
         run: |
           sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
           sudo apt-get install -y -qq postgresql-client-18
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
       - uses: ruby/setup-ruby@v1
