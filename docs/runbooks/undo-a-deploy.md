@@ -86,21 +86,34 @@ day of sign-ups and costs that nobody can type in again from memory.
      maintenance on or restores anything, and says so;
    - `backup`: the id from step 1.
 
-   First, before it changes anything, it checks the backup (#248). The
-   release it goes back to has a `db/production_schema_version.txt`,
-   which names the newest of the migrations that were deleted from
-   `db/migrate/` after production ran them. The rollback runs that
-   release's `db:migrate`, which cannot run a migration that has no
-   file. So when the backup's newest migration is older than the file's
-   version, the workflow refuses the backup, says both versions, and
-   stops with production as it was. Pick a newer backup, or a release
-   whose file is not newer than the backup. A release from before the
-   file was added still holds every migration file, so any backup
-   passes. A backup that has run no migration is always refused: it is
-   not a copy of production's database. To read the backup's
-   migrations, the workflow streams the backup into `pg_restore` and
-   keeps only the `schema_migrations` rows; nothing of the backup is
-   written to disk, and its signed address is masked in the log.
+   First, before it changes anything, it checks the backup (#248), and
+   refuses it, with production left as it was, in any of these cases:
+   - The backup id is not a plain id of this app's backups: `b` and a
+     number for one taken by hand (as `bin/deploy` does), `a` and a
+     number for a scheduled one. An id like `comeals-staging::b042` or
+     an address would restore another database's data.
+   - The backup is behind the release. The release's
+     `db/production_schema_version.txt` names the newest of the
+     migrations that were deleted from `db/migrate/` after production
+     ran them. The rollback runs that release's `db:migrate`, which
+     cannot run a migration that has no file. A release from before the
+     file was added still holds every migration file, so this case does
+     not apply to it.
+   - The backup is newer than the release: it has a migration newer than
+     both the release's version file and every migration file the
+     release has. The old code would then run on a schema made by newer
+     code, which is what the rollback is meant to undo. The backup
+     `bin/deploy` takes before it pushes passes this, because it is
+     taken before the new release's migrations run.
+   - The backup has run no migration: it is not a copy of production's
+     database.
+   - The release has no version file and no migration file, so nothing
+     tells which database its code needs.
+
+   To read the backup's migrations, the workflow streams the backup into
+   `pg_restore` and keeps only the `schema_migrations` rows; nothing of
+   the backup is written to disk, and its signed address is masked in
+   the log.
 
    Then it turns maintenance mode on, captures a backup of the database as it
    is, scales web and the worker to 0, waits until neither runs and no
@@ -154,7 +167,9 @@ starts web or the worker again by itself.
   is as it was before the run (after a maintenance deploy that stopped,
   that is maintenance on with web and the worker at 0). The step's
   message says why it failed. When the backup is behind the
-  release's version file, run the workflow again with a newer backup.
+  release, run the workflow again with a newer backup. When it is newer
+  than the release, use the backup `bin/deploy` took before the deploy
+  (its output names it), or a newer release.
   When the backup could not be read (the PostgreSQL 18 client did not
   install, or heroku or the download failed), run the workflow again.
   The workflow has no input to skip this check, because a backup nobody
@@ -170,10 +185,11 @@ starts web or the worker again by itself.
   unset url
   ```
 
-  Compare it with
-  `git show <commit of the release>:db/production_schema_version.txt`.
   Restore by hand (the steps under "The restore failed" below) only when
-  it is not older.
+  it is not older than
+  `git show <commit of the release>:db/production_schema_version.txt`,
+  and not newer than both that and the newest file in
+  `git ls-tree --name-only <commit of the release>:db/migrate`.
 
 - Maintenance is still on: production shows the maintenance page. That
   is the safe state; nobody can write.

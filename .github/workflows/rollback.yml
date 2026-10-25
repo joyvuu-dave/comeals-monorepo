@@ -108,9 +108,11 @@ jobs:
           sudo apt-get install -y -qq postgresql-client-18
           echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
 
-      # Before anything changes: refuse a backup that is behind the
-      # db/production_schema_version.txt of the release it goes back to
-      # (#248). The old code's db:migrate could not bring it up to date.
+      # Before anything changes: refuse a backup that does not fit the
+      # release it goes back to (#248). One behind its
+      # db/production_schema_version.txt, which the old code's db:migrate
+      # cannot bring up to date; one with a migration newer than the old
+      # code knows; and an id that is not one of this app's own backups.
       - name: Check the backup
         if: inputs.backup != ''
         env:

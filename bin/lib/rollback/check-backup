@@ -1,19 +1,26 @@
 #!/usr/bin/env bash
 # The Rollback workflow's "Check the backup" step
 # (.github/workflows/rollback.yml). It runs before anything is changed,
-# and refuses a backup whose newest migration is older than the
-# db/production_schema_version.txt of the release it goes back to (#248).
+# and refuses a backup that does not fit the code of the release it goes
+# back to (#248):
 #
-# Why: the migrations up to that version were deleted from db/migrate/
-# after production ran them. The rollback runs the old code's release
-# phase, and its db:migrate cannot run a migration that has no file. So
-# the old code would run on a database without the tables and columns
-# those migrations made. A release with the squash guard
-# (deploy:verify_schema_version) refuses such a database, but only after
-# the restore, with maintenance on and web at 0. A release from before
-# the guard does not refuse it at all. bin/deploy and
-# lib/squashed_migrations_check.rb make the same comparison for the live
-# database, in the same words.
+# - A backup whose newest migration is older than that release's
+#   db/production_schema_version.txt. The migrations up to that version
+#   were deleted from db/migrate/ after production ran them. The rollback
+#   runs the old code's release phase, and its db:migrate cannot run a
+#   migration that has no file. So the old code would run on a database
+#   without the tables and columns those migrations made. A release with
+#   the squash guard (deploy:verify_schema_version) refuses such a
+#   database, but only after the restore, with maintenance on and web at
+#   0. A release from before the guard does not refuse it at all.
+#   bin/deploy and lib/squashed_migrations_check.rb make the same
+#   comparison for the live database, in the same words.
+# - A backup with a migration newer than every version that release
+#   knows: the old code would run on a schema made by newer code, which
+#   is what the rollback is meant to undo.
+# - A backup id that is not a plain id of this app's backups, such as
+#   other-app::b042 or an address: heroku would restore another
+#   database's data over this app's.
 #
 # It reads the backup's schema_migrations and nothing else: curl streams
 # the backup into pg_restore, which writes out only that one table. The
@@ -28,23 +35,49 @@ set -euo pipefail
 
 file=db/production_schema_version.txt
 
-# The version the target commit's file names. A commit from before the
-# file was added still holds every migration file back to 2017, so its
-# release phase runs any migration the backup does not have.
-# A commit that is not here would look like one with no file, so check
-# that first.
+# Heroku names a scheduled backup a<number> and one taken by hand (as
+# bin/deploy does) b<number>, and resolves such an id among the backups of
+# the app given with -a. Anything else (other-app::b042, an address, r012,
+# which is a restore) can name another database, so it is refused before
+# heroku is asked anything.
+if ! [[ $BACKUP =~ ^[ab][0-9]+$ ]]; then
+  echo "\"$BACKUP\" is not one of the backup ids of $APP. It must be an id that heroku pg:backups -a $APP lists,"
+  echo "like b245: a backup of this app's own database. Nothing was changed."
+  exit 1
+fi
+
+# A commit that is not here would look like one with no version file and
+# no migrations, so check that first.
 if ! git cat-file -e "$TARGET_SHA^{commit}"; then
   echo "The commit of $TARGET ($TARGET_SHA) is not in this checkout. Backup $BACKUP was not restored; nothing was changed."
   exit 1
 fi
-if ! git cat-file -e "$TARGET_SHA:$file" 2>/dev/null; then
-  echo "The commit of $TARGET has no $file. It still holds every migration file, so its release phase"
-  echo "runs any migration the backup does not have."
-  exit 0
+
+# The version the target commit's file names, when it has the file. A
+# commit from before the file was added still holds every migration file
+# back to 2017, so its release phase runs any migration the backup does
+# not have.
+squashed=
+if git cat-file -e "$TARGET_SHA:$file" 2>/dev/null; then
+  squashed=$(git show "$TARGET_SHA:$file" | grep -v -e '^#' -e '^[[:space:]]*$') || true
+  if ! [[ $squashed =~ ^[0-9]{14}$ ]]; then
+    echo "The $file of $TARGET must hold one version of 14 digits. Backup $BACKUP was not restored; nothing was changed."
+    exit 1
+  fi
 fi
-squashed=$(git show "$TARGET_SHA:$file" | grep -v -e '^#' -e '^[[:space:]]*$') || true
-if ! [[ $squashed =~ ^[0-9]{14}$ ]]; then
-  echo "The $file of $TARGET must hold one version of 14 digits. Backup $BACKUP was not restored; nothing was changed."
+
+# The newest version the target code knows: its file's version, or the
+# newest of its migration files, whichever is later.
+known=${squashed:-0}
+migrations=$(git ls-tree --name-only "$TARGET_SHA:db/migrate" 2>/dev/null) || true
+while IFS= read -r name; do
+  if [[ $name =~ ^([0-9]{14})_ ]] && [ "${BASH_REMATCH[1]}" -gt "$known" ]; then
+    known=${BASH_REMATCH[1]}
+  fi
+done <<< "$migrations"
+if [ "$known" = 0 ]; then
+  echo "The commit of $TARGET has no $file and no migration file, so it is not known which database its code"
+  echo "needs. Backup $BACKUP was not restored; nothing was changed."
   exit 1
 fi
 
@@ -129,7 +162,7 @@ if [ "$count" = 0 ]; then
   exit 1
 fi
 
-if [ "$newest" -lt "$squashed" ]; then
+if [ -n "$squashed" ] && [ "$newest" -lt "$squashed" ]; then
   echo "Backup $BACKUP is behind the $file of $TARGET. Its newest migration is $newest, but the file says $squashed:"
   echo "the migrations up to $squashed were deleted from db/migrate/ after production ran them. db:migrate cannot run"
   echo "a migration that has no file, so the code of $TARGET would run on a database without the tables and columns"
@@ -138,4 +171,18 @@ if [ "$newest" -lt "$squashed" ]; then
   echo "whose $file is $newest or older."
   exit 1
 fi
-echo "Backup $BACKUP has run $count migrations, the newest $newest, which is not behind the $file of $TARGET ($squashed)."
+if [ "$newest" -gt "$known" ]; then
+  echo "Backup $BACKUP has migration $newest, which the code of $TARGET does not know: the newest version it knows is"
+  echo "$known. So the code of $TARGET would run on a schema made by newer code, which is what the rollback is meant"
+  echo "to undo. Backup $BACKUP was not restored, and nothing was changed. Run this again with the backup bin/deploy"
+  echo "took before the deploy that is being undone (its output names it), or with a newer release."
+  exit 1
+fi
+echo "Backup $BACKUP has run $count migrations, the newest $newest, which is not newer than the newest version"
+echo "the code of $TARGET knows ($known)."
+if [ -n "$squashed" ]; then
+  echo "It is not behind the $file of $TARGET ($squashed) either."
+else
+  echo "The commit of $TARGET has no $file. It still holds every migration file, so its release phase"
+  echo "runs any migration the backup does not have."
+fi

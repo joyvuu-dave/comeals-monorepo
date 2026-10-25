@@ -200,6 +200,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       sandbox.rule('git', "cat-file -e #{good}^{commit}")
       sandbox.rule('git', "cat-file -e #{file}")
       sandbox.rule('git', "show #{file}", out: "# The version of the newest migration.\n#\n20261023140000\n")
+      sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate", out: ".keep\n")
       sandbox.rule('heroku', "pg:backups:url b245 #{prod}", out: "#{url}\n")
       sandbox.rule('curl', '-sf *', out: 'the backup')
       sandbox.rule('pg_restore', '--data-only --schema=public --table=schema_migrations -f -',
@@ -224,8 +225,9 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
       expect(result.exitstatus).to eq(0)
       expect(result.out).to eq(
-        'Backup b245 has run 2 migrations, the newest 20261023140000, which is not behind the ' \
-        "db/production_schema_version.txt of v612 (20261023140000).\n"
+        "Backup b245 has run 2 migrations, the newest 20261023140000, which is not newer than the newest version\n" \
+        "the code of v612 knows (20261023140000).\n" \
+        "It is not behind the db/production_schema_version.txt of v612 (20261023140000) either.\n"
       )
       expect(heroku_calls).to eq(["heroku pg:backups:url b245 #{prod}"])
       expect(sandbox.calls_to('curl').map(&:args)).to eq([['-sf', url]])
@@ -278,15 +280,112 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
     # A commit from before the file was added still holds every migration
     # file, so the old code's db:migrate runs what the backup lacks.
-    it 'passes, without reading the backup, when the commit has no version file' do
+    it 'passes a backup no newer than its migration files when the commit has no version file' do
       sandbox.rule('git', "cat-file -e #{file}", exit: 128)
+      sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate",
+                   out: "20170515164827_create_communities.rb\n20261023140000_drop_a_column.rb\n")
 
       result = check
 
       expect(result.exitstatus).to eq(0)
-      expect(result.out).to include('The commit of v612 has no db/production_schema_version.txt. It still holds ' \
+      expect(result.out).to include('the code of v612 knows (20261023140000).',
+                                    'The commit of v612 has no db/production_schema_version.txt. It still holds ' \
                                     'every migration file')
+    end
+
+    # Nothing would tell which database such code needs.
+    it 'refuses when the commit has no version file and no migration file' do
+      sandbox.rule('git', "cat-file -e #{file}", exit: 128)
+      sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate", exit: 128, err: 'fatal: not a tree object')
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('The commit of v612 has no db/production_schema_version.txt and no migration ' \
+                                    'file, so it is not known')
       expect(heroku_calls).to be_empty
+    end
+
+    # A backup with a migration the old code does not know holds a schema
+    # made by newer code: the rollback would not undo what it is for.
+    context 'when the backup is newer than the code it goes back to' do
+      let(:newer) { dump("20261023140000\n20261101120000\n") }
+
+      it 'refuses it, naming the version the code does not know' do
+        sandbox.rule('pg_restore', '*', out: newer)
+
+        result = check
+
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to include(
+          'Backup b245 has migration 20261101120000, which the code of v612 does not know: the newest version it ' \
+          "knows is\n20261023140000.",
+          'Backup b245 was not restored, and nothing was changed. Run this again with the backup bin/deploy',
+          'took before the deploy that is being undone (its output names it), or with a newer release.'
+        )
+      end
+
+      it 'refuses it when the commit has no version file too' do
+        sandbox.rule('git', "cat-file -e #{file}", exit: 128)
+        sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate", out: "20261023140000_drop_a_column.rb\n")
+        sandbox.rule('pg_restore', '*', out: newer)
+
+        result = check
+
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to include('Backup b245 has migration 20261101120000, which the code of v612 does not know')
+      end
+    end
+
+    # The usual undo of a deploy that ran a migration. bin/deploy captures
+    # its backup before it pushes, so before the new release's migrations
+    # run: that backup has run exactly what the release before knows, and
+    # passes. The backup the restore step captures from the database as the
+    # new code left it has the new migration, and is refused.
+    context 'when undoing a deploy that ran a migration' do
+      before do
+        sandbox.rule('git', "show #{file}", out: "20261016130000\n")
+        sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate",
+                     out: ".keep\n20261021140000_create_browser_counts.rb\n20261023120000_drop_a_column.rb\n")
+      end
+
+      it 'passes the backup bin/deploy took before the push' do
+        sandbox.rule('pg_restore', '*', out: dump("20261016130000\n20261021140000\n20261023120000\n"))
+
+        expect(check.exitstatus).to eq(0)
+      end
+
+      it 'refuses a backup taken after the new release migrated' do
+        sandbox.rule('pg_restore', '*', out: dump("20261023120000\n20261023140000\n"))
+
+        result = check
+
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to include('Backup b245 has migration 20261023140000, which the code of v612 does not know')
+      end
+    end
+
+    # Heroku resolves a<number> (scheduled) and b<number> (taken by hand)
+    # among the backups of the app given with -a. Anything else can name
+    # another app's database.
+    it 'takes a scheduled backup id' do
+      sandbox.rule('heroku', "pg:backups:url a017 #{prod}", out: "#{url}\n")
+
+      expect(check('BACKUP' => 'a017').exitstatus).to eq(0)
+    end
+
+    ['comeals-staging::b042', 'https://example.com/latest.dump', '', 'r022', 'B245', 'b245 x'].each do |backup|
+      it "refuses #{backup.inspect} before it asks git or heroku anything" do
+        result = check('BACKUP' => backup)
+
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to eq(
+          "\"#{backup}\" is not one of the backup ids of comeals-monorepo. It must be an id that heroku " \
+          "pg:backups -a comeals-monorepo lists,\n" \
+          "like b245: a backup of this app's own database. Nothing was changed.\n"
+        )
+        expect(sandbox.calls).to be_empty
+      end
     end
 
     # Without this, a commit that was not fetched would look like one
