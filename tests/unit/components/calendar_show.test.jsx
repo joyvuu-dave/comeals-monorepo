@@ -5,6 +5,7 @@ import {
   fireEvent,
   cleanup,
   act,
+  within,
 } from "@testing-library/react";
 import { useState } from "react";
 import { observable, runInAction } from "mobx";
@@ -132,6 +133,29 @@ function BackButton() {
   return <button onClick={() => navigate(-1)}>Browser back</button>;
 }
 
+// Where a test looks for a button. A role query computes the name of
+// every button it searches, and the calendar grid alone has more than
+// 40, so a search of the whole page is slow: about 15 ms on an idle
+// machine against about 1 ms inside the dialog. With six Vitest runs
+// at once, each test in this file took 10 to 20 times longer and some
+// went past Vitest's 5 second limit (#247). These look in the part of
+// the page the button is in, and still find it by its role and name.
+//
+// The month name and its today, back and next buttons.
+function monthNav() {
+  return within(screen.getByRole("heading", { level: 2 }).parentElement);
+}
+
+// The open form (the calendar's modal, "Event Modal").
+function form() {
+  return within(screen.getByRole("dialog", { name: "Event Modal" }));
+}
+
+// The yes-or-no question on top of the form (ConfirmModal).
+function question() {
+  return within(screen.getByRole("dialog", { name: "Confirm" }));
+}
+
 // `before` is the page the person was on before `path`, for a test that
 // goes back to it.
 function renderCalendar({
@@ -188,7 +212,9 @@ describe("MainCalendar", () => {
 
   it("prev and next go one month either way", () => {
     renderCalendar();
-    fireEvent.click(screen.getByRole("button", { name: "Goto Next Month" }));
+    fireEvent.click(
+      monthNav().getByRole("button", { name: "Goto Next Month" }),
+    );
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/calendar/all/2026-02-15",
     );
@@ -196,7 +222,9 @@ describe("MainCalendar", () => {
 
   it("prev goes back one month", () => {
     renderCalendar();
-    fireEvent.click(screen.getByRole("button", { name: "Goto Last Month" }));
+    fireEvent.click(
+      monthNav().getByRole("button", { name: "Goto Last Month" }),
+    );
     expect(screen.getByTestId("location")).toHaveTextContent(
       "/calendar/all/2025-12-15",
     );
@@ -267,7 +295,7 @@ describe("MainCalendar", () => {
     it("Keep editing returns to the form with the changes intact", () => {
       dirtyEventForm();
       fireEvent.click(screen.getByLabelText("Close"));
-      fireEvent.click(screen.getByRole("button", { name: "Keep editing" }));
+      fireEvent.click(question().getByRole("button", { name: "Keep editing" }));
 
       expect(
         screen.queryByText("Discard your changes?"),
@@ -285,7 +313,7 @@ describe("MainCalendar", () => {
       const nowSpy = vi
         .spyOn(performance, "now")
         .mockReturnValue(performance.now() + 1000);
-      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+      fireEvent.click(question().getByRole("button", { name: "Discard" }));
       nowSpy.mockRestore();
 
       expect(screen.getByTestId("location")).toHaveTextContent(
@@ -394,7 +422,7 @@ describe("MainCalendar", () => {
       const nowSpy = vi
         .spyOn(performance, "now")
         .mockReturnValue(performance.now() + 1000);
-      fireEvent.click(screen.getByRole("button", { name: "Discard" }));
+      fireEvent.click(question().getByRole("button", { name: "Discard" }));
       nowSpy.mockRestore();
 
       expect(store.calendarFormDirty).toBe(false);
@@ -408,7 +436,7 @@ describe("MainCalendar", () => {
         const axios = (await import("axios")).default;
         axios.post.mockResolvedValue({ status: 200, data: {} });
         dirtyEventForm();
-        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        fireEvent.click(form().getByRole("button", { name: "Create" }));
 
         await vi.waitFor(() => {
           expect(screen.getByTestId("location")).toHaveTextContent(
@@ -628,12 +656,11 @@ describe("MainCalendar", () => {
         );
         renderWithTimer("/calendar/all/2026-03-01/events/edit/70/");
         await act(async () => {});
-        fireEvent.click(screen.getByRole("button", { name: "Delete" }));
-        const buttons = screen.getAllByRole("button", { name: "Delete" });
+        fireEvent.click(form().getByRole("button", { name: "Delete" }));
         const nowSpy = vi
           .spyOn(performance, "now")
           .mockReturnValue(performance.now() + 1000);
-        fireEvent.click(buttons[buttons.length - 1]);
+        fireEvent.click(question().getByRole("button", { name: "Delete" }));
         nowSpy.mockRestore();
         await act(async () => {});
         expect(
@@ -667,14 +694,14 @@ describe("MainCalendar", () => {
         const axios = (await import("axios")).default;
         axios.post.mockRejectedValueOnce(refusal("Title can't be blank"));
         renderWithTimer("/calendar/all/2026-03-01/events/new/");
-        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        fireEvent.click(form().getByRole("button", { name: "Create" }));
         await act(async () => {});
         expect(screen.getByText("Title can't be blank")).toBeInTheDocument();
 
         idle(IDLE_MS * 3);
         expect(screen.getByText("Title can't be blank")).toBeInTheDocument();
 
-        fireEvent.click(screen.getByRole("button", { name: "Dismiss" }));
+        fireEvent.click(form().getByRole("button", { name: "Dismiss" }));
         idle(IDLE_MS);
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
         expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
@@ -686,7 +713,7 @@ describe("MainCalendar", () => {
         const axios = (await import("axios")).default;
         axios.post.mockRejectedValueOnce(refusal("Title can't be blank"));
         const store = renderWithTimer("/calendar/all/2026-01-15/events/new/");
-        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        fireEvent.click(form().getByRole("button", { name: "Create" }));
         await act(async () => {});
 
         act(() => {
@@ -760,7 +787,7 @@ describe("MainCalendar", () => {
       act(() => {
         handleAxiosError({ response: { data: { message: NOT_SAVED } } });
       });
-      fireEvent.click(screen.getByRole("button", { name: "Create" }));
+      fireEvent.click(form().getByRole("button", { name: "Create" }));
       await vi.waitFor(() => {
         expect(messagesShown()).toEqual({
           form: [REFUSED],
@@ -789,7 +816,7 @@ describe("MainCalendar", () => {
         const axios = (await import("axios")).default;
         axios.post.mockResolvedValueOnce({ status: 200, data: {} });
 
-        fireEvent.click(screen.getByRole("button", { name: "Create" }));
+        fireEvent.click(form().getByRole("button", { name: "Create" }));
 
         await vi.waitFor(() => {
           expect(screen.getByTestId("location")).toHaveTextContent(
@@ -859,8 +886,10 @@ describe("MainCalendar", () => {
       });
       renderCalendar({ path: "/calendar/all/2026-01-15/events/new" });
       const dialog = screen.getByRole("dialog");
-      fireEvent.click(screen.getByRole("button", { name: "Create" }));
-      const dismiss = await screen.findByRole("button", { name: "Dismiss" });
+      fireEvent.click(within(dialog).getByRole("button", { name: "Create" }));
+      const dismiss = await within(dialog).findByRole("button", {
+        name: "Dismiss",
+      });
       dismiss.focus();
       // A move of focus is checked a moment later. That check runs
       // now, so it cannot be what puts focus back after the removal.
@@ -924,7 +953,7 @@ describe("MainCalendar", () => {
         now: new Date("2026-03-04T07:30:00Z"),
       });
       renderCalendar();
-      fireEvent.click(screen.getByRole("button", { name: "today" }));
+      fireEvent.click(monthNav().getByRole("button", { name: "today" }));
       expect(screen.getByTestId("location")).toHaveTextContent(
         /^\/calendar\/all\/2026-03-03$/,
       );
@@ -938,7 +967,7 @@ describe("MainCalendar", () => {
         now: new Date("2026-03-03T20:00:00Z"),
       });
       renderCalendar();
-      fireEvent.click(screen.getByRole("button", { name: "today" }));
+      fireEvent.click(monthNav().getByRole("button", { name: "today" }));
       expect(screen.getByTestId("location")).toHaveTextContent(
         /^\/calendar\/all\/2026-03-04$/,
       );
@@ -951,7 +980,7 @@ describe("MainCalendar", () => {
         now: new Date("2026-01-16T07:30:00Z"),
       });
       renderCalendar();
-      fireEvent.click(screen.getByRole("button", { name: "today" }));
+      fireEvent.click(monthNav().getByRole("button", { name: "today" }));
       expect(screen.getByTestId("location")).toHaveTextContent(
         /^\/calendar\/all\/2026-01-15\/$/,
       );
