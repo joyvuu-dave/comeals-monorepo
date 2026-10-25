@@ -33,3 +33,11 @@ why: staging has no Bugsnag key on purpose
 fixed: Logical backups of large databases are likely to fail
 app: both
 why: Heroku says this for any pg:backups:capture; our database is about 35 MB
+
+fixed: Warning: Continuous protection is already enabled for this database.
+app: both
+why: Heroku prints this with the logical backup note on every pg:backups:capture; the backup is still taken
+
+fixed: Warning: See https://devcenter.heroku.com/articles/heroku-postgres-data-sa
+app: both
+why: the link line of the same Heroku backup note
