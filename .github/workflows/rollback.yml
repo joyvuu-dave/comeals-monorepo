@@ -93,6 +93,31 @@ jobs:
           CODE_ONLY_IS_SAFE: ${{ inputs.code_only_is_safe }}
         run: bin/lib/rollback/check-migrations
 
+      # Reading the backup's migrations needs a pg_restore at least as new
+      # as the PostgreSQL that made it (18 on Heroku). Ubuntu 24.04 has no
+      # 18 client, so this installs it the way ci.yml's ruby-test job
+      # does. The time limit keeps a slow apt mirror (#240) from using up
+      # the job's 15 minutes; when it fails, nothing was changed yet.
+      - name: Install the PostgreSQL 18 client, to read the backup
+        if: inputs.backup != ''
+        timeout-minutes: 5
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y -qq postgresql-client-18
+          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+
+      # Before anything changes: refuse a backup that is behind the
+      # db/production_schema_version.txt of the release it goes back to
+      # (#248). The old code's db:migrate could not bring it up to date.
+      - name: Check the backup
+        if: inputs.backup != ''
+        env:
+          TARGET: ${{ steps.find.outputs.target }}
+          TARGET_SHA: ${{ steps.find.outputs.target_sha }}
+        run: bin/lib/rollback/check-backup
+
       # Maintenance from before the restore until the old code serves, so
       # nobody writes to the restored database through the new code.
       # Maintenance stops web requests only. The jobs run on the worker

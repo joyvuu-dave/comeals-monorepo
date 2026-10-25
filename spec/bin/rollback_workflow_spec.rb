@@ -188,6 +188,208 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
   end
 
+  # #248. The rollback runs the old code's release phase, whose db:migrate
+  # cannot run a migration that was deleted from db/migrate/. So a backup
+  # behind the old code's db/production_schema_version.txt must be
+  # refused before the restore, not after it.
+  describe 'bin/lib/rollback/check-backup' do
+    let(:file) { "#{good}:db/production_schema_version.txt" }
+    let(:url) { 'https://backups.example/b245.dump?X-Amz-Signature=secret' }
+
+    before do
+      sandbox.rule('git', "cat-file -e #{good}^{commit}")
+      sandbox.rule('git', "cat-file -e #{file}")
+      sandbox.rule('git', "show #{file}", out: "# The version of the newest migration.\n#\n20261023140000\n")
+      sandbox.rule('heroku', "pg:backups:url b245 #{prod}", out: "#{url}\n")
+      sandbox.rule('curl', '-sf *', out: 'the backup')
+      sandbox.rule('pg_restore', '--data-only --schema=public --table=schema_migrations -f -',
+                   out: dump("20261023140000\n20170515164827\n"), capture_stdin: true)
+    end
+
+    # What pg_restore writes for schema_migrations alone, around rows.
+    def dump(rows)
+      "--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\n\n" \
+        "COPY \"public\".\"schema_migrations\" (\"version\") FROM stdin;\n#{rows}\\.\n\n\n" \
+        "--\n-- PostgreSQL database dump complete\n--\n\n"
+    end
+
+    def check(env = {})
+      sandbox.run_script('bin/lib/rollback/check-backup',
+                         env: { 'APP' => 'comeals-monorepo', 'BACKUP' => 'b245', 'TARGET' => 'v612',
+                                'TARGET_SHA' => good }.merge(env))
+    end
+
+    it 'passes a backup that has run the migration the file names' do
+      result = check
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to eq(
+        'Backup b245 has run 2 migrations, the newest 20261023140000, which is not behind the ' \
+        "db/production_schema_version.txt of v612 (20261023140000).\n"
+      )
+      expect(heroku_calls).to eq(["heroku pg:backups:url b245 #{prod}"])
+      expect(sandbox.calls_to('curl').map(&:args)).to eq([['-sf', url]])
+    end
+
+    # The backup holds residents' personal data. curl hands it straight
+    # to pg_restore, which writes out only schema_migrations; no file of
+    # it is made.
+    it 'streams the backup into pg_restore and keeps no file of it' do
+      check
+
+      expect(sandbox.stdin_of('pg_restore')).to eq(['the backup'])
+      expect(Dir.children(File.join(sandbox.dir, 'tmp'))).to be_empty
+      expect(Dir.children(File.join(sandbox.root, 'tmp'))).to be_empty
+    end
+
+    # Anyone with the signed address can download the backup until it
+    # expires. In Actions the mask makes the log print *** in its place.
+    it 'masks the signed address in Actions, and prints it nowhere else' do
+      result = check('GITHUB_ACTIONS' => 'true')
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out.lines.first).to eq("::add-mask::#{url}\n")
+      expect(result.out.lines.grep(/X-Amz/)).to eq(["::add-mask::#{url}\n"])
+      expect(result.err).not_to include('X-Amz')
+    end
+
+    it 'never prints the signed address outside Actions' do
+      sandbox.rule('pg_restore', '*', out: dump(''))
+
+      result = check
+
+      expect("#{result.out}#{result.err}").not_to include('X-Amz')
+    end
+
+    it 'refuses a backup behind the file, before anything is changed' do
+      sandbox.rule('pg_restore', '*', out: dump("20261016130000\n20170515164827\n"))
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include(
+        'Backup b245 is behind the db/production_schema_version.txt of v612. Its newest migration is ' \
+        "20261016130000, but the file says 20261023140000:\n",
+        'Backup b245 was not restored, and nothing was changed.',
+        '(heroku pg:backups -a comeals-monorepo)'
+      )
+      expect(heroku_calls).to eq(["heroku pg:backups:url b245 #{prod}"])
+    end
+
+    # A commit from before the file was added still holds every migration
+    # file, so the old code's db:migrate runs what the backup lacks.
+    it 'passes, without reading the backup, when the commit has no version file' do
+      sandbox.rule('git', "cat-file -e #{file}", exit: 128)
+
+      result = check
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to include('The commit of v612 has no db/production_schema_version.txt. It still holds ' \
+                                    'every migration file')
+      expect(heroku_calls).to be_empty
+    end
+
+    # Without this, a commit that was not fetched would look like one
+    # from before the version file, and pass.
+    it 'refuses when the commit is not in the checkout' do
+      sandbox.rule('git', "cat-file -e #{good}^{commit}", exit: 128, err: 'fatal: Not a valid object name')
+      sandbox.rule('git', "cat-file -e #{file}", exit: 128)
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include("The commit of v612 (#{good}) is not in this checkout. Backup b245 was not " \
+                                    'restored; nothing was changed.')
+      expect(heroku_calls).to be_empty
+    end
+
+    it 'refuses when the file does not hold one version' do
+      sandbox.rule('git', "show #{file}", out: "# A comment only.\n")
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('must hold one version of 14 digits. Backup b245 was not restored')
+      expect(heroku_calls).to be_empty
+    end
+
+    context 'when the backup cannot be read' do
+      def expect_refused(result, reason)
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to include("Could not read the migrations in backup b245 of comeals-monorepo: #{reason}.",
+                                      'So the backup was not restored, and nothing was changed.')
+      end
+
+      it 'refuses when heroku cannot give the address' do
+        sandbox.rule('heroku', 'pg:backups:url *', err: 'Error: Not found.', exit: 1)
+
+        expect_refused(check, 'heroku pg:backups:url failed')
+        expect(sandbox.calls_to('curl')).to be_empty
+      end
+
+      it 'refuses an address that is not https' do
+        sandbox.rule('heroku', 'pg:backups:url *', out: "Warning: something\n")
+
+        expect_refused(check, 'heroku pg:backups:url did not give an https address')
+        expect(sandbox.calls_to('curl')).to be_empty
+      end
+
+      # A pg_restore older than the PostgreSQL that made the backup cannot
+      # read it.
+      it 'refuses when pg_restore fails' do
+        sandbox.rule('pg_restore', '*', err: 'pg_restore: error: unsupported version (1.16) in file header', exit: 1)
+
+        expect_refused(check, 'pg_restore exited with 1, and curl with 0')
+      end
+
+      # pg_restore stops reading once it wrote the table, and curl then
+      # fails to write the rest. That is how a good read ends.
+      it 'passes when curl could not write the rest after pg_restore stopped reading' do
+        sandbox.rule('curl', '-sf *', exit: 23)
+
+        expect(check.exitstatus).to eq(0)
+      end
+
+      it 'refuses when curl fails any other way' do
+        sandbox.rule('curl', '-sf *', exit: 56)
+
+        expect_refused(check, 'curl exited with 56')
+      end
+
+      it 'refuses a backup with no schema_migrations table' do
+        sandbox.rule('pg_restore', '*', out: "--\n-- PostgreSQL database dump\n--\n\n")
+
+        expect_refused(check, 'it has no schema_migrations table')
+      end
+
+      it 'refuses when the rows end part way' do
+        sandbox.rule('pg_restore', '*',
+                     out: "COPY \"public\".\"schema_migrations\" (\"version\") FROM stdin;\n20261023140000\n")
+
+        expect_refused(check, 'its schema_migrations data ended part way')
+      end
+
+      it 'refuses a row that is not a version' do
+        sandbox.rule('pg_restore', '*', out: dump("20261023140000\nnot a version\n"))
+
+        expect_refused(check, 'schema_migrations holds a row that is not a version')
+      end
+    end
+
+    # bin/deploy lets a live database with no migration through, because
+    # a new database gets its schema from db/structure.sql. A backup put
+    # over production is never that.
+    it 'refuses a backup that has run no migration' do
+      sandbox.rule('pg_restore', '*', out: dump(''))
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Backup b245 of comeals-monorepo has run no migration, so it is not a copy of ' \
+                                    "production's database.")
+    end
+  end
+
   describe 'bin/lib/rollback/restore-backup' do
     before do
       sandbox.rule('heroku', "maintenance:on #{prod}")
@@ -742,6 +944,23 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
         end
       )
       expect(steps.reject { it == smoke }.map { it['env'].to_s }.grep(/SMOKE_/)).to eq([])
+    end
+
+    # #248. The backup is checked against the release it goes back to
+    # before the step that turns maintenance on and restores it, and in
+    # every run that restores one.
+    it 'checks the backup before the step that restores it' do
+      names = steps.pluck('name')
+      check = steps.find { it['name'] == 'Check the backup' }
+      install = steps.find { it['name'] == 'Install the PostgreSQL 18 client, to read the backup' }
+      restore = steps.find { it['id'] == 'restore' }
+
+      expect(check['run']).to eq('bin/lib/rollback/check-backup')
+      expect([install, check].pluck('if')).to all(eq(restore['if']))
+      expect(names.index(install['name'])).to be < names.index(check['name'])
+      expect(names.index(check['name'])).to be < names.index(restore['name'])
+      expect(check['env']).to eq('TARGET' => '${{ steps.find.outputs.target }}',
+                                 'TARGET_SHA' => '${{ steps.find.outputs.target_sha }}')
     end
 
     it 'gives no other step a way to write to GitHub' do

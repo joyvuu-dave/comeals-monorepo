@@ -1,0 +1,141 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Check the backup" step
+# (.github/workflows/rollback.yml). It runs before anything is changed,
+# and refuses a backup whose newest migration is older than the
+# db/production_schema_version.txt of the release it goes back to (#248).
+#
+# Why: the migrations up to that version were deleted from db/migrate/
+# after production ran them. The rollback runs the old code's release
+# phase, and its db:migrate cannot run a migration that has no file. So
+# the old code would run on a database without the tables and columns
+# those migrations made. A release with the squash guard
+# (deploy:verify_schema_version) refuses such a database, but only after
+# the restore, with maintenance on and web at 0. A release from before
+# the guard does not refuse it at all. bin/deploy and
+# lib/squashed_migrations_check.rb make the same comparison for the live
+# database, in the same words.
+#
+# It reads the backup's schema_migrations and nothing else: curl streams
+# the backup into pg_restore, which writes out only that one table. The
+# backup holds residents' personal data, so no part of it is written to
+# disk, and the signed address of the backup is never printed.
+#
+# Reads APP, BACKUP, TARGET (the release, like v612) and TARGET_SHA (its
+# commit). Run from the repository root, with that commit fetched, and
+# with a pg_restore at least as new as the PostgreSQL that made the
+# backup.
+set -euo pipefail
+
+file=db/production_schema_version.txt
+
+# The version the target commit's file names. A commit from before the
+# file was added still holds every migration file back to 2017, so its
+# release phase runs any migration the backup does not have.
+# A commit that is not here would look like one with no file, so check
+# that first.
+if ! git cat-file -e "$TARGET_SHA^{commit}"; then
+  echo "The commit of $TARGET ($TARGET_SHA) is not in this checkout. Backup $BACKUP was not restored; nothing was changed."
+  exit 1
+fi
+if ! git cat-file -e "$TARGET_SHA:$file" 2>/dev/null; then
+  echo "The commit of $TARGET has no $file. It still holds every migration file, so its release phase"
+  echo "runs any migration the backup does not have."
+  exit 0
+fi
+squashed=$(git show "$TARGET_SHA:$file" | grep -v -e '^#' -e '^[[:space:]]*$') || true
+if ! [[ $squashed =~ ^[0-9]{14}$ ]]; then
+  echo "The $file of $TARGET must hold one version of 14 digits. Backup $BACKUP was not restored; nothing was changed."
+  exit 1
+fi
+
+# What to print when the backup's versions cannot be read. The backup is
+# not restored then: a backup nobody checked could be the one this step
+# is here to refuse.
+cannot_read() {
+  echo "Could not read the migrations in backup $BACKUP of $APP: $1."
+  echo "So the backup was not restored, and nothing was changed. docs/runbooks/undo-a-deploy.md"
+  echo "says how to read them by hand."
+  exit 1
+}
+
+url=$(heroku pg:backups:url "$BACKUP" -a "$APP") || cannot_read "heroku pg:backups:url failed"
+if [[ $url != https://* ]]; then
+  cannot_read "heroku pg:backups:url did not give an https address"
+fi
+# Anyone who can read the address can download the backup until it
+# expires. The mask makes Actions print *** in its place, everywhere.
+if [ "${GITHUB_ACTIONS:-}" = true ]; then
+  echo "::add-mask::$url"
+fi
+
+# pg_restore stops reading once it has written schema_migrations, so curl
+# then fails to write the rest and exits 23. That is not an error.
+# pg_restore's own exit status says whether it read the table.
+read_backup() {
+  curl -sf "$url" | pg_restore --data-only --schema=public --table=schema_migrations -f -
+  echo "statuses=${PIPESTATUS[*]}"
+}
+dump=$(read_backup)
+unset url
+statuses=${dump##*statuses=}
+# What pg_restore wrote, without the newline before statuses=, which the
+# <<< below adds back.
+dump=${dump%statuses=*}
+dump=${dump%$'\n'}
+read -r curl_status restore_status <<< "$statuses"
+if [ "$restore_status" != 0 ]; then
+  cannot_read "pg_restore exited with $restore_status, and curl with $curl_status"
+fi
+if [ "$curl_status" != 0 ] && [ "$curl_status" != 23 ]; then
+  cannot_read "curl exited with $curl_status"
+fi
+
+# The rows of the COPY block for schema_migrations, one version a line,
+# ended by a line that is only \.
+copying=false
+ended=false
+count=0
+newest=0
+while IFS= read -r line; do
+  if [ "$copying" = false ]; then
+    [[ $line == COPY*schema_migrations* ]] && copying=true
+    continue
+  fi
+  if [ "$line" = '\.' ]; then
+    ended=true
+    break
+  fi
+  if ! [[ $line =~ ^[0-9]{1,18}$ ]]; then
+    cannot_read "schema_migrations holds a row that is not a version"
+  fi
+  count=$((count + 1))
+  if [ "$line" -gt "$newest" ]; then
+    newest=$line
+  fi
+done <<< "$dump"
+
+if [ "$copying" = false ]; then
+  cannot_read "it has no schema_migrations table"
+fi
+if [ "$ended" = false ]; then
+  cannot_read "its schema_migrations data ended part way"
+fi
+# The live check lets a database with no migration through, because a
+# new database gets its schema from db/structure.sql. A backup restored
+# over production is never that: it would leave production empty.
+if [ "$count" = 0 ]; then
+  echo "Backup $BACKUP of $APP has run no migration, so it is not a copy of production's database."
+  echo "It was not restored, and nothing was changed."
+  exit 1
+fi
+
+if [ "$newest" -lt "$squashed" ]; then
+  echo "Backup $BACKUP is behind the $file of $TARGET. Its newest migration is $newest, but the file says $squashed:"
+  echo "the migrations up to $squashed were deleted from db/migrate/ after production ran them. db:migrate cannot run"
+  echo "a migration that has no file, so the code of $TARGET would run on a database without the tables and columns"
+  echo "those migrations made. Backup $BACKUP was not restored, and nothing was changed. Do one of these: run this again"
+  echo "with a backup taken after production ran migration $squashed (heroku pg:backups -a $APP), or with a release"
+  echo "whose $file is $newest or older."
+  exit 1
+fi
+echo "Backup $BACKUP has run $count migrations, the newest $newest, which is not behind the $file of $TARGET ($squashed)."

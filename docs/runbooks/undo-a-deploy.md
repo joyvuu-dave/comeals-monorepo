@@ -86,7 +86,23 @@ day of sign-ups and costs that nobody can type in again from memory.
      maintenance on or restores anything, and says so;
    - `backup`: the id from step 1.
 
-   It turns maintenance mode on, captures a backup of the database as it
+   First, before it changes anything, it checks the backup (#248). The
+   release it goes back to has a `db/production_schema_version.txt`,
+   which names the newest of the migrations that were deleted from
+   `db/migrate/` after production ran them. The rollback runs that
+   release's `db:migrate`, which cannot run a migration that has no
+   file. So when the backup's newest migration is older than the file's
+   version, the workflow refuses the backup, says both versions, and
+   stops with production as it was. Pick a newer backup, or a release
+   whose file is not newer than the backup. A release from before the
+   file was added still holds every migration file, so any backup
+   passes. A backup that has run no migration is always refused: it is
+   not a copy of production's database. To read the backup's
+   migrations, the workflow streams the backup into `pg_restore` and
+   keeps only the `schema_migrations` rows; nothing of the backup is
+   written to disk, and its signed address is masked in the log.
+
+   Then it turns maintenance mode on, captures a backup of the database as it
    is, scales web and the worker to 0, waits until neither runs and no
    Solid Queue process is left (below), restores the backup from step 1, and rolls back the code. It waits for the
    rollback's release phase to succeed, scales the worker to 1 when the
@@ -133,6 +149,31 @@ day of sign-ups and costs that nobody can type in again from memory.
 The workflow's last step before the smoke test, "Say what to do by
 hand", prints which state it left and the commands to run. It never
 starts web or the worker again by itself.
+
+- "Check the backup" failed: the workflow changed nothing, so production
+  is as it was before the run (after a maintenance deploy that stopped,
+  that is maintenance on with web and the worker at 0). The step's
+  message says why it failed. When the backup is behind the
+  release's version file, run the workflow again with a newer backup.
+  When the backup could not be read (the PostgreSQL 18 client did not
+  install, or heroku or the download failed), run the workflow again.
+  The workflow has no input to skip this check, because a backup nobody
+  checked could be the kind this check is there to refuse. If it keeps
+  failing, read the backup's newest migration by hand, on a computer
+  with `pg_restore` 18 or newer. This streams the backup and prints one
+  version; it writes nothing of the backup to disk:
+
+  ```bash
+  url=$(heroku pg:backups:url <id> -a comeals-monorepo)
+  curl -sf "$url" | pg_restore --data-only --schema=public \
+    --table=schema_migrations -f - | grep -E '^[0-9]{14}$' | sort -n | tail -n 1
+  unset url
+  ```
+
+  Compare it with
+  `git show <commit of the release>:db/production_schema_version.txt`.
+  Restore by hand (the steps under "The restore failed" below) only when
+  it is not older.
 
 - Maintenance is still on: production shows the maintenance page. That
   is the safe state; nobody can write.
