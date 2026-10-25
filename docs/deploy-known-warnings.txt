@@ -41,3 +41,7 @@ why: Heroku prints this with the logical backup note on every pg:backups:capture
 fixed: Warning: See https://devcenter.heroku.com/articles/heroku-postgres-data-sa
 app: both
 why: the link line of the same Heroku backup note
+
+fixed: npm warn deprecated eslint@9
+app: both
+why: eslint 10 is blocked by eslint-plugin-react
