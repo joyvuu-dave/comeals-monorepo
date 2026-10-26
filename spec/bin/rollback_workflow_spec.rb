@@ -17,8 +17,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
   # The files the scripts source or run besides themselves.
   before do
-    %w[bin/lib/json.sh bin/lib/wait_until_stopped.sh bin/lib/schema-check bin/rollback-check bin/smoke]
-      .each { sandbox.link(it) }
+    %w[bin/lib/json.sh bin/lib/schema-check bin/lib/smoke_secrets.sh bin/lib/wait_until_stopped.sh
+       bin/rollback-check bin/smoke].each { sandbox.link(it) }
   end
 
   def heroku_calls = sandbox.call_lines('heroku')
@@ -1090,7 +1090,14 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       sandbox.rule('node', 'tests/smoke/smoke.js')
     end
 
-    def smoke = sandbox.run_script('bin/lib/rollback/smoke', 'https://comeals.com')
+    let(:smoke_secrets) do
+      { 'SMOKE_EMAIL' => 'me@example.com', 'SMOKE_PASSWORD' => 'resident-secret',
+        'SMOKE_ADMIN_EMAIL' => 'admin@example.com', 'SMOKE_ADMIN_PASSWORD' => 'admin-secret' }
+    end
+
+    def smoke(app: 'comeals-monorepo', url: 'https://comeals.com', secrets: smoke_secrets)
+      sandbox.run_script('bin/lib/rollback/smoke', url, env: { 'APP' => app }.merge(secrets))
+    end
 
     it 'smokes the site it is given and passes when the smoke test passes' do
       result = smoke
@@ -1112,6 +1119,29 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
         "The rollback itself is done: do not roll back again for this. Check the SMOKE_*\n" \
         "secrets of the GitHub environment production, then run: bin/smoke https://comeals.com\n"
       )
+    end
+
+    # On production the step gets the secrets. One that is not set reaches
+    # it as an empty value, and the smoke test would skip that login. The
+    # smoke test still runs, since it is the only check that the old code
+    # serves; then the step ends with 2 and names what is missing.
+    it 'smokes the site, then ends with code 2 naming each missing secret but no value, when one is not set' do
+      result = smoke(secrets: smoke_secrets.merge('SMOKE_EMAIL' => '', 'SMOKE_PASSWORD' => ''))
+
+      expect(result.exitstatus).to eq(2)
+      expect(result.out).to eq(
+        "Missing smoke secrets: SMOKE_EMAIL SMOKE_PASSWORD. Set them in the GitHub environment production.\n"
+      )
+      expect(result.out + result.err).not_to include('resident-secret', 'admin-secret')
+      expect(sandbox.calls_to('node').size).to eq(1)
+    end
+
+    # Staging gets no secrets on purpose: it checks the public pages.
+    it 'does not ask for the secrets on staging' do
+      result = smoke(app: 'comeals-staging', url: 'https://staging.example.com', secrets: {})
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to eq('')
     end
 
     it 'fails, and says the old code does not serve, when the smoke test fails' do

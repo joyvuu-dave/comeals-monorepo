@@ -43,6 +43,61 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     expect(deploy.calls_to('heroku').grep(/maintenance|ps:scale|pg:backups:capture|run /)).to eq([])
   end
 
+  # bin/deploy runs bin/smoke twice on production: once before it changes
+  # anything, and once after. This answers the first call with a pass and
+  # the second with `answer`.
+  def smoke_after_the_deploy(**answer)
+    deploy.rule('smoke', 'comeals\\.com', times: 1)
+    deploy.rule('smoke', 'comeals\\.com', **answer)
+  end
+
+  # Before it changes anything, bin/deploy smokes production as it is. A
+  # smoke login that the site refuses now would be refused after the
+  # deploy too, and then nobody could tell whether the deploy broke it.
+  # State left: nothing changed.
+  describe 'the smoke test before the deploy' do
+    it 'smokes production before the backup, and again after the deploy' do
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('Production passes the smoke test before the deploy')
+      calls = deploy.calls
+      smokes = calls.each_index.select { calls[it] == 'smoke https://comeals.com' }
+      expect(smokes.size).to eq(2)
+      expect(smokes.first).to be < calls.index('heroku pg:backups:capture -a comeals-monorepo')
+      expect(smokes.last).to be > calls.index('git push heroku main --force')
+    end
+
+    it 'stops, and changes nothing, when production refuses a smoke login before the deploy' do
+      deploy.rule('smoke', 'comeals\\.com', exit: 2, stdout: "SMOKE LOGIN REFUSED against https://comeals.com:\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        'SMOKE LOGIN REFUSED against https://comeals.com:',
+        'Production refused a smoke login before the deploy. Nothing was changed. Check the SMOKE_* credentials ' \
+        '(in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then deploy again.'
+      )
+      expect(deploy.calls_to('smoke')).to eq(['smoke https://comeals.com'])
+      expect_nothing_changed_in_production
+    end
+
+    it 'stops, and changes nothing, when production fails the smoke test before the deploy' do
+      deploy.rule('smoke', 'comeals\\.com', exit: 1, stdout: "login page did not load\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        'login page did not load',
+        'Production fails the smoke test before the deploy. Nothing was changed. ' \
+        'Find out why first: bin/smoke https://comeals.com'
+      )
+      expect_nothing_changed_in_production
+    end
+  end
+
   describe 'a push deploy (no migration changed)' do
     it 'pushes, checks the release, clears the cache, recalculates, checks the site, and says so' do
       result = deploy.run('--yes')
@@ -1420,7 +1475,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
         'and docs/runbooks/scheduler-cutover.md'
       )
       expect(deploy.calls_to('heroku').grep(/verify_solid_queue/).size).to eq(2)
-      expect(deploy.calls_to('smoke')).to eq([])
+      expect(deploy.calls_to('smoke')).to eq(['smoke https://comeals.com'])
       expect_production(maintenance: false, web: 1, pushed: true)
     end
   end
@@ -1442,7 +1497,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
         'Read the error above, then: heroku logs -a comeals-monorepo --dyno worker | grep -i error'
       )
       expect(deploy.calls_to('heroku').grep(/verify_recurring_job/).size).to eq(1)
-      expect(deploy.calls_to('smoke')).to eq([])
+      expect(deploy.calls_to('smoke')).to eq(['smoke https://comeals.com'])
       expect_production(maintenance: false, web: 1, pushed: true)
     end
   end
@@ -1450,7 +1505,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   # State left: no maintenance, web at 1, new code live and broken. Next
   # step: roll back (docs/runbooks/undo-a-deploy.md).
   it 'fails and says to roll back when the smoke test fails' do
-    deploy.rule('smoke', 'comeals\\.com', exit: 1, stdout: "login page did not load\n")
+    smoke_after_the_deploy(exit: 1, stdout: "login page did not load\n")
 
     result = deploy.run('--yes')
 
@@ -1462,29 +1517,27 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   end
 
   # bin/smoke ends with 2 when the site answered and refused a smoke
-  # login. Every check that could run passed, so the site is not called
-  # broken and there is nothing to roll back; but the checks behind the
-  # login did not run, so the deploy is not complete either. State left:
-  # no maintenance, web at 1, new code live.
-  it 'fails and says to check the smoke credentials, not to roll back, when the smoke login is refused' do
-    deploy.rule('smoke', 'comeals\\.com', exit: 2, stdout: "SMOKE LOGIN REFUSED against https://comeals.com:\n")
+  # login. The same login worked before the deploy, so the deploy broke
+  # it. State left: no maintenance, web at 1, new code live.
+  it 'says to roll back when the deploy broke a smoke login that worked before it' do
+    smoke_after_the_deploy(exit: 2, stdout: "SMOKE LOGIN REFUSED against https://comeals.com:\n")
 
     result = deploy.run('--yes')
 
     expect(result.status).to eq(1)
     expect(result.output).to include(
       'SMOKE LOGIN REFUSED against https://comeals.com:',
-      'The site refused a smoke login. Every smoke check that could run passed, so do not roll back for this. ' \
-      'Check the SMOKE_* credentials (in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then run: bin/smoke https://comeals.com'
+      'SMOKE TEST FAILED — the site refused a smoke login that worked before this deploy, so the deploy broke it. ' \
+      'Roll back.'
     )
-    expect(result.output).not_to include('Deploy complete!', 'Roll back.', recovery_banner)
+    expect(result.output).not_to include('Deploy complete!', recovery_banner)
     expect_production(maintenance: false, web: 1, pushed: true)
   end
 
   # Any code but 0 and 2 is a broken site, or a smoke test that could
   # not run; either way the deploy is not known to work.
   it 'says to roll back when the smoke test ends with any other code' do
-    deploy.rule('smoke', 'comeals\\.com', exit: 127)
+    smoke_after_the_deploy(exit: 127)
 
     result = deploy.run('--yes')
 
@@ -1620,7 +1673,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
         'add: -f backup=b001'
       )
       expect(result.output).not_to include('Smoke test passed', 'Deploy complete!', recovery_banner)
-      expect(deploy.calls_to('smoke')).to eq([])
+      expect(deploy.calls_to('smoke')).to eq(['smoke https://comeals.com'])
       expect_production(maintenance: false, web: 1, pushed: true)
     end
 
@@ -1769,6 +1822,24 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                          'comeals-staging. Nothing was changed.')
         expect(deploy.calls).to eq([])
       end
+    end
+
+    # Staging is parked at 0 dynos between rehearsals, so there is no site
+    # to smoke before the deploy, and so no login known to have worked. A
+    # refused login after the deploy then means the credentials are wrong.
+    it 'does not smoke staging before the deploy, and says to check the credentials when a login is refused' do
+      deploy.rule('smoke', 'herokuapp\\.com', exit: 2)
+
+      result = deploy.run('--yes', env: staging.merge('SMOKE_EMAIL' => 'smoke@example.com',
+                                                      'SMOKE_PASSWORD' => 'smoke-pass'))
+
+      expect(result.status).to eq(1)
+      expect(deploy.calls_to('smoke')).to eq(["smoke #{staging_url}"])
+      expect(result.output).to include(
+        'The site refused a smoke login. Every smoke check that could run passed, so do not roll back for this. ' \
+        "Check the SMOKE_* credentials (in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then run: bin/smoke #{staging_url}"
+      )
+      expect(result.output).not_to include('Roll back.')
     end
 
     it 'runs a push deploy on staging, end to end, and never names production' do

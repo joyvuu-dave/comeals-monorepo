@@ -14,9 +14,15 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
   let(:live) { 'l' * 40 }
   let(:prod) { '-a comeals-monorepo' }
   let(:apps) { { 'PROD_APP' => 'comeals-monorepo', 'STAGING_APP' => 'comeals-staging' } }
+  # The four smoke sign-ins, as the production environment's secrets give
+  # them to a step.
+  let(:smoke_secrets) do
+    { 'SMOKE_EMAIL' => 'me@example.com', 'SMOKE_PASSWORD' => 'resident-secret',
+      'SMOKE_ADMIN_EMAIL' => 'admin@example.com', 'SMOKE_ADMIN_PASSWORD' => 'admin-secret' }
+  end
 
   # The files the scripts source or run besides themselves.
-  before { %w[bin/lib/json.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
+  before { %w[bin/lib/json.sh bin/lib/smoke_secrets.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
 
   def heroku_calls = sandbox.call_lines('heroku')
 
@@ -257,6 +263,70 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
   end
 
+  # Before the run changes anything (the draft release, staging,
+  # production), it smokes production as it is. A smoke login that works
+  # now is what lets a refused login after the promote roll back.
+  describe 'bin/lib/deploy/smoke-before' do
+    before do
+      sandbox.note_env('SMOKE_URL', 'SMOKE_EMAIL')
+      sandbox.rule('node', 'tests/smoke/smoke.js')
+    end
+
+    def smoke_before(secrets = smoke_secrets)
+      sandbox.run_script('bin/lib/deploy/smoke-before', env: apps.merge('PROD_URL' => 'https://comeals.com')
+                                                                 .merge(secrets))
+    end
+
+    it 'smokes production with the sign-ins and says the login worked' do
+      result = smoke_before
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to eq("Production passes the smoke test before the deploy, its logins included.\n")
+      expect(result.outputs).to eq('login_worked' => 'true')
+      expect(sandbox.calls_to('node').map(&:env))
+        .to eq([{ 'SMOKE_URL' => 'https://comeals.com', 'SMOKE_EMAIL' => 'me@example.com' }])
+    end
+
+    it 'stops the run with code 2, and changes nothing, when production refuses a smoke login' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 2)
+
+      result = smoke_before
+
+      expect(result.exitstatus).to eq(2)
+      expect(result.out).to eq(
+        "Production refused a smoke login before the deploy. Nothing was changed. Check the SMOKE_* secrets of\n" \
+        "the GitHub environment production, then run the workflow again.\n"
+      )
+      expect(result.outputs).to be_empty
+    end
+
+    it 'stops the run, and changes nothing, when production fails the smoke test' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+
+      result = smoke_before
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to eq(
+        "Production fails the smoke test before the deploy. Nothing was changed.\n" \
+        "Find out why first: bin/smoke https://comeals.com\n"
+      )
+      expect(result.outputs).to be_empty
+    end
+
+    # A secret that is not set reaches the step as an empty value. The
+    # smoke test would then skip that login and pass without it.
+    it 'stops with code 2 before smoking, naming each missing secret but no value, when one is not set' do
+      result = smoke_before(smoke_secrets.merge('SMOKE_PASSWORD' => '', 'SMOKE_ADMIN_EMAIL' => ''))
+
+      expect(result.exitstatus).to eq(2)
+      expect(result.out).to eq(
+        "Missing smoke secrets: SMOKE_PASSWORD SMOKE_ADMIN_EMAIL. Set them in the GitHub environment production.\n"
+      )
+      expect(result.out + result.err).not_to include('resident-secret', 'admin-secret', 'me@example.com')
+      expect(sandbox.calls_to('node')).to be_empty
+    end
+  end
+
   describe 'bin/lib/deploy/watch-production' do
     let(:version_url) { 'https://comeals.com/api/v1/version' }
     let(:diff) { "diff --name-only --no-renames --diff-filter=A #{live} #{candidate} -- db/migrate" }
@@ -276,11 +346,13 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       sandbox.rule('sleep')
     end
 
-    def watch
+    def watch(secrets: smoke_secrets, login_worked_before: 'true')
       sandbox.run_script('bin/lib/deploy/watch-production',
                          env: apps.merge('CANDIDATE' => candidate, 'PREVIOUS' => live,
                                          'STARTED' => '2026-10-19T12:30:00',
-                                         'PROD_URL' => 'https://comeals.com'))
+                                         'PROD_URL' => 'https://comeals.com',
+                                         'LOGIN_WORKED_BEFORE' => login_worked_before)
+                                  .merge(secrets))
     end
 
     def rollbacks = heroku_calls.grep(/heroku rollback/)
@@ -417,20 +489,34 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
     end
 
     # bin/smoke ends with 2 when production answered and refused a smoke
-    # login: the secrets are stale, and every smoke check that could run
-    # passed. Rolling back would undo a good release (before this, it did).
-    # The other checks still run and still roll back a broken release, and
-    # the run still fails, so the release note stays a draft.
-    context 'when production refuses a smoke login' do
+    # login. The smoke-before step proved that login worked before the
+    # promote, so the release broke it.
+    it 'rolls back when production refuses a smoke login that worked before the deploy' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 2)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include(
+        "Production refused a smoke login that worked before the deploy, so the release broke it. Rolling back.\n"
+      )
+      expect(rollbacks).to eq(["heroku rollback #{prod}"])
+    end
+
+    # Without that proof the refusal may be stale secrets, and rolling back
+    # would undo a good release. The other checks still run, and still
+    # roll back a broken release, and the run still fails, so the release
+    # note stays a draft.
+    context 'when production refuses a smoke login not known to have worked before' do
       before { sandbox.rule('node', 'tests/smoke/smoke.js', exit: 2) }
 
       it 'does not roll back, runs the other checks, and fails at the end saying to check the secrets' do
-        result = watch
+        result = watch(login_worked_before: '')
 
         expect(result.exitstatus).to eq(1)
         expect(result.out).to include(
-          'Production refused a smoke login. Every smoke check that could run passed, so this is not a reason to ' \
-          "roll back. The other checks go on.\n"
+          'Production refused a smoke login. It is not known to have worked before the deploy, so this is not a ' \
+          "reason to roll back. The other checks go on.\n"
         )
         expect(result.out).to end_with(
           "No worrying lines in the production logs.\n" \
@@ -447,12 +533,28 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       it 'still rolls back when another check fails' do
         sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}", exit: 1)
 
-        result = watch
+        result = watch(login_worked_before: '')
 
         expect(result.exitstatus).to eq(1)
         expect(result.out).to include('Solid Queue is not running on production. Rolling back.')
         expect(rollbacks).to eq(["heroku rollback #{prod}"])
       end
+    end
+
+    # The promote already ran, so a missing secret must not stop the watch:
+    # every check still runs and can still roll back. The step then ends
+    # with 2 and names what is missing.
+    it 'runs every check, then ends with code 2 naming each missing secret but no value, when one is not set' do
+      result = watch(secrets: smoke_secrets.merge('SMOKE_ADMIN_PASSWORD' => ''))
+
+      expect(result.exitstatus).to eq(2)
+      expect(result.out).to end_with(
+        "No worrying lines in the production logs.\n" \
+        "Missing smoke secrets: SMOKE_ADMIN_PASSWORD. Set them in the GitHub environment production.\n"
+      )
+      expect(result.out + result.err).not_to include('resident-secret', 'me@example.com')
+      expect(heroku_calls.grep(/deploy:verify/).size).to eq(2)
+      expect(rollbacks).to be_empty
     end
 
     # Any code but 0 and 2 is a broken site, or a smoke test that could
@@ -559,12 +661,13 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)['jobs']['daily-deploy']['steps']
     end
 
-    it 'gives the smoke sign-ins from the secrets to the Watch production step only' do
+    it 'gives the smoke sign-ins from the secrets to the two steps that smoke production only' do
       names = %w[SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD]
-      watch = steps.find { it['name'] == 'Watch production' }
+      smoking = steps.select { %w[smoke_before].include?(it['id']) || it['name'] == 'Watch production' }
 
-      expect(watch['env'].slice(*names)).to eq(names.index_with { "${{ secrets.#{it} }}" })
-      expect(steps.reject { it == watch }.map { it['env'].to_s }.grep(/SMOKE_/)).to eq([])
+      expect(smoking.pluck('name')).to eq(['Smoke production before the deploy', 'Watch production'])
+      smoking.each { expect(it['env'].slice(*names)).to eq(names.index_with { "${{ secrets.#{it} }}" }) }
+      expect((steps - smoking).map { it['env'].to_s }.grep(/SMOKE_/)).to eq([])
       expect(YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)['env'].keys.grep(/SMOKE/))
         .to eq([])
     end
@@ -583,6 +686,22 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(check['run']).to eq('node tests/smoke/browser.js')
       expect(names.index(check['name'])).to be < names.index('Staging rehearsal')
       expect(steps.map { it['run'].to_s }.grep(/playwright/)).to eq([])
+    end
+
+    # Nothing may change before the smoke test of production as it is:
+    # not the draft release, not staging, not production.
+    it 'smokes production before any step that changes something, and tells the watch whether the login worked' do
+      names = steps.pluck('name')
+      before = steps.find { it['id'] == 'smoke_before' }
+      watch = steps.find { it['name'] == 'Watch production' }
+
+      expect(before['run']).to eq('bin/lib/deploy/smoke-before')
+      expect(before['if']).to eq("steps.compare.outputs.proceed == 'true'")
+      expect(names.index(before['name'])).to be > names.index("Check that the smoke test's browser starts")
+      ['Create the draft release', 'Staging rehearsal', 'Promote to production'].each do |name|
+        expect(names.index(before['name'])).to be < names.index(name)
+      end
+      expect(watch['env']['LOGIN_WORKED_BEFORE']).to eq('${{ steps.smoke_before.outputs.login_worked }}')
     end
   end
 end
