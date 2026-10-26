@@ -18,6 +18,14 @@
 // (when_server_answers.ts). Meanwhile the page keeps showing its
 // "Loading..." words (the Suspense fallback).
 //
+// A browser set to block site data throws on any use of sessionStorage
+// (#162), and one that is out of space throws on a write. Then the page
+// cannot remember that it reloaded, so a reload could not tell the first
+// failure from the second, and a file that stays missing would reload
+// the page over and over. So when the flag cannot be read or written,
+// the page counts the failure as the second one: no reload, and the
+// chunk's own error goes on. The storage error is never thrown.
+//
 // `beforeReload` runs just before the reload. The reload ends every
 // request on its way, and WebKit ends them as soon as it starts, before
 // the page fires pagehide. index.jsx hands the bills saves on their way
@@ -28,21 +36,38 @@ import { whenServerAnswers } from "./when_server_answers";
 // One id per production build (vite.config.mjs).
 declare const __BUILD_ID__: string;
 
+const FLAG = "chunk_retry";
+
+// True when this is the first failure in this build and the flag that
+// says so is saved, so the page may reload. False when the page already
+// reloaded in this build, or when sessionStorage cannot be used.
+function firstFailureSaved(): boolean {
+  try {
+    if (window.sessionStorage.getItem(FLAG) === __BUILD_ID__) {
+      window.sessionStorage.removeItem(FLAG);
+      return false;
+    }
+    window.sessionStorage.setItem(FLAG, __BUILD_ID__);
+    return true;
+  } catch (error) {
+    console.warn("This browser refuses sessionStorage:", error);
+    return false;
+  }
+}
+
 export function lazyRetry<T>(
   importFn: () => Promise<T>,
   beforeReload: () => void,
 ): () => Promise<T> {
   return function () {
     return importFn().catch(function (err: unknown) {
-      if (sessionStorage.getItem("chunk_retry") !== __BUILD_ID__) {
-        sessionStorage.setItem("chunk_retry", __BUILD_ID__);
+      if (firstFailureSaved()) {
         whenServerAnswers(function () {
           beforeReload();
           window.location.reload();
         });
         return new Promise<T>(function () {});
       }
-      sessionStorage.removeItem("chunk_retry");
       throw err;
     });
   };
