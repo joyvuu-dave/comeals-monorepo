@@ -49,7 +49,7 @@ RSpec.describe SchemaBootCheck do
       expect { described_class.verify!('The jobs process') }.to raise_error(
         described_class::DatabaseBehind,
         'The jobs process will not start. The database has not run 1 migration that is in db/migrate/: ' \
-        "#{PRODUCTION_SCHEMA_VERSION + 1}. Run it with bin/rake db:migrate (on Heroku: heroku run bin/rake " \
+        "#{PRODUCTION_SCHEMA_VERSION + 1}. Run bin/rake db:migrate (on Heroku: heroku run bin/rake " \
         'db:migrate, or ' \
         'deploy again, which runs it in the release phase). heroku run (a console or a rake task) still ' \
         'starts, so the database can be looked at and repaired there. (lib/schema_boot_check.rb)'
