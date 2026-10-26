@@ -22,7 +22,7 @@ module Kaminari::ActionViewExtension; end
 # pkg:gem/kaminari-actionview#lib/kaminari/actionview/action_view_extension.rb:12
 module Kaminari::ActionViewExtension::LogSubscriberSilencer
   # pkg:gem/kaminari-actionview#lib/kaminari/actionview/action_view_extension.rb:13
-  def render_partial(*_arg0); end
+  def render_partial(*); end
 end
 
 # pkg:gem/kaminari-actionview#lib/kaminari/actionview/version.rb:4

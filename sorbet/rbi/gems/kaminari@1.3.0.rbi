@@ -5,5 +5,8 @@
 # Please instead update this file by running `bin/tapioca gem kaminari`.
 
 
-# THIS IS AN EMPTY RBI FILE.
-# see https://github.com/Shopify/tapioca#manually-requiring-parts-of-a-gem
+# pkg:gem/kaminari#lib/kaminari/version.rb:3
+module Kaminari; end
+
+# pkg:gem/kaminari#lib/kaminari/version.rb:4
+Kaminari::VERSION = T.let(T.unsafe(nil), String)

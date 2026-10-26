@@ -14,6 +14,9 @@ module Kaminari
     # pkg:gem/kaminari-core#lib/kaminari/config.rb:9
     def configure; end
 
+    # pkg:gem/kaminari-core#lib/kaminari/core.rb:4
+    def deprecator; end
+
     # Wrap an Array object to make it paginatable
     # ==== Options
     # * <tt>:limit</tt> - limit
@@ -21,7 +24,7 @@ module Kaminari
     # * <tt>:total_count</tt> - total_count
     # * <tt>:padding</tt> - padding
     #
-    # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:70
+    # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:86
     def paginate_array(array, limit: T.unsafe(nil), offset: T.unsafe(nil), total_count: T.unsafe(nil), padding: T.unsafe(nil)); end
   end
 end
@@ -156,17 +159,17 @@ module Kaminari::Helpers; end
 
 # Link with page number that appears at the leftmost
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:103
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:172
 class Kaminari::Helpers::FirstPage < ::Kaminari::Helpers::Tag
   include ::Kaminari::Helpers::Link
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:105
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:174
   def page; end
 end
 
 # Non-link tag that stands for skipped pages...
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:161
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:230
 class Kaminari::Helpers::Gap < ::Kaminari::Helpers::Tag; end
 
 # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:98
@@ -191,10 +194,10 @@ module Kaminari::Helpers::HelperMethods
   #     <span>No More Pages</span>
   #   <% end %>
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:172
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:174
   def link_to_next_page(scope, name, **options); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:153
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:155
   def link_to_prev_page(scope, name, **options); end
 
   # A simple "Twitter like" pagination link that creates a link to the previous page.
@@ -215,7 +218,7 @@ module Kaminari::Helpers::HelperMethods
   #     <span>At the Beginning</span>
   #   <% end %>
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:141
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:143
   def link_to_previous_page(scope, name, **options); end
 
   # Renders a helpful message with numbers of displayed vs. total entries.
@@ -229,13 +232,13 @@ module Kaminari::Helpers::HelperMethods
   #
   # By default, the message will use the humanized class name of objects
   # in collection: for instance, "project types" for ProjectType models.
-  # The namespace will be cutted out and only the last name will be used.
+  # The namespace will be cut out and only the last name will be used.
   # Override this with the <tt>:entry_name</tt> parameter:
   #
   #   <%= page_entries_info @posts, entry_name: 'item' %>
   #   #-> Displaying items 6 - 10 of 26 in total
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:201
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:203
   def page_entries_info(collection, entry_name: T.unsafe(nil)); end
 
   # A helper that renders the pagination links.
@@ -250,11 +253,12 @@ module Kaminari::Helpers::HelperMethods
   # * <tt>:params</tt> - url_for parameters for the links (:controller, :action, etc.)
   # * <tt>:param_name</tt> - parameter name for page number in the links (:page by default)
   # * <tt>:remote</tt> - Ajax? (false by default)
+  # * <tt>:data</tt> - data-* attributes for the links (e.g. <tt>{turbo_frame: 'users'}</tt>)
   # * <tt>:paginator_class</tt> - Specify a custom Paginator (Kaminari::Helpers::Paginator by default)
   # * <tt>:template</tt> - Specify a custom template renderer for rendering the Paginator (receiver by default)
   # * <tt>:ANY_OTHER_VALUES</tt> - Any other hash key & values would be directly passed into each tag as :locals value.
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:116
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:117
   def paginate(scope, paginator_class: T.unsafe(nil), template: T.unsafe(nil), **options); end
 
   # Renders rel="next" and rel="prev" links to be used in the head.
@@ -275,50 +279,50 @@ module Kaminari::Helpers::HelperMethods
   #
   #   #-> <link rel="next" href="/items/page/3"><link rel="prev" href="/items/page/1">
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:236
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/helper_methods.rb:251
   def rel_next_prev_link_tags(scope, options = T.unsafe(nil)); end
 end
 
 # Link with page number that appears at the rightmost
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:111
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:180
 class Kaminari::Helpers::LastPage < ::Kaminari::Helpers::Tag
   include ::Kaminari::Helpers::Link
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:113
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:182
   def page; end
 end
 
 # Tag that contains a link
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:74
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:143
 module Kaminari::Helpers::Link
   # target page number
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:76
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:145
   def page; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:83
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:152
   def to_s(locals = T.unsafe(nil)); end
 
   # the link's href
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:80
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:149
   def url; end
 end
 
 # The "next" page of the current page
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:140
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:209
 class Kaminari::Helpers::NextPage < ::Kaminari::Helpers::Tag
   include ::Kaminari::Helpers::Link
 
   # TODO: Remove this initializer before 1.3.0.
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:144
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:213
   def initialize(template, params: T.unsafe(nil), param_name: T.unsafe(nil), theme: T.unsafe(nil), views_prefix: T.unsafe(nil), **options); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:155
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:224
   def page; end
 end
 
@@ -327,16 +331,16 @@ Kaminari::Helpers::PARAM_KEY_EXCEPT_LIST = T.let(T.unsafe(nil), Array)
 
 # A page
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:90
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:159
 class Kaminari::Helpers::Page < ::Kaminari::Helpers::Tag
   include ::Kaminari::Helpers::Link
 
   # target page number
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:93
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:162
   def page; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:96
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:165
   def to_s(locals = T.unsafe(nil)); end
 end
 
@@ -347,7 +351,7 @@ class Kaminari::Helpers::Paginator < ::Kaminari::Helpers::Tag
   # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:10
   def initialize(template, window: T.unsafe(nil), outer_window: T.unsafe(nil), left: T.unsafe(nil), right: T.unsafe(nil), inner_window: T.unsafe(nil), **options); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:50
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:54
   def each_page; end
 
   # enumerate each page providing PageProxy object as the block parameter
@@ -357,153 +361,153 @@ class Kaminari::Helpers::Paginator < ::Kaminari::Helpers::Tag
   # * pages inside the inner window plus one on the left plus one on the right for showing the gap tags
   # * pages inside the right outer window plus one for showing the gap tag
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:43
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:47
   def each_relevant_page; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:66
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:70
   def first_page_tag; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:66
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:70
   def gap_tag; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:66
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:70
   def last_page_tag; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:66
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:70
   def next_page_tag; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:61
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:65
   def page_tag(page); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:66
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:70
   def prev_page_tag; end
 
   # render given block as a view template
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:28
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:32
   def render(&block); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:73
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:77
   def to_s; end
 
   private
 
   # delegates view helper methods to @template
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:81
-  def method_missing(name, *args, &block); end
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:85
+  def method_missing(name, *args, **kwargs, &block); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:52
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:56
   def relevant_pages(options); end
 end
 
 # Wraps a "page number" and provides some utility methods
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:87
+# pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:91
 class Kaminari::Helpers::Paginator::PageProxy
   include ::Comparable
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:90
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:94
   def initialize(options, page, last); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:177
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:187
   def +(other); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:181
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:191
   def -(other); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:185
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:195
   def <=>(other); end
 
   # current page or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:100
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:110
   def current?; end
 
   # Should we display the link tag?
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:165
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:175
   def display_tag?; end
 
   # the first page or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:105
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:115
   def first?; end
 
   # inside the inner window or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:144
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:154
   def inside_window?; end
 
   # the last page or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:110
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:120
   def last?; end
 
   # within the left outer window or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:134
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:144
   def left_outer?; end
 
   # the next page or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:120
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:130
   def next?; end
 
   # the page number
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:95
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:105
   def number; end
 
   # The page number exceeds the range of pages or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:155
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:165
   def out_of_range?; end
 
   # the previous page or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:115
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:125
   def prev?; end
 
   # relationship with the current page
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:125
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:135
   def rel; end
 
   # within the right outer window or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:139
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:149
   def right_outer?; end
 
   # Current page is an isolated gap or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:149
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:159
   def single_gap?; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:169
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:179
   def to_i; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:173
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:183
   def to_s; end
 
   # The last rendered tag was "truncated" or not
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:160
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/paginator.rb:170
   def was_truncated?; end
 end
 
 # The "previous" page of the current page
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:119
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:188
 class Kaminari::Helpers::PrevPage < ::Kaminari::Helpers::Tag
   include ::Kaminari::Helpers::Link
 
   # TODO: Remove this initializer before 1.3.0.
   #
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:123
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:192
   def initialize(template, params: T.unsafe(nil), param_name: T.unsafe(nil), theme: T.unsafe(nil), views_prefix: T.unsafe(nil), **options); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:134
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:203
   def page; end
 end
 
@@ -520,25 +524,53 @@ end
 # installed template will be used.
 #   e.g.)  Paginator  ->  $GEM_HOME/kaminari-x.x.x/app/views/kaminari/_paginator.html.erb
 #
-# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:19
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:20
 class Kaminari::Helpers::Tag
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:20
-  def initialize(template, params: T.unsafe(nil), param_name: T.unsafe(nil), theme: T.unsafe(nil), views_prefix: T.unsafe(nil), **options); end
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:24
+  def initialize(template, params: T.unsafe(nil), param_name: T.unsafe(nil), theme: T.unsafe(nil), views_prefix: T.unsafe(nil), internal_params: T.unsafe(nil), internal_url_cache: T.unsafe(nil), internal_partial_cache: T.unsafe(nil), **options); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:36
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:54
   def page_url_for(page); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:31
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:44
   def to_s(locals = T.unsafe(nil)); end
 
   private
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:44
+  # Use the URL with the placeholder only when it builds exactly the same URL as url_for does.
+  # Otherwise (e.g. when the routes constrain the page number), fall back to calling url_for for each page.
+  #
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:103
+  def build_url_template(page, url); end
+
+  # Generating URLs is costly, so the paginator generates the URL only once with a placeholder page number,
+  # and then builds the URL for each page by replacing the placeholder
+  #
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:90
+  def cached_page_url_for(page); end
+
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:82
+  def generate_page_url(page); end
+
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:112
   def params_for(page); end
 
-  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:63
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:137
   def partial_path; end
+
+  # Looking up a partial template is costly, so the paginator looks up each partial only once, and then renders the
+  # template directly in the same way as `render partial:` does.
+  # This is done only when the formats already include :html, which means the formats that `to_s` would pass to
+  # `render` are the same as the current ones, and so finding and rendering the template doesn't depend on the formats.
+  #
+  # pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:64
+  def render_cached_partial(locals); end
 end
+
+# A page number that is unlikely to appear in any URL, which stands in for the actual page number in the cached URL
+#
+# pkg:gem/kaminari-core#lib/kaminari/helpers/tags.rb:22
+Kaminari::Helpers::Tag::PAGE_PLACEHOLDER = T.let(T.unsafe(nil), Integer)
 
 # The Kaminari::Helpers::UrlHelper module provides useful methods for
 # generating a path or url to a particular page. A class must implement the
@@ -650,39 +682,42 @@ end
 module Kaminari::PageScopeMethods
   # Current page number
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:47
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:49
   def current_page; end
 
   # Current per-page number
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:58
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:60
   def current_per_page; end
 
   # First page of the collection?
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:77
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:79
   def first_page?; end
 
   # Last page of the collection?
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:82
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:84
   def last_page?; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:21
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:24
   def max_paginates_per(new_max_per_page); end
 
   # Next page number in the collection
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:67
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:69
   def next_page; end
 
   # Out of range of the collection?
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:87
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:89
   def out_of_range?; end
 
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:27
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:30
   def padding(num); end
+
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:93
+  def paginated?; end
 
   # Specify the <tt>per_page</tt> value for the preceding <tt>page</tt> scope
   #   Model.page(3).per(10)
@@ -692,13 +727,20 @@ module Kaminari::PageScopeMethods
 
   # Previous page number in the collection
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:72
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:74
   def prev_page; end
 
   # Total number of pages
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:35
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:37
   def total_pages; end
+
+  private
+
+  # Returns another scope with the given limit and offset
+  #
+  # pkg:gem/kaminari-core#lib/kaminari/models/page_scope_methods.rb:100
+  def limit_and_offset(new_limit, new_offset); end
 end
 
 # Kind of Array that can paginate
@@ -723,7 +765,7 @@ class Kaminari::PaginatableArray < ::Array
 
   # returns another chunk of the original array
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:49
+  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:50
   def limit(num); end
 
   # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:11
@@ -734,7 +776,7 @@ class Kaminari::PaginatableArray < ::Array
 
   # returns another chunk of the original array
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:59
+  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:65
   def offset(num); end
 
   # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:11
@@ -746,10 +788,22 @@ class Kaminari::PaginatableArray < ::Array
   # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:42
   def page(num = T.unsafe(nil)); end
 
+  # overridden by Kaminari::PageScopeMethods once paginated
+  #
+  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:55
+  def paginated?; end
+
   # total item numbers of the original array
   #
-  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:54
+  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:60
   def total_count; end
+
+  private
+
+  # Builds another chunk of the original array, carrying over the per page settings given to this one
+  #
+  # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:72
+  def spawn(limit:, offset:); end
 end
 
 # pkg:gem/kaminari-core#lib/kaminari/models/array_extension.rb:9
