@@ -94,10 +94,10 @@ module Goldiloader::AssociationLoader
   # pkg:gem/goldiloader#lib/goldiloader/association_loader.rb:17
   def eager_load(models, association_name); end
 
-  # pkg:gem/goldiloader#lib/goldiloader/association_loader.rb:32
+  # pkg:gem/goldiloader#lib/goldiloader/association_loader.rb:28
   def has_association?(model, association_name); end
 
-  # pkg:gem/goldiloader#lib/goldiloader/association_loader.rb:25
+  # pkg:gem/goldiloader#lib/goldiloader/association_loader.rb:21
   def load?(model, association_name); end
 end
 
@@ -125,25 +125,25 @@ end
 # pkg:gem/goldiloader#lib/goldiloader/association_options.rb:7
 Goldiloader::AssociationOptions::OPTIONS = T.let(T.unsafe(nil), Array)
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:105
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:101
 module Goldiloader::AssociationPatch
   extend ::ActiveSupport::Concern
   include GeneratedInstanceMethods
 
   mixes_in_class_methods GeneratedClassMethods
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:113
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:109
   def auto_include?; end
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:119
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:115
   def fully_load?; end
 
   private
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:125
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:121
   def eager_loadable?; end
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:129
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:125
   def load_with_auto_include; end
 
   module GeneratedClassMethods
@@ -159,12 +159,12 @@ module Goldiloader::AssociationPatch
   end
 end
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:79
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:75
 module Goldiloader::AssociationReflectionPatch
   # Note we need to pass the association's target class as an argument since it won't be known
   # outside the context of an association instance for polymorphic associations.
   #
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:82
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:78
   def eager_loadable?(target_klass); end
 end
 
@@ -185,7 +185,7 @@ class Goldiloader::AutoIncludeContext
   def register_models(models); end
 
   # pkg:gem/goldiloader#lib/goldiloader/auto_include_context.rb:7
-  def size(*_arg0, **_arg1, &_arg2); end
+  def size(*, **, &); end
 
   class << self
     # pkg:gem/goldiloader#lib/goldiloader/auto_include_context.rb:13
@@ -204,7 +204,7 @@ module Goldiloader::BasePatch
   def goldiload(cache_name = T.unsafe(nil), key: T.unsafe(nil), &block); end
 
   # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:24
-  def reload(*_arg0); end
+  def reload(*); end
 
   private
 
@@ -212,49 +212,37 @@ module Goldiloader::BasePatch
   def initialize_copy(other); end
 end
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:161
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:157
 module Goldiloader::CollectionAssociationPatch
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:164
-  def empty?(*args, **kwargs, &block); end
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:169
+  def empty?(*, **, &); end
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:174
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:178
   def find_from_target?; end
 
   # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:164
-  def ids_reader(*args, **kwargs, &block); end
+  def ids_reader(*, **, &); end
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:170
-  def load_target(*_arg0, **_arg1, &_arg2); end
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:174
+  def load_target(*, **, &); end
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:164
-  def size(*args, **kwargs, &block); end
+  # Force these methods to load the entire association for fully_load associations
+  #
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:159
+  def size(*, **, &); end
 end
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:203
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:207
 module Goldiloader::CollectionProxyPatch
   # The CollectionProxy just forwards exists? to the underlying scope so we need to intercept this and
   # force it to use size which handles fully_load properly.
   #
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:206
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:210
   def exists?(*args, **kwargs); end
 end
 
 # pkg:gem/goldiloader#lib/goldiloader/compatibility.rb:4
-module Goldiloader::Compatibility
-  class << self
-    # pkg:gem/goldiloader#lib/goldiloader/compatibility.rb:5
-    def pre_rails_7?; end
-
-    # pkg:gem/goldiloader#lib/goldiloader/compatibility.rb:17
-    def pre_rails_7_2?; end
-
-    # pkg:gem/goldiloader#lib/goldiloader/compatibility.rb:9
-    def rails_6_1?; end
-
-    # pkg:gem/goldiloader#lib/goldiloader/compatibility.rb:13
-    def rails_6_1_or_greater?; end
-  end
-end
+module Goldiloader::Compatibility; end
 
 # pkg:gem/goldiloader#lib/goldiloader/custom_preloads.rb:4
 module Goldiloader::CustomPreloads
@@ -279,11 +267,11 @@ module Goldiloader::CustomPreloads
   def store_preloaded(cache_name, preloaded_hash); end
 end
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:69
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:65
 module Goldiloader::MergerPatch
   private
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:72
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:68
   def merge_single_values; end
 end
 
@@ -332,16 +320,16 @@ class Goldiloader::ScopeInfo
   def scope; end
 end
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:152
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:148
 module Goldiloader::SingularAssociationPatch
   private
 
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:155
-  def find_target(*_arg0, **_arg1, &_arg2); end
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:151
+  def find_target(*, **, &); end
 end
 
-# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:180
+# pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:184
 module Goldiloader::ThroughAssociationPatch
-  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:181
+  # pkg:gem/goldiloader#lib/goldiloader/active_record_patches.rb:185
   def auto_include?; end
 end
