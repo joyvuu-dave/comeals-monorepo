@@ -31,7 +31,7 @@ gem 'sassc-rails'
 gem 'bigdecimal'
 
 gem 'activeadmin', '~> 3.0'
-gem 'alba', '~> 3.11'
+gem 'alba', '~> 4.0'
 gem 'audited'
 
 # Stateless authentication tokens (see app/services/jwt_auth.rb).
