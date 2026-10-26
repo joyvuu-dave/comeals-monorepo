@@ -59,6 +59,17 @@ RSpec.describe SchemaBootCheck do
       )
     end
 
+    it 'counts two or more migrations' do
+      File.write(File.join(dir, "#{PRODUCTION_SCHEMA_VERSION + 2}_another_change.rb"),
+                 "class AnotherChange < ActiveRecord::Migration[8.1]; end\n")
+
+      versions = "#{PRODUCTION_SCHEMA_VERSION + 1}, #{PRODUCTION_SCHEMA_VERSION + 2}"
+
+      expect { described_class.verify!('The web process') }.to raise_error(
+        described_class::DatabaseBehind, %r{has not run 2 migrations that are in db/migrate/: #{versions}\.}
+      )
+    end
+
     # The integration and admin browser suites start web with the clock
     # stopped at a day in the past (config/initializers/integration_fake_time.rb).
     # Rails refuses to read a migration file dated after "now", so reading
