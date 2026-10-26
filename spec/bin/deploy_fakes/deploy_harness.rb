@@ -20,12 +20,14 @@ class DeployHarness
   FAKE_NAMES = %w[heroku git gh curl bundle npm npx sleep].freeze
   # The local tools bin/deploy (and the fakes) run. None talks to another
   # machine.
-  LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 tail tee].freeze
+  LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 ruby tail tee].freeze
   RULE_OPTIONS = %i[stdout stderr exit times].freeze
   # The version db/production_schema_version.txt of the throwaway
   # repository names, and the newest one in the fake database's
   # schema_migrations unless the spec says otherwise.
   SCHEMA_VERSION = '20260201000000'
+  # The versions the throwaway repository's db/structure.sql lists as run.
+  RECORDED = %w[20260101000000 20260201000000].freeze
 
   Result = Struct.new(:output, :status)
 
@@ -41,7 +43,7 @@ class DeployHarness
     @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '', push_output: '' }
     @state = {
       maintenance: 'off', web: 1, worker: 1, backups: 0, release: 700, releases: [], pushed: '', heroku_sha: '',
-      schema_version: SCHEMA_VERSION, config: {}
+      schema_version: SCHEMA_VERSION, tables: %w[meals schema_migrations], config: {}
     }
     build_path
     build_repo
@@ -76,7 +78,10 @@ class DeployHarness
   # nothing), git_sha (Heroku's git main when it is not the commit that
   # runs, as after a rollback), schema_version (the newest version in the
   # database's schema_migrations, which `heroku pg:psql` answers; 'none'
-  # for a table with no rows) and config.
+  # for a table with no rows), schema_versions (every row of
+  # schema_migrations, when the spec names them; otherwise each version
+  # db/structure.sql lists up to schema_version, and schema_version
+  # itself), tables (what the database holds) and config.
   def production(**values) = @state.merge!(values)
 
   def git(*)
@@ -201,15 +206,30 @@ class DeployHarness
       'state/worker' => @state[:worker].to_s,
       'state/backups' => @state[:backups].to_s, 'state/release' => @state[:release].to_s,
       'state/releases' => @state[:releases].map { "#{it}\n" }.join,
-      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha]),
-      'state/schema_version' => @state[:schema_version]
-    )
+      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha])
+    ).merge(schema_files)
     @state[:config].each { |var, value| files["state/config/#{var}"] = value }
     files['state/config/HEROKU_SLUG_COMMIT'] = @state[:heroku_sha]
     files.each do |path, body|
       FileUtils.mkdir_p(File.dirname(File.join(fake_home, path)))
       File.write(File.join(fake_home, path), body)
     end
+  end
+
+  # What `heroku pg:psql` answers about the database's schema.
+  def schema_files
+    {
+      'state/schema_version' => schema_versions.empty? ? 'none' : schema_versions.max,
+      'state/schema_versions' => schema_versions.map { "#{it}\n" }.join,
+      'state/tables' => @state[:tables].map { "#{it}\n" }.join
+    }
+  end
+
+  def schema_versions
+    return @state[:schema_versions] if @state[:schema_versions]
+
+    newest = @state[:schema_version]
+    newest == 'none' ? [] : (RECORDED.select { it <= newest } | [newest])
   end
 
   def rule_files
@@ -258,10 +278,12 @@ class DeployHarness
     @commits = {}
     @commits[:first_migration] = commit(
       { 'db/migrate/20260101000000_first.rb' => '', 'app/a.rb' => '1',
-        'db/production_schema_version.txt' => "# The newest migration production has run.\n#\n#{SCHEMA_VERSION}\n" },
+        'db/production_schema_version.txt' => "# The newest migration production has run.\n#\n#{SCHEMA_VERSION}\n",
+        'db/structure.sql' => structure(RECORDED.first(1)) },
       'first'
     )
-    @commits[:second_migration] = commit({ 'db/migrate/20260201000000_second.rb' => '' }, 'second')
+    @commits[:second_migration] = commit({ 'db/migrate/20260201000000_second.rb' => '',
+                                           'db/structure.sql' => structure(RECORDED) }, 'second')
     @commits[:head] = commit({ 'app/a.rb' => '2' }, 'only app code')
     # The real repository ignores both (.gitignore), and bin/deploy writes
     # its log under tmp/ before it checks that the tree is clean.
@@ -271,6 +293,13 @@ class DeployHarness
     git('update-ref', 'refs/remotes/origin/main', @commits[:head])
     @state[:heroku_sha] = @commits[:second_migration]
     git('status', '--porcelain').empty? || raise('the throwaway repository should be clean')
+  end
+
+  # A db/structure.sql that lists these versions as run, newest first, the
+  # way pg_dump writes the list.
+  def structure(versions)
+    "CREATE TABLE meals ();\n\nINSERT INTO \"schema_migrations\" (version) VALUES\n" \
+      "#{versions.reverse.map { "('#{it}')" }.join(",\n")};\n\n"
   end
 
   def with_stdin(input, tty)

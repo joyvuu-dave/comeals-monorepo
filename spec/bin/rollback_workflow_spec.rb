@@ -201,6 +201,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       sandbox.rule('git', "cat-file -e #{file}")
       sandbox.rule('git', "show #{file}", out: "# The version of the newest migration.\n#\n20261023140000\n")
       sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate", out: ".keep\n")
+      sandbox.rule('git', "show #{good}:db/structure.sql", out: structure(%w[20261023140000 20170515164827]))
       sandbox.rule('heroku', "pg:backups:url b245 #{prod}", out: "#{url}\n")
       sandbox.rule('curl', '-sf *', out: 'the backup')
       sandbox.rule('pg_restore', '--data-only --schema=public --table=schema_migrations -f -',
@@ -212,6 +213,12 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       "--\n-- PostgreSQL database dump\n--\n\nSET statement_timeout = 0;\n\n" \
         "COPY \"public\".\"schema_migrations\" (\"version\") FROM stdin;\n#{rows}\\.\n\n\n" \
         "--\n-- PostgreSQL database dump complete\n--\n\n"
+    end
+
+    # The target commit's db/structure.sql: only its list of the versions
+    # it records as run.
+    def structure(versions)
+      "INSERT INTO \"schema_migrations\" (version) VALUES\n#{versions.map { "('#{it}')" }.join(",\n")};\n"
     end
 
     def check(env = {})
@@ -276,6 +283,24 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
         '(heroku pg:backups -a comeals-monorepo)'
       )
       expect(heroku_calls).to eq(["heroku pg:backups:url b245 #{prod}"])
+    end
+
+    # #248: the release phase compares every migration db/structure.sql
+    # lists up to the file's version, not only the newest. So a backup
+    # whose newest migration is new enough, but which is missing an older
+    # one, is refused here, before the restore.
+    it 'refuses a backup that is missing an older deleted migration, with the release phase\'s words' do
+      sandbox.rule('pg_restore', '*', out: dump("20261023140000\n"))
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include(
+        "Backup b245 does not fit the code of v612.\n",
+        'The database has not run 1 of the migrations that were deleted from db/migrate/ after production ran ' \
+        'them: 20170515164827.',
+        "Backup b245 was not restored, and nothing was changed.\n"
+      )
     end
 
     # A commit from before the file was added still holds every migration
@@ -345,6 +370,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     context 'when undoing a deploy that ran a migration' do
       before do
         sandbox.rule('git', "show #{file}", out: "20261016130000\n")
+        sandbox.rule('git', "show #{good}:db/structure.sql",
+                     out: structure(%w[20261023120000 20261021140000 20261016130000]))
         sandbox.rule('git', "ls-tree --name-only #{good}:db/migrate",
                      out: ".keep\n20261021140000_create_browser_counts.rb\n20261023120000_drop_a_column.rb\n")
       end

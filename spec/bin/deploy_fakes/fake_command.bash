@@ -14,7 +14,8 @@
 #                version), releases (the statuses of the release a push
 #                makes, one per line), pushed, heroku_sha (the main branch
 #                of Heroku's git repository), schema_version (the newest
-#                version in schema_migrations, or none)
+#                version in schema_migrations, or none), schema_versions
+#                (its rows, one a line), tables (the database's tables)
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
 #   smoke_env    the credentials the last bin/smoke call was given
@@ -197,12 +198,22 @@ heroku_default() {
       done
       printf ']\n'
       ;;
-    # heroku pg:psql -c SQL. For schema_migrations, the newest version
-    # (bin/deploy's check_database_not_behind). Otherwise the count of
+    # heroku pg:psql -c SQL. For pg_class, the tables, and for
+    # 'version=', the rows of schema_migrations, each list ended by
+    # end=ok (bin/deploy's check_database_schema). For schema_migrations,
+    # the newest version. Otherwise the count of
     # Solid Queue processes with a fresh heartbeat
     # (bin/lib/wait_until_stopped.sh), none by default.
     pg:psql)
-      if [[ $* == *schema_migrations* ]]; then
+      if [[ $* == *pg_class* ]]; then
+        printf ' line \n------\n'
+        while IFS= read -r table; do printf ' table=%s\n' "$table"; done <"$state/tables"
+        printf ' end=ok\n\n'
+      elif [[ $* == *"'version='"* ]]; then
+        printf ' line \n------\n'
+        while IFS= read -r version; do printf ' version=%s\n' "$version"; done <"$state/schema_versions"
+        printf ' end=ok\n\n'
+      elif [[ $* == *schema_migrations* ]]; then
         printf ' schema \n--------\n newest=%s\n(1 row)\n\n' "$(<"$state/schema_version")"
       else
         printf ' solid_queue \n-------------\n fresh=0\n(1 row)\n\n'

@@ -725,6 +725,35 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_nothing_changed_in_production
     end
 
+    # #248: the release phase compares every migration db/structure.sql
+    # lists up to the file's version, not only the newest. bin/deploy uses
+    # the same rule (bin/lib/schema-check), so it stops before the backup
+    # and maintenance instead of in the release phase.
+    it 'refuses before anything in production changes when the database is missing an older migration' do
+      deploy.production(schema_versions: ['20260201000000'])
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('The database has not run 1 of the migrations that were deleted from ' \
+                                       'db/migrate/ after production ran them: 20260101000000.', 'Nothing was changed.')
+      expect(deploy.calls_to('npm')).to eq([])
+      expect_nothing_changed_in_production
+    end
+
+    # db:migrate would load db/structure.sql over the tables, or do
+    # nothing; the release phase refuses it, so bin/deploy does too.
+    it 'refuses before anything in production changes when the database has tables but no versions' do
+      deploy.production(schema_versions: [])
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('The database has tables (meals, schema_migrations) but no record of the ' \
+                                       'migrations it has run', 'Nothing was changed.')
+      expect_nothing_changed_in_production
+    end
+
     # A brand new app, before its schema is loaded from db/structure.sql.
     # The release phase lets it through too.
     it 'goes on when the database has no schema_migrations table' do
