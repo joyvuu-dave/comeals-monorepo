@@ -14,6 +14,12 @@ name: Deploy
 
 on:
   workflow_dispatch:
+    inputs:
+      skip_smoke_before:
+        description: "Skip the smoke test of production before the deploy (only for a deploy that must go out while production fails it)"
+        type: boolean
+        default: false
+        required: false
 
 concurrency:
   group: deploy
@@ -111,11 +117,14 @@ jobs:
       # draft release, staging, production). If it fails, the run stops
       # with nothing changed. When it passes, the smoke logins are known to
       # work, and Watch production rolls back a release that breaks one.
-      # A secret that is not set ends this step with code 2.
+      # A secret that is not set ends this step with code 2. The
+      # skip_smoke_before input skips the smoke test and leaves
+      # login_worked unset, with a warning in the job summary.
       - name: Smoke production before the deploy
         if: steps.compare.outputs.proceed == 'true'
         id: smoke_before
         env:
+          SKIP_SMOKE_BEFORE: ${{ inputs.skip_smoke_before }}
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
           SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}

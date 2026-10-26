@@ -260,7 +260,16 @@ Before a deploy changes anything, `bin/deploy` and the Deploy workflow
 run the smoke test against production as it is. If it fails, the deploy
 stops with nothing changed: fix the credentials (or the site) first.
 When it passes, the logins are known to work, so a refused login after
-the deploy means the deploy broke it:
+the deploy means the deploy broke it.
+
+A deploy that must go out while production fails that smoke test (say,
+the deploy that fixes it) can skip it: `SMOKE_BEFORE=skip bin/deploy`,
+or the Deploy workflow's `skip_smoke_before` input. Then nobody knows
+whether the logins worked before, so a refused login after the deploy
+does not roll back and is not called a reason to. `bin/deploy` refuses
+any other value of `SMOKE_BEFORE` but empty or `skip`.
+
+After the deploy, a refused login whose login worked before:
 
 - `bin/deploy` fails and says to roll back. (On staging there is no
   smoke test before the deploy, so there it says to check the

@@ -49,7 +49,10 @@ set -euo pipefail
 # SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD from .env when the
 # environment does not set them (load_smoke_credentials). On production
 # it also runs the smoke test before it changes anything, and stops if
-# that fails (smoke_before_deploy).
+# that fails (smoke_before_deploy). SMOKE_BEFORE=skip skips that, for a
+# deploy that must go out while production fails the smoke test (say,
+# the deploy that fixes it). Any other value but empty or skip is
+# refused before anything runs.
 # ==============================================================================
 
 MAINTENANCE_ENABLED=false
@@ -126,6 +129,14 @@ case "$APP" in
     exit 1
     ;;
 esac
+
+# Only empty and "skip". Anything else ("Skip", "yes", "skip ") is a
+# typo, and a typo must not decide whether the check runs.
+SMOKE_BEFORE="${SMOKE_BEFORE:-}"
+if [ -n "$SMOKE_BEFORE" ] && [ "$SMOKE_BEFORE" != skip ]; then
+  fail "SMOKE_BEFORE is \"$SMOKE_BEFORE\". It must be empty or skip. Nothing was changed."
+  exit 1
+fi
 
 # --- The deploy log -----------------------------------------------------------
 
@@ -986,6 +997,10 @@ check_logs() {
 smoke_before_deploy() {
   [ "$APP" = comeals-monorepo ] || return 0
   step "Smoke test before the deploy"
+  if [ "$SMOKE_BEFORE" = skip ]; then
+    warn "The smoke test before the deploy was skipped on purpose (SMOKE_BEFORE=skip). Nobody knows whether the smoke logins worked before the deploy, so a refused login after it will not say to roll back."
+    return 0
+  fi
   local status=0
   bin/smoke "$APP_URL" || status=$?
   case $status in

@@ -9,15 +9,35 @@
 # would also be refused after the deploy, and nobody could tell whether
 # the deploy broke it.
 #
-# Reads PROD_URL and the four SMOKE_* secrets. Run from the repository
-# root.
+# The workflow's skip_smoke_before input (SKIP_SMOKE_BEFORE=true) skips
+# the smoke test, for a deploy that must go out while production fails
+# it (say, the deploy that fixes it). Then nobody knows whether the
+# logins worked before, so login_worked stays unset, and the warning
+# goes to the log and the job summary.
+#
+# Reads PROD_URL, SKIP_SMOKE_BEFORE, GITHUB_STEP_SUMMARY and the four
+# SMOKE_* secrets. Run from the repository root.
 set -euo pipefail
 . "$(dirname "$0")/../smoke_secrets.sh"
+
+# The input is a boolean, so GitHub gives true or false. Anything else
+# means the step was changed by mistake.
+if [ "${SKIP_SMOKE_BEFORE:-}" != true ] && [ "${SKIP_SMOKE_BEFORE:-}" != false ]; then
+  echo "SKIP_SMOKE_BEFORE is \"${SKIP_SMOKE_BEFORE:-}\". It must be true or false. Nothing was changed."
+  exit 1
+fi
 
 missing=$(missing_smoke_secrets)
 if [ -n "$missing" ]; then
   say_smoke_secrets_missing "$missing"
   exit 2
+fi
+
+if [ "$SKIP_SMOKE_BEFORE" = true ]; then
+  warning="The smoke test before the deploy was skipped on purpose (skip_smoke_before). Nobody knows whether the smoke logins worked before the deploy, so a refused login after it will not roll back by itself."
+  echo "$warning"
+  printf '> [!WARNING]\n> %s\n' "$warning" >>"$GITHUB_STEP_SUMMARY"
+  exit 0
 fi
 
 status=0
