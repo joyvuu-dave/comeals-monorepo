@@ -283,6 +283,26 @@ describe("pusherClient", () => {
       expect(beforeReload).not.toHaveBeenCalled();
       expect(fake.location.reload).not.toHaveBeenCalled();
     });
+    // A browser that blocks site data cannot remember a reload, so a
+    // reload could repeat with no end. The page never reloads; the
+    // failure goes to Bugsnag once and the page runs with no live
+    // updates.
+    it("reports to Bugsnag, with no reload, when the browser refuses sessionStorage", async () => {
+      vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+      const { startPusher } = await freshClient({ key: "k" });
+      const beforeReload = vi.fn();
+
+      startPusher(beforeReload);
+
+      await vitestWaitFor(() => expect(notifyError).toHaveBeenCalledTimes(1));
+      expect(notifyError.mock.calls[0][0]).toBeInstanceOf(Error);
+      expect(notifyError.mock.calls[0][0]).not.toBeInstanceOf(DOMException);
+      expect(beforeReload).not.toHaveBeenCalled();
+      expect(fake.location.reload).not.toHaveBeenCalled();
+      vi.restoreAllMocks();
+    });
   });
 
   // Safari has no requestIdleCallback; there it loads on the next turn.

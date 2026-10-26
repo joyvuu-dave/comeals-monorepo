@@ -179,4 +179,88 @@ describe("lazyRetry", () => {
       );
     });
   });
+  // A browser set to block site data throws on any use of sessionStorage
+  // (#162), and one that is out of space throws on a write. Then the
+  // page cannot remember that it reloaded, so a reload could not tell the
+  // first failure from the second: a file that stays missing would
+  // reload the page over and over. So with storage it cannot use, the
+  // page never reloads. It takes the second-failure path at once: the
+  // chunk's own error goes on (to the error page, or for Pusher to
+  // Bugsnag), and the storage error is never thrown.
+  describe("when the browser refuses sessionStorage", () => {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    function refuseStorage() {
+      vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+    }
+
+    it("fails with the chunk's error, with no reload", async () => {
+      refuseStorage();
+      const beforeReload = vi.fn();
+      const failure = new Error("no chunk");
+
+      await expect(
+        lazyRetry(() => Promise.reject(failure), beforeReload)(),
+      ).rejects.toBe(failure);
+
+      expect(beforeReload).not.toHaveBeenCalled();
+      expect(fake.location.reload).not.toHaveBeenCalled();
+    });
+
+    // The loop the rule is there to stop: every load of the page fails
+    // the same way, and none of them reloads.
+    it("never reloads when the chunk keeps failing", async () => {
+      refuseStorage();
+      const beforeReload = vi.fn();
+      const failure = new Error("no chunk");
+
+      for (let load = 0; load < 3; load += 1) {
+        await expect(
+          lazyRetry(() => Promise.reject(failure), beforeReload)(),
+        ).rejects.toBe(failure);
+        await flush();
+      }
+
+      expect(beforeReload).not.toHaveBeenCalled();
+      expect(fake.location.reload).not.toHaveBeenCalled();
+    });
+
+    it("fails with the chunk's error, with no reload, when the flag cannot be written", async () => {
+      vi.spyOn(Storage.prototype, "setItem").mockImplementation(() => {
+        throw new DOMException(
+          "The quota has been exceeded.",
+          "QuotaExceededError",
+        );
+      });
+      const beforeReload = vi.fn();
+      const failure = new Error("no chunk");
+
+      await expect(
+        lazyRetry(() => Promise.reject(failure), beforeReload)(),
+      ).rejects.toBe(failure);
+
+      expect(beforeReload).not.toHaveBeenCalled();
+      expect(fake.location.reload).not.toHaveBeenCalled();
+    });
+
+    // The second failure removes the flag. If the removal throws, the
+    // chunk's error still goes on.
+    it("fails with the chunk's error when the flag cannot be removed", async () => {
+      sessionStorage.setItem("chunk_retry", "build-2");
+      vi.spyOn(Storage.prototype, "removeItem").mockImplementation(() => {
+        throw new DOMException("The operation is insecure.", "SecurityError");
+      });
+      const failure = new Error("no chunk");
+
+      await expect(
+        lazyRetry(() => Promise.reject(failure), vi.fn())(),
+      ).rejects.toBe(failure);
+
+      expect(fake.location.reload).not.toHaveBeenCalled();
+    });
+  });
 });
