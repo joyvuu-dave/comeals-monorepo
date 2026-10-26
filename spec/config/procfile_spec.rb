@@ -70,6 +70,19 @@ RSpec.describe 'Procfile' do
       expect(throwaway_tables).to eq(['schema_migrations'])
     end
 
+    # Its newest migration is the one the file names, but it has not run
+    # the ones before it (#248, item 3).
+    it 'refuses, and migrates nothing, when the database is missing an older deleted migration' do
+      on_database(throwaway_database, 'CREATE TABLE schema_migrations (version varchar PRIMARY KEY)',
+                  "INSERT INTO schema_migrations VALUES ('#{PRODUCTION_SCHEMA_VERSION}')")
+
+      output, status = run_release
+
+      expect(status).not_to be_success, output
+      expect(output).to include('The database has not run')
+      expect(throwaway_tables).to eq(['schema_migrations'])
+    end
+
     # A brand new app's database. db:migrate makes the two tables Rails
     # keeps, as it did before the check. The app's own tables come from
     # db/structure.sql.

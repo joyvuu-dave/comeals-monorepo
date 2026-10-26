@@ -126,6 +126,17 @@ RSpec.describe SquashedMigrationsCheck do
       )
     end
 
+    # A database that has run the newest deleted migration but not an
+    # older one: a backup restored and then migrated by code that skipped
+    # one, or a row deleted by hand. Its newest version is not behind, but
+    # the tables of the missing migration are not there (#248, item 3).
+    it 'raises when the database is missing a deleted migration older than its newest' do
+      oldest = connection.select_value('SELECT min(version::bigint) FROM schema_migrations')
+      connection.execute("DELETE FROM schema_migrations WHERE version::bigint = #{oldest}")
+
+      expect { described_class.verify! }.to raise_error(described_class::DatabaseBehind, /#{oldest}/)
+    end
+
     it 'passes on a database with no schema_migrations table, and returns nil' do
       connection.execute('ALTER TABLE schema_migrations RENAME TO schema_migrations_hidden')
 
