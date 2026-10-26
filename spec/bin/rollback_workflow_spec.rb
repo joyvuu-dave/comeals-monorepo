@@ -1182,7 +1182,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     it 'rolls back even when Node, npm ci or the browser check fails' do
       node, npm, browser, ready = %w[node npm browser smoke_ready].map { |id| steps.find { it['id'] == id } }
 
-      expect([node, npm, browser].pluck('continue-on-error')).to all(be(true))
+      expect([node, npm, browser, ready].pluck('continue-on-error')).to all(be(true))
       expect([node, npm, browser].pluck('timeout-minutes')).to all(be_between(1, 5))
       expect(node).not_to have_key('if')
       expect(npm['if']).to eq("steps.node.outcome == 'success'")
@@ -1195,6 +1195,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
 
     # A run that could not smoke the site must not look like one that did.
+    # That includes a run where the step that says whether it can run
+    # failed itself: then it set no reason, so the step gives its own.
     it 'fails the run at the end, saying the site was not checked, when the smoke test could not run' do
       names = steps.pluck('name')
       not_checked = steps.find { it['name'] == 'Say that the site was not checked' }
@@ -1202,7 +1204,10 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(names.last).to eq(not_checked['name'])
       expect(not_checked['if'])
         .to eq("${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready != 'true' }}")
-      expect(not_checked['env']).to eq('PROBLEM' => '${{ steps.smoke_ready.outputs.problem }}')
+      expect(not_checked['env']).to eq(
+        'PROBLEM' => "${{ steps.smoke_ready.outcome == 'success' && steps.smoke_ready.outputs.problem || " \
+                     "'the check for whether the smoke test can run failed' }}"
+      )
       expect(not_checked['run']).to include('exit 1')
     end
 

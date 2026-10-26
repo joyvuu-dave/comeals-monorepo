@@ -119,6 +119,7 @@ jobs:
         run: node tests/smoke/browser.js
       - name: Say whether the smoke test can run
         id: smoke_ready
+        continue-on-error: true
         env:
           NODE_OUTCOME: ${{ steps.node.outcome }}
           NPM_OUTCOME: ${{ steps.npm.outcome }}
@@ -277,11 +278,13 @@ jobs:
         run: bin/smoke "${{ steps.find.outputs.url }}"
 
       # A rollback whose site could not be smoked must not look like one
-      # that was. The job summary already says why at the top.
+      # that was. The job summary already says why at the top, unless the
+      # step that says whether the smoke test can run failed itself: then
+      # it set no reason, and this step gives its own.
       - name: Say that the site was not checked
         if: ${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready != 'true' }}
         env:
-          PROBLEM: ${{ steps.smoke_ready.outputs.problem }}
+          PROBLEM: ${{ steps.smoke_ready.outcome == 'success' && steps.smoke_ready.outputs.problem || 'the check for whether the smoke test can run failed' }}
         run: |
           echo "The rollback is done, but the site was not checked: the smoke test cannot run ($PROBLEM). Check the site by hand." >&2
           exit 1
