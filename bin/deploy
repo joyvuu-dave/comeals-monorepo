@@ -543,13 +543,16 @@ detect_pending_migrations() {
   # Every file added or changed, never a deleted one: after a deploy the
   # migrations production ran are deleted, and that changes nothing in
   # the database. --no-renames, because git would call a deleted migration
-  # and a new one with nearly the same text a rename.
-  local migration_diff
-  if ! migration_diff=$(git diff --name-only --no-renames --diff-filter=d "$HEROKU_SHA" HEAD -- db/migrate/ 2>/dev/null); then
+  # and a new one with nearly the same text a rename. Only a file named
+  # <version>_<name>.rb counts, because db:migrate reads only those: an
+  # empty db/migrate/ holds a .keep file so git keeps the folder.
+  local changed_files migration_diff
+  if ! changed_files=$(git diff --name-only --no-renames --diff-filter=d "$HEROKU_SHA" HEAD -- db/migrate/ 2>/dev/null); then
     warn "git diff failed — assuming migrations needed"
     NEEDS_MAINTENANCE=true
     return
   fi
+  migration_diff=$(printf '%s\n' "$changed_files" | grep -E '^db/migrate/[0-9]+_[^/]+\.rb$' || true)
 
   if [ -n "$migration_diff" ]; then
     NEEDS_MAINTENANCE=true

@@ -160,6 +160,22 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_production(maintenance: false, web: 1, pushed: true)
     end
 
+    # Deleting every migration leaves db/migrate/ empty, and git keeps an
+    # empty folder only with a file in it. That file is not a migration:
+    # db:migrate reads only <version>_<name>.rb. On 2026-10-26 production
+    # showed the maintenance page for 4 minutes because of it.
+    it 'is a push deploy when the only file added to db/migrate is not a migration' do
+      make_head('db/migrate/20260101000000_first.rb' => nil, 'db/migrate/20260201000000_second.rb' => nil,
+                'db/migrate/.keep' => '')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('No new or changed migration — push deploy', 'PUSH deploy (no migrations)')
+      expect(deploy.calls_to('heroku').grep(/maintenance/)).to eq([])
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
     # git calls a deleted file and an added one with nearly the same text
     # a rename. The added one is a new migration all the same.
     it 'is a maintenance deploy when the same push adds a migration with nearly the text of a deleted one' do
