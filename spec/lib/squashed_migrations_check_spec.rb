@@ -157,33 +157,34 @@ RSpec.describe SquashedMigrationsCheck do
     end
   end
 
-  describe '.newest_version' do
+  describe '.database_versions' do
     let(:connection) { ActiveRecord::Base.connection }
 
-    it 'is the newest version in schema_migrations' do
-      expect(described_class.newest_version).to eq(PRODUCTION_SCHEMA_VERSION)
+    it 'is every version in schema_migrations, as numbers' do
+      expect(described_class.database_versions).to match_array(
+        described_class.recorded_versions(Rails.root.join('db/structure.sql').read)
+      )
     end
 
-    # Compared as numbers, not as text, so a short version cannot sort
-    # after a long one.
-    it 'compares the versions as numbers' do
+    # Numbers, not text, so a short version cannot sort after a long one.
+    it 'reads the versions as numbers' do
       connection.execute('DELETE FROM schema_migrations')
       connection.execute("INSERT INTO schema_migrations (version) VALUES ('9'), ('20261016130000')")
 
-      expect(described_class.newest_version).to eq(20_261_016_130_000)
+      expect(described_class.database_versions).to contain_exactly(9, 20_261_016_130_000)
     end
 
-    it 'is nil when schema_migrations has no rows' do
+    it 'is empty when schema_migrations has no rows' do
       connection.execute('DELETE FROM schema_migrations')
 
-      expect(described_class.newest_version).to be_nil
+      expect(described_class.database_versions).to eq([])
     end
 
     # Postgres rolls back DDL with the example's transaction.
-    it 'is nil when there is no schema_migrations table' do
+    it 'is empty when there is no schema_migrations table' do
       connection.execute('ALTER TABLE schema_migrations RENAME TO schema_migrations_hidden')
 
-      expect(described_class.newest_version).to be_nil
+      expect(described_class.database_versions).to eq([])
     end
   end
 

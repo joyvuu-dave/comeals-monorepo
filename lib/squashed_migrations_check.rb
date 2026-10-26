@@ -72,10 +72,6 @@ module SquashedMigrationsCheck
     schema_migration.integer_versions
   end
 
-  # The newest version in schema_migrations, or nil when it has none.
-  sig { returns(T.nilable(Integer)) }
-  def self.newest_version = database_versions.max
-
   # A sentence that says what is wrong and what to do, or nil when the
   # database has run every deleted migration, or is new. `database` holds
   # the versions in schema_migrations, `recorded` the versions in

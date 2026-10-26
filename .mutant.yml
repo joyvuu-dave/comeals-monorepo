@@ -116,6 +116,7 @@ matcher:
     - DatabasePoolCheck*
     - SolidQueueCheck*
     - SquashedMigrationsCheck*
+    - SchemaBootCheck*
     - BugsnagErrorSubscriber*
     # models and concerns
     - ApplicationRecord*
