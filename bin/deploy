@@ -47,11 +47,17 @@ set -euo pipefail
 # The smoke test signs in when it has credentials (bin/smoke). On
 # production, bin/deploy reads SMOKE_EMAIL, SMOKE_PASSWORD,
 # SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD from .env when the
-# environment does not set them (load_smoke_credentials).
+# environment does not set them (load_smoke_credentials). On production
+# it also runs the smoke test before it changes anything, and stops if
+# that fails (smoke_before_deploy).
 # ==============================================================================
 
 MAINTENANCE_ENABLED=false
 DEPLOY_TIMESTAMP=""
+# true once the smoke test passed on production before the deploy: its
+# logins worked then, so a refused one afterwards means the deploy broke
+# it (smoke_before_deploy, run_smoke).
+SMOKE_WORKED_BEFORE=false
 NEEDS_MAINTENANCE=false
 HEROKU_SHA=""
 # The newest release before the push, and the release the push made.
@@ -972,16 +978,44 @@ check_logs() {
   fi
 }
 
+# On production, smoke the site as it is before anything changes. If that
+# fails, nothing has changed yet and the deploy stops: a login refused
+# now would be refused after the deploy too, and nobody could tell
+# whether the deploy broke it. Staging is parked at 0 dynos between
+# rehearsals, so it has no site to smoke yet.
+smoke_before_deploy() {
+  [ "$APP" = comeals-monorepo ] || return 0
+  step "Smoke test before the deploy"
+  local status=0
+  bin/smoke "$APP_URL" || status=$?
+  case $status in
+    0)
+      SMOKE_WORKED_BEFORE=true
+      ok "Production passes the smoke test before the deploy"
+      ;;
+    2)
+      fail "Production refused a smoke login before the deploy. Nothing was changed. Check the SMOKE_* credentials (in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then deploy again."
+      exit 1
+      ;;
+    *)
+      fail "Production fails the smoke test before the deploy. Nothing was changed. Find out why first: bin/smoke $APP_URL"
+      exit 1
+      ;;
+  esac
+}
+
 # Drive the live site with a real browser (bin/smoke): login page,
 # and with SMOKE_EMAIL/SMOKE_PASSWORD set, login + calendar on a DST
 # month + meal page; with SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_PASSWORD set, the
 # admin dashboard and the reconciliations page. curl proves the server
 # answers; this proves the app runs. A failure here means the deploy is
-# bad — roll back. A refused login (bin/smoke ends with 2) means the
-# smoke credentials are wrong: the deploy fails, since the checks behind
-# that login did not run, but it says to check the credentials, not to
-# roll back. On production a missing credential is named, because the
-# checks it would run are then skipped.
+# bad — roll back. A refused login (bin/smoke ends with 2) is bad too
+# when the same login worked before the deploy (SMOKE_WORKED_BEFORE).
+# Otherwise it may mean only that the smoke credentials are wrong: the
+# deploy fails, since the checks behind that login did not run, but it
+# says to check the credentials, not to roll back. On production a
+# missing credential is named, because the checks it would run are then
+# skipped.
 run_smoke() {
   step "Browser smoke test"
 
@@ -1000,6 +1034,10 @@ run_smoke() {
   case $status in
     0) ok "Smoke test passed" ;;
     2)
+      if [ "$SMOKE_WORKED_BEFORE" = true ]; then
+        fail "SMOKE TEST FAILED — the site refused a smoke login that worked before this deploy, so the deploy broke it. Roll back."
+        exit 1
+      fi
       fail "The site refused a smoke login. Every smoke check that could run passed, so do not roll back for this. Check the SMOKE_* credentials (in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then run: bin/smoke $APP_URL"
       exit 1
       ;;
@@ -1107,6 +1145,7 @@ main() {
   check_database_schema
 
   preflight_quality
+  smoke_before_deploy
 
   # --- Confirmation ---
   echo

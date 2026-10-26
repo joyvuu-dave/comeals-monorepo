@@ -5,13 +5,20 @@
 # the logs for three minutes. On a failure it rolls back only the code,
 # and only when the release ran no migration.
 #
-# A refused smoke login does not roll back: the run goes on with the
-# other checks and fails at the end.
+# A refused smoke login rolls back only when the smoke-before step
+# proved that login worked before the promote (LOGIN_WORKED_BEFORE=true).
+# Otherwise the run goes on with the other checks and fails at the end.
+# A missing smoke secret does not stop the watch either: every check
+# runs, and the step then ends with code 2.
 #
 # Reads CANDIDATE, PREVIOUS and STARTED (from the promote step),
-# PROD_APP and PROD_URL. Run from the repository root.
+# LOGIN_WORKED_BEFORE (from the smoke-before step), PROD_APP, PROD_URL
+# and the four SMOKE_* secrets. Run from the repository root.
 set -euo pipefail
 . "$(dirname "$0")/../json.sh"
+. "$(dirname "$0")/../smoke_secrets.sh"
+
+missing_secrets=$(missing_smoke_secrets)
 
 # The log lines logged at or after $1 (UTC, as 2026-10-19T12:00:00).
 # Heroku log lines start with a UTC timestamp; compare as strings.
@@ -83,14 +90,19 @@ if ! heroku ps:scale worker=1 -a "$PROD_APP"; then
   exit 1
 fi
 # bin/smoke ends with 2 when production answered and refused a smoke
-# login: the secrets are out of date, and every smoke check that could
-# run passed. Rolling back would undo a good release, so it does not. The
-# other checks still run, and still roll back a broken release, and the
-# run fails at the end, so the release note stays a draft.
+# login. If that login worked before the promote, the release broke it,
+# and it rolls back. If not, the secrets may just be out of date, and
+# rolling back could undo a good release: the other checks still run,
+# and still roll back a broken release, and the run fails at the end, so
+# the release note stays a draft.
 smoke_status=0
 bin/smoke "$PROD_URL" || smoke_status=$?
-if [ "$smoke_status" -eq 2 ]; then
-  echo "Production refused a smoke login. Every smoke check that could run passed, so this is not a reason to roll back. The other checks go on."
+if [ "$smoke_status" -eq 2 ] && [ "${LOGIN_WORKED_BEFORE:-}" = true ]; then
+  echo "Production refused a smoke login that worked before the deploy, so the release broke it. Rolling back."
+  roll_back
+  exit 1
+elif [ "$smoke_status" -eq 2 ]; then
+  echo "Production refused a smoke login. It is not known to have worked before the deploy, so this is not a reason to roll back. The other checks go on."
 elif [ "$smoke_status" -ne 0 ]; then
   echo "Smoke failed on production. Rolling back."
   roll_back
@@ -149,4 +161,8 @@ echo "No worrying lines in the production logs."
 if [ "$smoke_status" -eq 2 ]; then
   echo "Production passed every other check, but the smoke test could not sign in, so this run is not a pass and the release stays a draft. Check the SMOKE_* secrets of the GitHub environment production, then run: bin/smoke $PROD_URL"
   exit 1
+fi
+if [ -n "$missing_secrets" ]; then
+  say_smoke_secrets_missing "$missing_secrets"
+  exit 2
 fi

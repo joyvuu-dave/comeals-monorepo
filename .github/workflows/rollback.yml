@@ -271,7 +271,8 @@ jobs:
       # this step is skipped and the next one fails the run. It signs in with the owner's accounts on production only; on
       # staging the credentials are empty, and it checks the public pages.
       # bin/lib/rollback/smoke says when a login was refused (stale
-      # secrets) rather than the old code broken.
+      # secrets) rather than the old code broken, and on production ends
+      # with code 2 when a secret is not set.
       - name: Smoke the rolled-back site
         if: ${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready == 'true' }}
         env:

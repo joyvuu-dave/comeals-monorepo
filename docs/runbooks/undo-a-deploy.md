@@ -254,16 +254,29 @@ login, runs the rest, and ends with code 2 and "SMOKE LOGIN REFUSED",
 with the names to check (the top of `bin/smoke` lists every exit code).
 It is told apart from a broken site by what the site says: the resident
 login's "Incorrect password" or "No resident with email", or the admin
-login page's "Invalid email or password.". A refused login is not a pass,
-but nothing rolls back for it:
+login page's "Invalid email or password.". A refused login is not a pass.
 
-- `bin/deploy` fails and says to check the credentials, not to roll back.
-- The Deploy workflow's Watch production step goes on with the Solid
-  Queue checks and the log watch, which still roll back a broken
-  release, then fails. The release note stays a draft.
+Before a deploy changes anything, `bin/deploy` and the Deploy workflow
+run the smoke test against production as it is. If it fails, the deploy
+stops with nothing changed: fix the credentials (or the site) first.
+When it passes, the logins are known to work, so a refused login after
+the deploy means the deploy broke it:
+
+- `bin/deploy` fails and says to roll back. (On staging there is no
+  smoke test before the deploy, so there it says to check the
+  credentials.)
+- The Deploy workflow's Watch production step rolls back. If the login
+  was not proven to work before, it does not roll back: it goes on with
+  the Solid Queue checks and the log watch, which still roll back a
+  broken release, then fails, and the release note stays a draft.
 - The Rollback workflow's smoke step fails and says the rollback is done.
 - `bin/staging-rehearsal` makes its own smoke resident, so there a
   refused login means logins or the seed are broken, and it stops.
+
+In the Deploy and Rollback workflows (the Rollback workflow on production
+only), a SMOKE_* secret that is not set ends the step with code 2 and
+names the missing secret. Before the deploy that stops the run. After the
+promote, and after a rollback, every check still runs first.
 
 If the credentials are right and the login is still refused, sign in by
 hand. If that fails too, the site is broken.

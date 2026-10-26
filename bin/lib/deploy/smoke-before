@@ -1,0 +1,36 @@
+#!/usr/bin/env bash
+# The Deploy workflow's "Smoke production before the deploy" step
+# (.github/workflows/deploy.yml). It runs before any step that changes
+# something, and smokes production as it is. When that passes, the smoke
+# logins are known to work, and it writes login_worked=true to the step's
+# outputs: Watch production then rolls back a release that makes the
+# site refuse one of them. When it fails, the run stops and nothing
+# changed: a login refused now (exit 2) or a missing secret (exit 2)
+# would also be refused after the deploy, and nobody could tell whether
+# the deploy broke it.
+#
+# Reads PROD_URL and the four SMOKE_* secrets. Run from the repository
+# root.
+set -euo pipefail
+. "$(dirname "$0")/../smoke_secrets.sh"
+
+missing=$(missing_smoke_secrets)
+if [ -n "$missing" ]; then
+  say_smoke_secrets_missing "$missing"
+  exit 2
+fi
+
+status=0
+bin/smoke "$PROD_URL" || status=$?
+if [ "$status" -eq 0 ]; then
+  echo "login_worked=true" >>"$GITHUB_OUTPUT"
+  echo "Production passes the smoke test before the deploy, its logins included."
+elif [ "$status" -eq 2 ]; then
+  echo "Production refused a smoke login before the deploy. Nothing was changed. Check the SMOKE_* secrets of"
+  echo "the GitHub environment production, then run the workflow again."
+  exit 2
+else
+  echo "Production fails the smoke test before the deploy. Nothing was changed."
+  echo "Find out why first: bin/smoke $PROD_URL"
+  exit 1
+fi

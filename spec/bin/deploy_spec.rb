@@ -1444,7 +1444,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.status).to eq(1)
       expect(result.output).to include('Got HTTP 000, retrying in 5s... (11/12)',
                                        'https://api.comeals.com returned HTTP 000 after 12 attempts')
-      expect(result.output).not_to include('(12/12)', recovery_banner, 'Smoke test')
+      expect(result.output).not_to include('(12/12)', recovery_banner, 'Browser smoke test')
+      expect(deploy.calls_to('smoke')).to eq(['smoke https://comeals.com'])
       expect(deploy.calls_to('curl').grep(/api\.comeals/).size).to eq(12)
       expect_production(maintenance: false, web: 1, pushed: true)
     end

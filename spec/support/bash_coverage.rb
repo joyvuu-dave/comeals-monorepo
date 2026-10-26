@@ -42,6 +42,8 @@ class BashCoverage
     'bin/lib/deploy/green-gate' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/hold-check' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/promote' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/deploy/smoke-before' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/smoke_secrets.sh' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/watch-production' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/write-release-note' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/playwright-install' => 'spec/bin/playwright_install_spec.rb',

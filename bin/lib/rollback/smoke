@@ -6,11 +6,18 @@
 # old code is broken, and the rollback is already done. It still fails
 # the step: the checks behind that login did not run.
 #
-# Usage: bin/lib/rollback/smoke <site address>. Run from the repository
-# root.
+# On production (APP) a SMOKE_* secret that is not set ends the step
+# with code 2. The smoke test still runs first, since it is the only
+# check that the old code serves. Staging gets no secrets on purpose.
+#
+# Usage: bin/lib/rollback/smoke <site address>. Reads APP and the four
+# SMOKE_* secrets. Run from the repository root.
 set -euo pipefail
+. "$(dirname "$0")/../smoke_secrets.sh"
 
 url="$1"
+missing=""
+[ "$APP" != comeals-monorepo ] || missing=$(missing_smoke_secrets)
 status=0
 bin/smoke "$url" || status=$?
 if [ "$status" -eq 2 ]; then
@@ -22,4 +29,8 @@ elif [ "$status" -ne 0 ]; then
   echo "The rolled-back site failed the smoke test: the old code does not serve as it should."
   echo "Follow docs/runbooks/undo-a-deploy.md."
   exit 1
+fi
+if [ -n "$missing" ]; then
+  say_smoke_secrets_missing "$missing"
+  exit 2
 fi

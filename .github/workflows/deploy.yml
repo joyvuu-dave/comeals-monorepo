@@ -107,6 +107,21 @@ jobs:
         if: steps.compare.outputs.proceed == 'true'
         run: node tests/smoke/browser.js
 
+      # Smoke production as it is, before any step changes something (the
+      # draft release, staging, production). If it fails, the run stops
+      # with nothing changed. When it passes, the smoke logins are known to
+      # work, and Watch production rolls back a release that breaks one.
+      # A secret that is not set ends this step with code 2.
+      - name: Smoke production before the deploy
+        if: steps.compare.outputs.proceed == 'true'
+        id: smoke_before
+        env:
+          SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
+          SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
+          SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
+          SMOKE_ADMIN_PASSWORD: ${{ secrets.SMOKE_ADMIN_PASSWORD }}
+        run: bin/lib/deploy/smoke-before
+
       # The release note: commit messages between the live sha and the
       # candidate, turned into plain language by Claude. If the call
       # fails, fall back to the raw commit list — the note is
@@ -158,14 +173,16 @@ jobs:
           CANDIDATE: ${{ steps.compare.outputs.candidate }}
         run: bin/lib/deploy/promote
 
-      # The smoke credentials are given to this step only, so the staging
-      # rehearsal above never signs in with the owner's accounts.
+      # The smoke credentials are given to this step and the smoke before
+      # the deploy only, so the staging rehearsal above never signs in with
+      # the owner's accounts.
       - name: Watch production
         if: steps.compare.outputs.proceed == 'true'
         env:
           CANDIDATE: ${{ steps.compare.outputs.candidate }}
           PREVIOUS: ${{ steps.promote.outputs.previous }}
           STARTED: ${{ steps.promote.outputs.started }}
+          LOGIN_WORKED_BEFORE: ${{ steps.smoke_before.outputs.login_worked }}
           SMOKE_EMAIL: ${{ secrets.SMOKE_EMAIL }}
           SMOKE_PASSWORD: ${{ secrets.SMOKE_PASSWORD }}
           SMOKE_ADMIN_EMAIL: ${{ secrets.SMOKE_ADMIN_EMAIL }}
