@@ -78,4 +78,18 @@ RSpec.describe SchemaBootCheck do
     expect { described_class.verify!('The web process') }
       .to raise_error(described_class::DatabaseBehind, /\AThe web process will not start. The database has tables/)
   end
+
+  # A database with no tables, which nothing has built yet. Web would
+  # start and then fail on every request.
+  it 'refuses a database with no tables, and says how to build it' do
+    allow(SquashedMigrationsCheck).to receive(:database_versions).and_return([])
+    allow(connection).to receive(:tables).and_return([])
+
+    expect { described_class.verify!('The web process') }.to raise_error(
+      described_class::DatabaseBehind,
+      'The web process will not start. The database has no tables. On a laptop, run bin/rails db:prepare. On ' \
+      'Heroku, deploy: the release phase builds the tables from db/structure.sql. heroku run (a console or a ' \
+      'rake task) still starts, so the database can be looked at and repaired there. (lib/schema_boot_check.rb)'
+    )
+  end
 end

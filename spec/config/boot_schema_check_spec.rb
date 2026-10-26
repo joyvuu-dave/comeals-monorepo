@@ -73,13 +73,23 @@ RSpec.describe 'the schema check at boot' do
     end
   end
 
-  # A brand new app's database, before its first release. The release
-  # check lets it through too.
+  # A database nothing has built yet. The release check lets it through,
+  # because db:migrate builds it. Web and the worker do not: they would
+  # start and then fail on every request and every job.
   describe 'on a database with no tables' do
-    it 'loads config.ru' do
+    it 'refuses to load config.ru, and says how to build the database' do
       output, status = load_config_ru
 
-      expect(status).to be_success, output
+      expect(status).not_to be_success
+      expect(output).to include('The web process will not start. The database has no tables. On a laptop, run ' \
+                                'bin/rails db:prepare.')
+    end
+
+    it 'refuses to start the jobs process' do
+      output, status = run_jobs
+
+      expect(status.exited?).to be(true), "bin/jobs was still running after 60 seconds:\n#{output}"
+      expect(output).to include('The jobs process will not start. The database has no tables.')
     end
   end
 
