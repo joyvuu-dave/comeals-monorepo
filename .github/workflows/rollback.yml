@@ -64,17 +64,16 @@ env:
 
 jobs:
   rollback:
-    # ubuntu-24.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
-    runs-on: ubuntu-24.04
+    # ubuntu-26.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-26.04
     # The restore and the heroku rollback run in the first minutes (the
     # database is about 33 MB); everything after them is bookkeeping. If
     # a later step hangs, fail in 35 minutes — production is already
     # fixed by then — instead of holding the shared "deploy" concurrency
     # group for 6 hours. It was 15 until steps with their own time limits
     # were added before the restore: the smoke test's setup (#251) and,
-    # when a backup is restored, the PostgreSQL client and Ruby (#248).
-    # On a slow day those use up to 17 minutes before the rollback
-    # starts. 35 keeps the old 15 for the restore, the rollback and what
+    # when a backup is restored, Ruby (#248). On a slow day those use up
+    # to 12 minutes before the rollback starts. 35 keeps the old 15 for the restore, the rollback and what
     # follows, plus a few minutes for the short steps with no limit.
     timeout-minutes: 35
     environment: production
@@ -140,19 +139,18 @@ jobs:
         run: bin/lib/rollback/check-migrations
 
       # Reading the backup's migrations needs a pg_restore at least as new
-      # as the PostgreSQL that made it (18 on Heroku). Ubuntu 24.04 has no
-      # 18 client, so this installs it the way ci.yml's ruby-test job
-      # does. The time limit keeps a slow apt mirror (#240) from using up
-      # the job's time; when it fails, nothing was changed yet.
-      - name: Install the PostgreSQL 18 client, to read the backup
+      # as the PostgreSQL that made it (18 on Heroku). The ubuntu-26.04
+      # image ships PostgreSQL 18. This fails before anything is changed
+      # if a later image ships an older one.
+      - name: Check that pg_restore is 18 or newer, to read the backup
         if: inputs.backup != ''
-        timeout-minutes: 5
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-common
-          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y -qq postgresql-client-18
-          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+          pg_restore --version
+          major=$(pg_restore --version | awk '{ print $3 }' | cut -d. -f1)
+          if [ "$major" -lt 18 ]; then
+            echo "pg_restore is version $major. Heroku's PostgreSQL is 18, and an older pg_restore can refuse a backup that 18 made. Nothing was changed." >&2
+            exit 1
+          fi
 
       # check-backup runs bin/lib/schema-check, the release phase's rule
       # (lib/squashed_migrations_check.rb), which needs the app's gems.

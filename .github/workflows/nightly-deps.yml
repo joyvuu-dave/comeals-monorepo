@@ -73,8 +73,8 @@ env:
 
 jobs:
   nightly-update:
-    # ubuntu-24.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
-    runs-on: ubuntu-24.04
+    # ubuntu-26.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-26.04
     # bin/check alone takes about 25 minutes here (it runs every CI
     # job's work in sequence), plus the updates and the visual
     # container. 60 is about twice a normal run.
@@ -188,6 +188,19 @@ jobs:
           sudo tar -xzf "gitleaks_${version}_linux_x64.tar.gz" -C /usr/local/bin gitleaks
           rm "gitleaks_${version}_linux_x64.tar.gz"
           gitleaks version
+
+      # The same check as ci.yml's ruby-test job: bin/check runs
+      # spec/config/procfile_spec.rb, whose db:migrate runs pg_dump, and
+      # pg_dump refuses a server newer than itself.
+      - name: Check that pg_dump is 18 or newer, to match the server
+        if: steps.diff.outputs.changed == 'true'
+        run: |
+          pg_dump --version
+          major=$(pg_dump --version | awk '{ print $3 }' | cut -d. -f1)
+          if [ "$major" -lt 18 ]; then
+            echo "pg_dump is version $major. The server is 18, and pg_dump refuses a server newer than itself." >&2
+            exit 1
+          fi
 
       # bin/check's migration check reads .env: with TEST_DB_SUFFIX
       # present it checks the test database, the same as an agent

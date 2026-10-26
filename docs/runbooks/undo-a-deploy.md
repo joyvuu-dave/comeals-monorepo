@@ -170,8 +170,8 @@ starts web or the worker again by itself.
   release, run the workflow again with a newer backup. When it is newer
   than the release, use the backup `bin/deploy` took before the deploy
   (its output names it), or a newer release.
-  When the backup could not be read (the PostgreSQL 18 client did not
-  install, or heroku or the download failed), run the workflow again.
+  When the backup could not be read (heroku or the download failed),
+  run the workflow again.
   The workflow has no input to skip this check, because a backup nobody
   checked could be the kind this check is there to refuse. If it keeps
   failing, read the backup's newest migration by hand, on a computer
@@ -190,6 +190,13 @@ starts web or the worker again by itself.
   `git show <commit of the release>:db/production_schema_version.txt`,
   and not newer than both that and the newest file in
   `git ls-tree --name-only <commit of the release>:db/migrate`.
+
+- "Check that pg_restore is 18 or newer" failed: the workflow changed
+  nothing, as above. The runner image now ships a PostgreSQL client
+  older than 18, so the workflow cannot read a backup. Add a step that
+  installs the 18 client before this check (git history of
+  `.github/workflows/rollback.yml` has one), or restore by hand with the
+  check above done on a computer.
 
 - Maintenance is still on: production shows the maintenance page. That
   is the safe state; nobody can write.

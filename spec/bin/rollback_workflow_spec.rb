@@ -1222,14 +1222,14 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     it 'checks the backup before the step that restores it' do
       names = steps.pluck('name')
       check = steps.find { it['name'] == 'Check the backup' }
-      install = steps.find { it['name'] == 'Install the PostgreSQL 18 client, to read the backup' }
+      version = steps.find { it['name'] == 'Check that pg_restore is 18 or newer, to read the backup' }
       ruby = steps.find { it['name'] == 'Install Ruby and the gems, to check the backup' }
       restore = steps.find { it['id'] == 'restore' }
 
       expect(check['run']).to eq('bin/lib/rollback/check-backup')
       expect(ruby).to include('uses' => 'ruby/setup-ruby@v1', 'with' => { 'bundler-cache' => true })
-      expect([install, ruby, check].pluck('if')).to all(eq(restore['if']))
-      expect(names.index(install['name'])).to be < names.index(check['name'])
+      expect([version, ruby, check].pluck('if')).to all(eq(restore['if']))
+      expect(names.index(version['name'])).to be < names.index(check['name'])
       expect(names.index(ruby['name'])).to be < names.index(check['name'])
       expect(names.index(check['name'])).to be < names.index(restore['name'])
       expect(check['env']).to eq('TARGET' => '${{ steps.find.outputs.target }}',

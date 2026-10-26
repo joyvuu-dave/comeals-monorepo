@@ -18,15 +18,17 @@ jobs:
   # image (bin/lib/playwright-docker), and on 2026-08-19 a slow CDN made
   # a browser download take 12 minutes.
   #
-  # Every workflow names ubuntu-24.04, not ubuntu-latest. GitHub moves
-  # ubuntu-latest to Ubuntu 26 from 2026-10-19. A new image changes the
-  # system libraries and fonts the browser suites use, and the Linux
-  # screenshots are made in the Playwright "noble" image, which is
-  # Ubuntu 24.04 (bin/visual-linux). Move to a newer image on purpose,
-  # in its own change, so a failure it causes is not mixed up with one
-  # from the code.
+  # Every workflow names ubuntu-26.04, not ubuntu-latest. That is the
+  # Ubuntu that Heroku's heroku-26 stack runs, so CI and production use
+  # the same system libraries. ubuntu-latest moves to a new Ubuntu when
+  # GitHub decides. A new image changes the system libraries and fonts
+  # the browser suites use, so move to one on purpose, in its own
+  # change, so a failure it causes is not mixed up with one from the
+  # code. The Linux screenshots are made in the Playwright "noble"
+  # container, which is Ubuntu 24.04 whatever the runner is
+  # (bin/visual-linux).
   ruby-lint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -44,7 +46,7 @@ jobs:
   # for the whole suite.
   ruby-test:
     name: ruby-test (${{ matrix.part }}/2)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
@@ -69,18 +71,19 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
     steps:
       - uses: actions/checkout@v6
-      # The runner's PostgreSQL client is 16, and pg_dump refuses a
-      # server newer than itself. spec/config/procfile_spec.rb runs
-      # db:migrate, which dumps the schema in the test environment.
-      # Ubuntu 24.04 has no 18 client, so this adds the PostgreSQL apt
-      # repository first, with the script postgresql-common ships.
-      - name: Install the PostgreSQL 18 client, to match the server
+      # pg_dump refuses a server newer than itself, and the server is 18.
+      # spec/config/procfile_spec.rb runs db:migrate, which dumps the
+      # schema in the test environment. The ubuntu-26.04 image ships
+      # PostgreSQL 18. This fails early, with a clear message, if a later
+      # image ships an older one.
+      - name: Check that pg_dump is 18 or newer, to match the server
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq postgresql-common
-          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
-          sudo apt-get install -y -qq postgresql-client-18
-          echo /usr/lib/postgresql/18/bin >> "$GITHUB_PATH"
+          pg_dump --version
+          major=$(pg_dump --version | awk '{ print $3 }' | cut -d. -f1)
+          if [ "$major" -lt 18 ]; then
+            echo "pg_dump is version $major. The server is 18, and pg_dump refuses a server newer than itself." >&2
+            exit 1
+          fi
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
@@ -117,7 +120,7 @@ jobs:
   # that failed may have stopped early, and its coverage would be short.
   ruby-coverage:
     needs: ruby-test
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -142,7 +145,7 @@ jobs:
           include-hidden-files: true
 
   node-lint:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -159,7 +162,7 @@ jobs:
   # bites here. Without this job, a type-level drift at the API
   # boundary merges green.
   node-typecheck:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -171,7 +174,7 @@ jobs:
       - run: npm run typecheck
 
   node-audit:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -186,7 +189,7 @@ jobs:
   # token shapes. Free for a personal account; an organization would
   # need GITLEAKS_LICENSE.
   secrets:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -203,7 +206,7 @@ jobs:
           GITLEAKS_VERSION: 8.30.1
 
   ruby-security:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -216,7 +219,7 @@ jobs:
   # The same quality gate bin/check runs: complexity, duplication, and
   # smells averaged over app and lib, minimum score 80.
   ruby-quality:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -232,7 +235,7 @@ jobs:
   # files as committed: nothing in this job runs bin/tapioca without
   # --verify first.
   ruby-static:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     services:
       postgres:
@@ -271,7 +274,7 @@ jobs:
           todo_markers app_zone_dates new_js_files annotations
 
   bundle-budget:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     env:
       VITE_PUSHER_KEY: "test-key-for-ci"
@@ -290,7 +293,7 @@ jobs:
   # (rake test:generate_fixtures). Regenerate and fail on any diff: a
   # commit that changes an API response must carry its fixture change.
   api-fixtures:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     services:
       postgres:
@@ -332,7 +335,7 @@ jobs:
           fi
 
   node-unit-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v6
@@ -347,7 +350,7 @@ jobs:
       - run: npm run test:bin
 
   node-e2e-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     # The admin Playwright project boots a real Rails server
     # (tests/admin/server.sh), so this job needs Ruby and Postgres in
@@ -401,7 +404,7 @@ jobs:
           retention-days: 7
 
   visual-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     # The admin pages are in the visual suite, and their Rails server runs
     # on the runner (the Playwright container has no Ruby), so this job
@@ -446,7 +449,7 @@ jobs:
           retention-days: 7
 
   integration-tests:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 25
     services:
       postgres:

@@ -37,8 +37,8 @@ env:
 
 jobs:
   daily-deploy:
-    # ubuntu-24.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
-    runs-on: ubuntu-24.04
+    # ubuntu-26.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-26.04
     # Without a timeout, a hung step holds the job for GitHub's 6-hour
     # default — and because this job shares the "deploy" concurrency
     # group with rollback.yml, a rollback would queue behind it that
