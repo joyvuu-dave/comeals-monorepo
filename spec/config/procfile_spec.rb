@@ -38,59 +38,27 @@ RSpec.describe 'Procfile' do
   # fails, so a database that is behind is never migrated, and Heroku does
   # not promote the release.
   describe 'the release command' do
-    let(:database) { "comeals_test#{ENV.fetch('TEST_DB_SUFFIX', '')}_release" }
+    include ThrowawayDatabase
+
     let(:dump_dir) { Dir.mktmpdir('release-dump') }
-
-    # The database `name` on the server the specs use: the local socket, or
-    # on CI the host, port and password in DATABASE_URL.
-    def url_for(name)
-      URI(ENV.fetch('DATABASE_URL', 'postgresql:///')).tap { it.path = "/#{name}" }.to_s
-    end
-
-    # Runs the SQL on the database `name`, on a connection of its own:
-    # CREATE DATABASE cannot run inside the example's transaction.
-    def on_database(name, *sql)
-      pg = PG.connect(url_for(name))
-      sql.map { pg.exec(it) }.last
-    ensure
-      pg&.close
-    end
-
-    def tables
-      on_database(database, "SELECT tablename FROM pg_tables WHERE schemaname = 'public' ORDER BY 1").column_values(0)
-    end
 
     # SCHEMA sends the schema dump that db:migrate writes in the test
     # environment to a folder of its own, so db/structure.sql is never
     # touched.
-    # DATABASE_URL names the release database too. On CI it is set and
-    # names comeals_test, and its name wins over config/database.yml's, so
-    # without this the release command would migrate the test database.
     def run_release
-      env = { 'RAILS_ENV' => 'test', 'RUBYOPT' => nil, 'DATABASE_URL' => url_for(database),
-              'SCHEMA' => File.join(dump_dir, 'structure.sql') }
-      Open3.capture2e(env, *processes.fetch('release').split, chdir: Rails.root.to_s)
+      run_on_throwaway_database(*processes.fetch('release').split,
+                                env: { 'SCHEMA' => File.join(dump_dir, 'structure.sql') })
     end
 
-    # Not DROP DATABASE IF EXISTS: when there is none, PostgreSQL sends a
-    # notice, and spec/support/server_notices.rb fails the example.
-    def drop_database
-      exists = on_database('postgres', "SELECT 1 FROM pg_database WHERE datname = '#{database}'").ntuples.positive?
-      on_database('postgres', "DROP DATABASE #{database}") if exists
-    end
-
-    before do
-      drop_database
-      on_database('postgres', "CREATE DATABASE #{database}")
-    end
+    before { create_throwaway_database }
 
     after do
-      drop_database
+      drop_throwaway_database
       FileUtils.remove_entry(dump_dir)
     end
 
     it 'refuses, and migrates nothing, when the database is behind the deleted migrations' do
-      on_database(database, 'CREATE TABLE schema_migrations (version varchar PRIMARY KEY)',
+      on_database(throwaway_database, 'CREATE TABLE schema_migrations (version varchar PRIMARY KEY)',
                   "INSERT INTO schema_migrations VALUES ('#{PRODUCTION_SCHEMA_VERSION - 1}')")
 
       output, status = run_release
@@ -99,7 +67,7 @@ RSpec.describe 'Procfile' do
       expect(output).to include('The database is behind db/production_schema_version.txt. ' \
                                 "Its newest migration is #{PRODUCTION_SCHEMA_VERSION - 1}")
       # db:migrate makes ar_internal_metadata. It did not run.
-      expect(tables).to eq(['schema_migrations'])
+      expect(throwaway_tables).to eq(['schema_migrations'])
     end
 
     # A brand new app's database. db:migrate makes the two tables Rails
@@ -109,7 +77,7 @@ RSpec.describe 'Procfile' do
       output, status = run_release
 
       expect(status).to be_success, output
-      expect(tables).to eq(%w[ar_internal_metadata schema_migrations])
+      expect(throwaway_tables).to eq(%w[ar_internal_metadata schema_migrations])
     end
   end
 
