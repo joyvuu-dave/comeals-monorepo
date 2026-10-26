@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Say whether the smoke test can run" step
+# (.github/workflows/rollback.yml). It runs before the rollback, after the
+# steps that set up Node, install the npm packages and start the smoke
+# test's browser. Each of those may fail without stopping the rollback:
+# nothing may block undoing a bad deploy (#251). So this step says
+# whether the smoke test can run. When it cannot, the reason goes at the
+# top of the job summary, the smoke step is skipped, and the last step
+# fails the run, saying the site was not checked.
+#
+# Reads NODE_OUTCOME, NPM_OUTCOME and BROWSER_OUTCOME (each step's
+# outcome: success, failure, cancelled or skipped). Writes ready (true or
+# false) and, when false, problem to $GITHUB_OUTPUT.
+set -euo pipefail
+
+if [ "$NODE_OUTCOME" != success ]; then
+  problem="Node could not be set up"
+elif [ "$NPM_OUTCOME" != success ]; then
+  problem="npm ci failed or ran out of time"
+elif [ "$BROWSER_OUTCOME" != success ]; then
+  problem="the browser did not start (see the step \"Check that the smoke test's browser starts\")"
+else
+  echo "ready=true" >> "$GITHUB_OUTPUT"
+  echo "The smoke test can run after the rollback."
+  exit 0
+fi
+
+line="The smoke test cannot run: $problem. Check the site by hand."
+echo "ready=false" >> "$GITHUB_OUTPUT"
+echo "problem=$problem" >> "$GITHUB_OUTPUT"
+printf '## %s\n\nThe rollback goes ahead. The site will not be checked.\n' "$line" >> "$GITHUB_STEP_SUMMARY"
+echo "::warning::$line The rollback goes ahead."

@@ -1038,6 +1038,49 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
   end
 
+  # #251. Node, the npm packages and the smoke test's browser are set up
+  # before the rollback, and each of those steps may fail without
+  # stopping it: nothing may block undoing a bad deploy. This step says
+  # whether the smoke test can run, and when it cannot, puts the reason at
+  # the top of the job summary.
+  describe 'bin/lib/rollback/smoke-ready' do
+    let(:summary) { File.join(sandbox.dir, 'summary.md') }
+
+    def ready(node: 'success', npm: 'success', browser: 'success')
+      sandbox.run_script('bin/lib/rollback/smoke-ready',
+                         env: { 'NODE_OUTCOME' => node, 'NPM_OUTCOME' => npm, 'BROWSER_OUTCOME' => browser,
+                                'GITHUB_STEP_SUMMARY' => summary })
+    end
+
+    def written_summary = File.exist?(summary) ? File.read(summary) : ''
+
+    it 'says the smoke test can run when all three steps worked' do
+      result = ready
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.outputs).to eq('ready' => 'true')
+      expect(result.out).to eq("The smoke test can run after the rollback.\n")
+      expect(written_summary).to eq('')
+    end
+
+    {
+      { node: 'failure', npm: 'skipped', browser: 'skipped' } => 'Node could not be set up',
+      { npm: 'failure', browser: 'skipped' } => 'npm ci failed or ran out of time',
+      { browser: 'failure' } =>
+        "the browser did not start (see the step \"Check that the smoke test's browser starts\")"
+    }.each do |outcomes, reason|
+      it "says the smoke test cannot run, and why, when #{outcomes.keys.first} did not work" do
+        result = ready(**outcomes)
+        line = "The smoke test cannot run: #{reason}. Check the site by hand."
+
+        expect(result.exitstatus).to eq(0)
+        expect(result.outputs).to eq('ready' => 'false', 'problem' => reason)
+        expect(result.out).to eq("::warning::#{line} The rollback goes ahead.\n")
+        expect(written_summary).to eq("## #{line}\n\nThe rollback goes ahead. The site will not be checked.\n")
+      end
+    end
+  end
+
   # The Rollback workflow can run on staging, as a rehearsal. A step that
   # gets a GitHub token writes to GitHub (DEPLOY_HOLD, the release notes,
   # the follow-up issue), and the repository is public, so each one runs
@@ -1074,10 +1117,12 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
     # The smoke test still runs after a bookkeeping step fails: it is the
     # only check that the old code serves.
-    it 'smokes the site whenever the rollback worked' do
+    # It is skipped when the smoke test cannot run (bin/lib/rollback/smoke-ready).
+    it 'smokes the site whenever the rollback worked and the smoke test can run' do
       smoke = steps.find { it['name'] == 'Smoke the rolled-back site' }
 
-      expect(smoke['if']).to eq("${{ !cancelled() && steps.roll.outcome == 'success' }}")
+      expect(smoke['if'])
+        .to eq("${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready == 'true' }}")
     end
 
     # The smoke test signs in with the owner's resident and admin accounts
@@ -1117,20 +1162,48 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     # with --with-deps took system packages from Ubuntu's mirror. On run
     # 40354841180 the mirror was slow, the install ran out of time after
     # the rollback, and nobody tested the rolled-back site. Now the smoke
-    # test uses the Google Chrome the runner image already has, and starts
-    # it before the first step that changes anything, so a browser that
-    # does not start stops the run while production is untouched.
-    it "starts the smoke test's browser, the runner's own Chrome, before anything changes" do
+    # test uses the Google Chrome the runner image already has, and Node,
+    # the npm packages and the browser are set up before the first step
+    # that changes anything. Each of those steps may fail without stopping
+    # the rollback; bin/lib/rollback/smoke-ready says what happened.
+    it "sets up the smoke test's browser, the runner's own Chrome, before anything changes" do
       job = YAML.safe_load_file(Rails.root.join('.github/workflows/rollback.yml').to_s)['jobs']['rollback']
       names = steps.pluck('name')
-      check = steps.find { it['name'] == "Check that the smoke test's browser starts" }
+      setup = steps.select { %w[node npm browser smoke_ready].include?(it['id']) }
       first_change = steps.index { %w[restore roll].include?(it['id']) }
 
       expect(job['env']).to eq('SMOKE_BROWSER_CHANNEL' => 'chrome')
-      expect(check['run']).to eq('node tests/smoke/browser.js')
-      expect(check).not_to have_key('if')
-      expect(names.index(check['name'])).to be < first_change
+      expect(setup.pluck('id')).to eq(%w[node npm browser smoke_ready])
+      expect(setup.map { names.index(it['name']) }).to all(be < first_change)
+      expect(steps.find { it['id'] == 'browser' }['run']).to eq('node tests/smoke/browser.js')
       expect(steps.map { it['run'].to_s }.grep(/playwright|apt-get .*fonts/)).to eq([])
+    end
+
+    it 'rolls back even when Node, npm ci or the browser check fails' do
+      node, npm, browser, ready = %w[node npm browser smoke_ready].map { |id| steps.find { it['id'] == id } }
+
+      expect([node, npm, browser].pluck('continue-on-error')).to all(be(true))
+      expect([node, npm, browser].pluck('timeout-minutes')).to all(be_between(1, 5))
+      expect(node).not_to have_key('if')
+      expect(npm['if']).to eq("steps.node.outcome == 'success'")
+      expect(browser['if']).to eq("steps.npm.outcome == 'success'")
+      expect(ready).not_to have_key('if')
+      expect(ready['run']).to eq('bin/lib/rollback/smoke-ready')
+      expect(ready['env']).to eq('NODE_OUTCOME' => '${{ steps.node.outcome }}',
+                                 'NPM_OUTCOME' => '${{ steps.npm.outcome }}',
+                                 'BROWSER_OUTCOME' => '${{ steps.browser.outcome }}')
+    end
+
+    # A run that could not smoke the site must not look like one that did.
+    it 'fails the run at the end, saying the site was not checked, when the smoke test could not run' do
+      names = steps.pluck('name')
+      not_checked = steps.find { it['name'] == 'Say that the site was not checked' }
+
+      expect(names.last).to eq(not_checked['name'])
+      expect(not_checked['if'])
+        .to eq("${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready != 'true' }}")
+      expect(not_checked['env']).to eq('PROBLEM' => '${{ steps.smoke_ready.outputs.problem }}')
+      expect(not_checked['run']).to include('exit 1')
     end
 
     it 'gives no other step a way to write to GitHub' do
