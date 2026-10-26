@@ -31,6 +31,8 @@ RSpec.describe SchemaBootCheck do
   # code: the deploy's own migrations still have their files, so the
   # database is not behind the deleted ones, but it has not run these.
   describe 'a migration file the database has not run' do
+    include ActiveSupport::Testing::TimeHelpers
+
     let(:dir) { Dir.mktmpdir('migrations') }
     let(:pool) { ActiveRecord::Base.connection_pool }
 
@@ -52,6 +54,18 @@ RSpec.describe SchemaBootCheck do
         'deploy again, which runs it in the release phase). heroku run (a console or a rake task) still ' \
         'starts, so the database can be looked at and repaired there. (lib/schema_boot_check.rb)'
       )
+    end
+
+    # The integration and admin browser suites start web with the clock
+    # stopped at a day in the past (config/initializers/integration_fake_time.rb).
+    # Rails refuses to read a migration file dated after "now", so reading
+    # the files through Rails would stop web from starting at all whenever
+    # db/migrate/ holds a migration newer than that day.
+    it 'reads the migration files when the clock is stopped before their date' do
+      travel_to(Time.zone.local(2026, 1, 15, 12)) do
+        expect { described_class.verify!('The web process') }
+          .to raise_error(described_class::DatabaseBehind, /has not run 1 migration/)
+      end
     end
   end
 
