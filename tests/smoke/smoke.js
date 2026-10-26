@@ -5,10 +5,14 @@
 // which says what a login itself writes.
 const { launchBrowser } = require("./browser");
 const {
+  EXIT,
   adminBaseFor,
   redact,
   signInResident,
   checkAdmin,
+  unlessRefused,
+  countedProblems,
+  refusedReport,
 } = require("./checks");
 
 const BASE = process.env.SMOKE_URL || "https://comeals.com";
@@ -70,11 +74,21 @@ async function main() {
   });
   const page = await context.newPage();
 
+  // Each as { text, url }: countedProblems (./checks.js) reads the url.
   const problems = [];
-  page.on("pageerror", (e) => problems.push(`page error: ${e}`));
+  page.on("pageerror", (e) =>
+    problems.push({ text: `page error: ${e}`, url: "" }),
+  );
   page.on("console", (m) => {
-    if (m.type() === "error") problems.push(`console error: ${m.text()}`);
+    if (m.type() === "error") {
+      problems.push({
+        text: `console error: ${m.text()}`,
+        url: m.location().url,
+      });
+    }
   });
+  // The logins the site refused. The rest of the smoke test still runs.
+  const refusals = [];
 
   const checks = [];
   function pass(name) {
@@ -94,22 +108,26 @@ async function main() {
   await page.waitForSelector('input[aria-label="email"]', { timeout: 15000 });
   pass("login page renders");
 
+  let residentRefused = false;
   if (EMAIL && PASSWORD) {
-    // 3. Log in for real.
-    await signInResident(page, EMAIL, PASSWORD);
-    await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
-    pass("login works, calendar renders");
+    await unlessRefused(refusals, async () => {
+      // 3. Log in for real.
+      await signInResident(page, EMAIL, PASSWORD);
+      await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
+      pass("login works, calendar renders");
 
-    // 4. Both DST months render with the 1st under its true weekday.
-    pass(await checkMonthGrid(page, BASE, 10, "November"));
-    pass(await checkMonthGrid(page, BASE, 2, "March"));
+      // 4. Both DST months render with the 1st under its true weekday.
+      pass(await checkMonthGrid(page, BASE, 10, "November"));
+      pass(await checkMonthGrid(page, BASE, 2, "March"));
 
-    // 5. The next meal's page renders.
-    await page.getByRole("button", { name: "Next Meal" }).click();
-    await page.waitForSelector('[aria-label="Enter meal description"]', {
-      timeout: 15000,
+      // 5. The next meal's page renders.
+      await page.getByRole("button", { name: "Next Meal" }).click();
+      await page.waitForSelector('[aria-label="Enter meal description"]', {
+        timeout: 15000,
+      });
+      pass("meal page renders");
     });
-    pass("meal page renders");
+    residentRefused = refusals.length > 0;
   } else {
     say(
       "  note: SMOKE_EMAIL/SMOKE_PASSWORD not set — skipped the " +
@@ -127,29 +145,31 @@ async function main() {
   } else if (!adminBase) {
     say(`  note: ${BASE} has no admin site — skipped the admin checks`);
   } else {
-    for (const name of await checkAdmin(
-      page,
-      adminBase,
-      ADMIN_EMAIL,
-      ADMIN_PASSWORD,
-    )) {
-      pass(name);
-    }
+    const passed = await unlessRefused(refusals, () =>
+      checkAdmin(page, adminBase, ADMIN_EMAIL, ADMIN_PASSWORD),
+    );
+    passed.forEach(pass);
   }
 
   await browser.close();
 
-  // Filter expected noise: nothing is expected on these pages.
-  if (problems.length) {
+  // Nothing is expected on these pages, except the browser's own line for
+  // a refused resident login (countedProblems).
+  const counted = countedProblems(problems, residentRefused);
+  if (counted.length) {
     sayError("Console/page errors during smoke:");
-    problems.forEach((p) => sayError(`  ${p}`));
-    throw new Error(`${problems.length} console/page error(s)`);
+    counted.forEach((p) => sayError(`  ${p}`));
+    throw new Error(`${counted.length} console/page error(s)`);
   }
 
+  if (refusals.length) {
+    refusedReport(BASE, refusals).forEach(sayError);
+    process.exit(EXIT.loginRefused);
+  }
   say(`Smoke passed: ${checks.length} check(s) against ${BASE}`);
 }
 
 main().catch((error) => {
   sayError(`SMOKE FAILED against ${BASE}: ${error.message || error}`);
-  process.exit(1);
+  process.exit(EXIT.broken);
 });

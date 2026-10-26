@@ -53,6 +53,7 @@ class BashCoverage
     'bin/lib/rollback/restore-backup' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/roll-back' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/say-what-to-do' => 'spec/bin/rollback_workflow_spec.rb',
+    'bin/lib/rollback/smoke' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/smoke-ready' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/start-web' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/wait_until_stopped.sh' => 'spec/bin/rollback_workflow_spec.rb'

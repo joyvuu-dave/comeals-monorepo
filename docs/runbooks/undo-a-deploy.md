@@ -248,11 +248,25 @@ says which are missing.
   secrets of the GitHub environment `production`, and give them to the
   smoke test of production only.
 
-When one of these passwords changes, update `.env` and the secret. A
-refused login fails the smoke test with "smoke login refused for the
-... account" and the names to update. In the Deploy workflow a failed
-smoke test rolls back the code, so a stale password there rolls back a
-good release.
+When one of these passwords changes, update `.env` and the secret. When
+the site refuses a login, the smoke test skips the checks behind that
+login, runs the rest, and ends with code 2 and "SMOKE LOGIN REFUSED",
+with the names to check (the top of `bin/smoke` lists every exit code).
+It is told apart from a broken site by what the site says: the resident
+login's "Incorrect password" or "No resident with email", or the admin
+login page's "Invalid email or password.". A refused login is not a pass,
+but nothing rolls back for it:
+
+- `bin/deploy` fails and says to check the credentials, not to roll back.
+- The Deploy workflow's Watch production step goes on with the Solid
+  Queue checks and the log watch, which still roll back a broken
+  release, then fails. The release note stays a draft.
+- The Rollback workflow's smoke step fails and says the rollback is done.
+- `bin/staging-rehearsal` makes its own smoke resident, so there a
+  refused login means logins or the seed are broken, and it stops.
+
+If the credentials are right and the login is still refused, sign in by
+hand. If that fails too, the site is broken.
 
 ## Deploying a commit again after a rollback
 

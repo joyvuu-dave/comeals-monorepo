@@ -977,8 +977,11 @@ check_logs() {
 # month + meal page; with SMOKE_ADMIN_EMAIL/SMOKE_ADMIN_PASSWORD set, the
 # admin dashboard and the reconciliations page. curl proves the server
 # answers; this proves the app runs. A failure here means the deploy is
-# bad — roll back. On production a missing credential is named, because
-# the checks it would run are then skipped.
+# bad — roll back. A refused login (bin/smoke ends with 2) means the
+# smoke credentials are wrong: the deploy fails, since the checks behind
+# that login did not run, but it says to check the credentials, not to
+# roll back. On production a missing credential is named, because the
+# checks it would run are then skipped.
 run_smoke() {
   step "Browser smoke test"
 
@@ -992,12 +995,19 @@ run_smoke() {
     fi
   fi
 
-  if bin/smoke "$APP_URL"; then
-    ok "Smoke test passed"
-  else
-    fail "SMOKE TEST FAILED — the deployed app is broken. Roll back."
-    exit 1
-  fi
+  local status=0
+  bin/smoke "$APP_URL" || status=$?
+  case $status in
+    0) ok "Smoke test passed" ;;
+    2)
+      fail "The site refused a smoke login. Every smoke check that could run passed, so do not roll back for this. Check the SMOKE_* credentials (in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then run: bin/smoke $APP_URL"
+      exit 1
+      ;;
+    *)
+      fail "SMOKE TEST FAILED — the deployed app is broken. Roll back."
+      exit 1
+      ;;
+  esac
 }
 
 check_health() {

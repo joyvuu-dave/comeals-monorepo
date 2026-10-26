@@ -12,8 +12,20 @@
 # daylight-saving month (the November escape) and the meal page. With
 # SMOKE_ADMIN_EMAIL and SMOKE_ADMIN_PASSWORD set it signs in to the
 # admin site (admin.<host>) and opens the dashboard and the
-# reconciliations list. Each login is tried once; a refused one fails
-# with the variables to update.
+# reconciliations list. Each login is tried once. When the site refuses
+# one, the checks behind it are skipped, the rest still run, and the run
+# ends with code 2 and the variables to check.
+#
+# Exit codes:
+#   0  Every check passed.
+#   1  A check failed: the site is broken. The smoke test also ends
+#      with 1 when it could not run at all (no browser, say).
+#   2  The site answered and refused a login: the smoke credentials
+#      are wrong. Every check that could run passed, but the checks
+#      behind that login did not run, so this is not a pass either.
+#   Any other code: the smoke test could not run (127: no node).
+# The callers treat every code but 0 and 2 as a broken site.
+# tests/smoke/checks.js (EXIT) uses the same numbers.
 #
 # On production these are the owner's own resident and admin accounts:
 # bin/deploy reads them from .env, and the Deploy and Rollback workflows

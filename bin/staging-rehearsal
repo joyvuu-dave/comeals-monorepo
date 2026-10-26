@@ -280,8 +280,19 @@ ok "No worrying lines in the staging logs"
 
 step "Smoke test (read-only checks, logged in)"
 
+# The rehearsal made the smoke resident just above, so a refused login
+# (bin/smoke ends with 2) is not stale credentials: logins are broken on
+# the candidate, or the seed did not save the resident.
+smoke_status=0
 SMOKE_EMAIL="$SMOKE_EMAIL" SMOKE_PASSWORD="$SMOKE_PASSWORD" \
-  bin/smoke "$staging_url"
+  bin/smoke "$staging_url" || smoke_status=$?
+if [ "$smoke_status" -eq 2 ]; then
+  fail "Staging refused the smoke resident this rehearsal just made. This is not a problem with the credentials: logins are broken on the candidate, or the seed did not save the resident."
+  exit 1
+elif [ "$smoke_status" -ne 0 ]; then
+  fail "The read-only smoke failed on staging."
+  exit 1
+fi
 ok "Read-only smoke passed"
 
 step "Aggressive smoke (real writes on the disposable copy)"

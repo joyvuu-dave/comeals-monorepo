@@ -224,7 +224,7 @@ describe("checkAdmin", () => {
   // (config/locales/devise.en.yml, invalid and not_found_in_database).
   it("says the login was refused when the login page comes back saying the email or password is wrong", async () => {
     const attempt = checkAdmin(
-      fakeAdminPage("  Invalid Email or password.\n"),
+      fakeAdminPage("  Invalid email or password.\n"),
       "https://admin.comeals.com",
       "a",
       "b",

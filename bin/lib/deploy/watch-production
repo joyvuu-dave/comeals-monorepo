@@ -5,6 +5,9 @@
 # the logs for three minutes. On a failure it rolls back only the code,
 # and only when the release ran no migration.
 #
+# A refused smoke login does not roll back: the run goes on with the
+# other checks and fails at the end.
+#
 # Reads CANDIDATE, PREVIOUS and STARTED (from the promote step),
 # PROD_APP and PROD_URL. Run from the repository root.
 set -euo pipefail
@@ -79,7 +82,16 @@ if ! heroku ps:scale worker=1 -a "$PROD_APP"; then
   roll_back
   exit 1
 fi
-if ! bin/smoke "$PROD_URL"; then
+# bin/smoke ends with 2 when production answered and refused a smoke
+# login: the secrets are out of date, and every smoke check that could
+# run passed. Rolling back would undo a good release, so it does not. The
+# other checks still run, and still roll back a broken release, and the
+# run fails at the end, so the release note stays a draft.
+smoke_status=0
+bin/smoke "$PROD_URL" || smoke_status=$?
+if [ "$smoke_status" -eq 2 ]; then
+  echo "Production refused a smoke login. Every smoke check that could run passed, so this is not a reason to roll back. The other checks go on."
+elif [ "$smoke_status" -ne 0 ]; then
   echo "Smoke failed on production. Rolling back."
   roll_back
   exit 1
@@ -134,3 +146,7 @@ if [ -n "$hits" ]; then
   exit 1
 fi
 echo "No worrying lines in the production logs."
+if [ "$smoke_status" -eq 2 ]; then
+  echo "Production passed every other check, but the smoke test could not sign in, so this run is not a pass and the release stays a draft. Check the SMOKE_* secrets of the GitHub environment production, then run: bin/smoke $PROD_URL"
+  exit 1
+fi

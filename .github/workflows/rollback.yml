@@ -270,6 +270,8 @@ jobs:
       # and the browser were set up before the rollback; when that failed,
       # this step is skipped and the next one fails the run. It signs in with the owner's accounts on production only; on
       # staging the credentials are empty, and it checks the public pages.
+      # bin/lib/rollback/smoke says when a login was refused (stale
+      # secrets) rather than the old code broken.
       - name: Smoke the rolled-back site
         if: ${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready == 'true' }}
         env:
@@ -277,7 +279,7 @@ jobs:
           SMOKE_PASSWORD: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_PASSWORD || '' }}
           SMOKE_ADMIN_EMAIL: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_ADMIN_EMAIL || '' }}
           SMOKE_ADMIN_PASSWORD: ${{ inputs.app == 'comeals-monorepo' && secrets.SMOKE_ADMIN_PASSWORD || '' }}
-        run: bin/smoke "${{ steps.find.outputs.url }}"
+        run: bin/lib/rollback/smoke "${{ steps.find.outputs.url }}"
 
       # A rollback whose site could not be smoked must not look like one
       # that was. The job summary already says why at the top, unless the

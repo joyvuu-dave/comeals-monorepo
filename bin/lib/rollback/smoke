@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# The Rollback workflow's "Smoke the rolled-back site" step
+# (.github/workflows/rollback.yml): runs bin/smoke on the site that now
+# runs the old code, and says what its exit code means here. A refused
+# login (code 2) means the smoke secrets are out of date, not that the
+# old code is broken, and the rollback is already done. It still fails
+# the step: the checks behind that login did not run.
+#
+# Usage: bin/lib/rollback/smoke <site address>. Run from the repository
+# root.
+set -euo pipefail
+
+url="$1"
+status=0
+bin/smoke "$url" || status=$?
+if [ "$status" -eq 2 ]; then
+  echo "The rolled-back site refused a smoke login. Every smoke check that could run passed."
+  echo "The rollback itself is done: do not roll back again for this. Check the SMOKE_*"
+  echo "secrets of the GitHub environment production, then run: bin/smoke $url"
+  exit 1
+elif [ "$status" -ne 0 ]; then
+  echo "The rolled-back site failed the smoke test: the old code does not serve as it should."
+  echo "Follow docs/runbooks/undo-a-deploy.md."
+  exit 1
+fi
