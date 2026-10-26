@@ -70,6 +70,9 @@
 // arrives are queued and replayed in order, so callers never have to
 // know or care that the client starts a moment after page load.
 
+import { lazyRetry } from "./lazy_retry";
+import { notifyError } from "./bugsnag";
+
 let real = null;
 const queue = [];
 
@@ -144,7 +147,11 @@ function connect(Pusher) {
   });
 }
 
-export function startPusher() {
+// `beforeReload` runs just before the page reloads because the library
+// failed to load (below). The store passes the step that hands the bills
+// saves on their way to the browser (#150), as index.jsx does for a
+// page's code.
+export function startPusher(beforeReload) {
   if (started) return;
   started = true;
   // No key, no connection. The staging app builds with a blank
@@ -168,10 +175,26 @@ export function startPusher() {
   // each confirmation fetches its data again (#112). An idle moment is
   // not waited for longer than 2 seconds. Safari has no
   // requestIdleCallback; there it loads on the next turn.
+  //
+  // The library is its own file (a chunk). After a deploy, a page loaded
+  // before it can ask for a chunk the server no longer has, and a phone
+  // on a bad network can fail to get it. Then the page reloads once, the
+  // same as when a page's code fails (lazy_retry.ts), because without
+  // the library the page never gets a live update. If it fails again
+  // after that reload, the page goes on without live updates and the
+  // failure goes to Bugsnag.
+  const importPusher = lazyRetry(function () {
+    return import("pusher-js");
+  }, beforeReload);
   function load() {
-    import("pusher-js").then(function (mod) {
-      connect(mod.default);
-    });
+    importPusher().then(
+      function (mod) {
+        connect(mod.default);
+      },
+      function (error) {
+        notifyError(error);
+      },
+    );
   }
   function whenIdle() {
     if (typeof window.requestIdleCallback === "function") {

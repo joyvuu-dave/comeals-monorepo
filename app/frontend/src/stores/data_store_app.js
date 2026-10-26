@@ -100,7 +100,12 @@ export function appActions(self) {
       // Subscriptions made before it arrives are queued and replayed.
       // See helpers/pusher_client.js.
       window.Comeals.pusher = pusherClient;
-      startPusher();
+      // If the library fails to load, the page reloads once, and the
+      // reload ends every bills save on its way, so each one is sent
+      // again with keepalive first (#150).
+      startPusher(function () {
+        self.sendBillsAgainBeforeClose();
+      });
 
       window.Comeals.pusher.connection.bind("connected", function () {
         window.Comeals.socketId = window.Comeals.pusher.connection.socket_id;
