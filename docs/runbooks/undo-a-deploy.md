@@ -219,7 +219,10 @@ starts web or the worker again by itself.
   `bin/smoke https://comeals.com`.
 - The rollback failed after the restore: the old database is back under
   the new code, with web at 0. Run the rollback by hand, wait until its
-  release succeeded, then scale web to 1 and turn maintenance off. A
+  release succeeded, then scale web to 1 and turn maintenance off. Web
+  and the worker refuse to start on a database their code does not fit
+  (`lib/schema_boot_check.rb`), so if one crashes at start,
+  `heroku logs -a comeals-monorepo` says why; `heroku run` still works. A
   rollback runs the release phase of the old code
   (`bin/rake db:migrate`); if that is what failed,
   `heroku releases:output -a comeals-monorepo` shows why.
