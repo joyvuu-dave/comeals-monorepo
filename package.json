@@ -9,7 +9,7 @@
     "npm": "11.19.1"
   },
   "dependencies": {
-    "@bugsnag/js": "^8.10.0",
+    "@bugsnag/js": "^9.1.0",
     "@fontsource/roboto": "^5.2.10",
     "axios": "^1.14.0",
     "date-fns": "^4.4.0",
