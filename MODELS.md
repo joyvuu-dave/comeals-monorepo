@@ -1264,6 +1264,12 @@ and a page restored from the browser's back-and-forward cache send nothing
 and are not counted. A reload is a second page load. The admin Browsers
 page adds the rows up by month (`BrowserCount.by_month`).
 
+The check also watches the app's module script. When it cannot load even
+after one reload, the page shows "Comeals could not load." and sends a
+second report, `result=load_failed`. That report alerts the owner
+(`AppDidNotLoad`) and is not counted, because its page load already sent
+its check's result.
+
 Counts only. No IP address, no resident, and no User-Agent string are
 stored. Not linked to the community: it is a fact about browsers.
 

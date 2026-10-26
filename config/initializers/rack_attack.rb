@@ -39,12 +39,13 @@ module Rack
       req.ip if browser_report?(req)
     end
 
-    # A failed or broken check emails the owner, through Bugsnag. 10 per IP
-    # per hour: one person on one old browser reloads a few times, and a
-    # script cannot fill the inbox from one address. The query string is
+    # A failed or broken check, and an app that could not load, email the
+    # owner, through Bugsnag. 10 per IP per hour: one person on one old
+    # browser reloads a few times, and a script cannot fill the inbox from
+    # one address. The query string is
     # read, not the body, so a large body is never parsed here.
     throttle('browser-report-alerts/ip', limit: 10, period: 1.hour) do |req|
-      req.ip if browser_report?(req) && %w[failed error].include?(req.GET['result'])
+      req.ip if browser_report?(req) && %w[failed error load_failed].include?(req.GET['result'])
     end
 
     def self.browser_report?(req)

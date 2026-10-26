@@ -16,7 +16,7 @@ RSpec.describe '.mutant.yml subjects' do # -- a config file
   # out of every run.
   let(:only_attributes) do
     %w[Current EventFormSerializer CommonHouseReservationFormSerializer GuestRoomReservationFormSerializer
-       UnsupportedBrowserSeen BrowserCheckBroke]
+       UnsupportedBrowserSeen BrowserCheckBroke AppDidNotLoad]
   end
   let(:subjects) do
     Rails.root.join('.mutant.yml').read.scan(/^\s+- ([A-Z][A-Za-z0-9:]*)\*$/).flatten

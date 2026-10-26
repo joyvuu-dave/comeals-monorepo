@@ -6,8 +6,11 @@
 # browser_counts, and a failed or broken check also alerts the owner.
 #
 # A check that failed means a resident saw the "too old" or "cookies"
-# message, and a check that broke means a mistake in the check. Either
-# alerts the owner through Rails.error, which Bugsnag emails. The alert
+# message, and a check that broke means a mistake in the check. A
+# load_failed report means the app's code did not load, even after one
+# reload, and the resident saw "Comeals could not load." Each alerts the
+# owner through Rails.error, which Bugsnag emails. A load_failed report
+# is not counted: its page load already sent its check's result. The alert
 # is sent from here, not from the request, so it carries no request data
 # and so no IP address.
 #
@@ -46,6 +49,8 @@ class BrowserReportJob < ApplicationJob
             { browser: browser, major: major, os: os, device: device, tests: tests, user_agent: user_agent })
     end
 
+    return unless BrowserReport::COUNTED_RESULTS.include?(result)
+
     RetryOnConflict.call(attempts: CONFLICT_ATTEMPTS, base_delay: CONFLICT_BASE_DELAY) do
       BrowserCount.add_one!(date:, browser:, major:, os:, device:, result:)
     end
@@ -66,6 +71,9 @@ class BrowserReportJob < ApplicationJob
     when 'error'
       report(BrowserCheckBroke.new("The browser check broke in #{description}: #{error}"),
              context.merge(grouping_hash: 'BrowserCheckBroke'))
+    when 'load_failed'
+      report(AppDidNotLoad.new("The app did not load in #{description}: #{error}"),
+             context.merge(grouping_hash: 'AppDidNotLoad'))
     end
   end
 

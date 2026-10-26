@@ -41,7 +41,7 @@ class BrowserCount < ApplicationRecord
   validates :browser, :os, presence: true, length: { maximum: MAX_NAME }
   validates :major, numericality: { only_integer: true, greater_than: 0 }, allow_nil: true
   validates :device, inclusion: { in: DEVICES }
-  validates :result, inclusion: { in: BrowserReport::RESULTS }
+  validates :result, inclusion: { in: BrowserReport::COUNTED_RESULTS }
   validates :count, numericality: { only_integer: true, greater_than: 0 }
 
   # Adds one page load, in one statement. The conflict target is the

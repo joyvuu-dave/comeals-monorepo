@@ -5,18 +5,31 @@
 # from the query string of POST /api/v1/browser-reports and the request's
 # User-Agent header.
 #
-# The check sends exactly one of three shapes, and anything else is
+# The check sends exactly one of four shapes, and anything else is
 # refused with Invalid:
 #
 #   result=passed&touch=0|1
 #   result=failed&tests=<known test>,...&touch=0|1
 #   result=error&error=<at most 200 characters>&touch=0|1
+#   result=load_failed&error=<at most 200 characters>&touch=0|1
+#
+# The first three are the check's result, one per page load. The fourth
+# comes later in the same page load, when the app's code could not load
+# even after a reload. Its error names the file.
 class BrowserReport
   extend T::Sig
 
   class Invalid < StandardError; end
 
-  RESULTS = %w[passed failed error].freeze
+  RESULTS = %w[passed failed error load_failed].freeze
+
+  # The results that count a page load in browser_counts. A load_failed
+  # report comes from a page load that already sent its check's result,
+  # so it is not counted again.
+  COUNTED_RESULTS = %w[passed failed error].freeze
+
+  # The results that carry an error.
+  WITH_ERROR = %w[error load_failed].freeze
 
   # The tests the check runs, by the names it sends.
   TESTS = %w[modules lookbehind color_mix cookies].freeze
@@ -92,7 +105,7 @@ class BrowserReport
   sig { params(params: ActionController::Parameters).returns(T.nilable(String)) }
   def read_error(params)
     value = text(params, :error)
-    unless result == 'error'
+    unless WITH_ERROR.include?(result)
       raise Invalid, "an error is sent only with result=error, not #{result}" unless value.nil?
 
       return nil

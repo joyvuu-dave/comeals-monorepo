@@ -74,6 +74,31 @@ RSpec.describe BrowserReportJob do
     end
   end
 
+  # The app's code did not load, even after the page reloaded once, and
+  # the resident saw "Comeals could not load."
+  describe 'an app that did not load' do
+    before do
+      described_class.perform_now(**report, result: 'load_failed', error: 'Could not load /vite-assets/index-abc.js')
+    end
+
+    it 'alerts the owner, as an error so Bugsnag emails it, with the file' do
+      expect(Rails.error).to have_received(:report).once do |error, context:, severity:, handled:|
+        expect(error).to be_an_instance_of(AppDidNotLoad)
+        expect(error.message)
+          .to eq('The app did not load in Safari 15 on iOS (phone): Could not load /vite-assets/index-abc.js')
+        expect(severity).to eq(:error)
+        expect(handled).to be(true)
+        expect(context).to include(grouping_hash: 'AppDidNotLoad', browser: 'Safari', user_agent: report[:user_agent])
+      end
+    end
+
+    # The same page load already sent its check's result, and that one
+    # was counted.
+    it 'does not count the page load again' do
+      expect(BrowserCount.count).to eq(0)
+    end
+  end
+
   describe 'the count' do
     it 'counts the page load, by the day it was loaded' do
       described_class.perform_now(**report)

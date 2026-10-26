@@ -68,6 +68,17 @@ RSpec.describe 'POST /api/v1/browser-reports' do
     expect(BrowserReportJob).to have_been_enqueued.with(hash_including(result: 'error', error: 'TypeError: boom'))
   end
 
+  # The app's code did not load, even after one reload. The error names
+  # the file.
+  it 'queues a report of an app that did not load, with the file' do
+    send_report('result=load_failed&error=Could%20not%20load%20%2Fvite-assets%2Findex-abc.js&touch=0')
+
+    expect(response).to have_http_status(:no_content)
+    expect(BrowserReportJob).to have_been_enqueued.with(
+      hash_including(result: 'load_failed', tests: [], error: 'Could not load /vite-assets/index-abc.js')
+    )
+  end
+
   # The day the page loaded, in the community's zone (Community#today),
   # and not the day the job happens to run. 03:00 UTC on October 22 is
   # still October 21 in the community.
@@ -156,6 +167,9 @@ RSpec.describe 'POST /api/v1/browser-reports' do
       ['an error on a passing report', 'result=passed&error=boom&touch=0'],
       ['an error report with no error', 'result=error&touch=0'],
       ['an error longer than the check sends', "result=error&error=#{'x' * 201}&touch=0"],
+      ['a load_failed report with no error', 'result=load_failed&touch=0'],
+      ['a load_failed report with tests', 'result=load_failed&tests=cookies&error=x&touch=0'],
+      ['a load_failed error longer than the check sends', "result=load_failed&error=#{'x' * 201}&touch=0"],
       ['no touch', 'result=passed'],
       ['a touch that is not 0 or 1', 'result=passed&touch=2'],
       ['a list where one value is expected', 'result[]=passed&touch=0']

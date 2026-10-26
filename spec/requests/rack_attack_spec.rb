@@ -140,5 +140,17 @@ RSpec.describe 'Rack::Attack throttles' do
       send_report('result=passed&touch=0', '10.0.0.6')
       expect(response).to have_http_status(:no_content)
     end
+
+    # An app that did not load alerts the owner too, so it counts against
+    # the same limit.
+    it 'counts an app that did not load as an alert' do
+      10.times do
+        send_report('result=load_failed&error=x&touch=0', '10.0.0.7')
+        expect(response).to have_http_status(:no_content)
+      end
+
+      send_report('result=load_failed&error=x&touch=0', '10.0.0.7')
+      expect(response).to have_http_status(:too_many_requests)
+    end
   end
 end

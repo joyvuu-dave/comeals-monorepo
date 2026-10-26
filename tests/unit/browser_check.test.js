@@ -378,3 +378,259 @@ describe("the build", () => {
     );
   });
 });
+
+// The check also watches the app's module script. When it cannot load,
+// the page reloads once, and on a second failure shows a message with a
+// Reload button and sends one report (tests/e2e/browser-check.spec.js
+// runs the same in a real browser, against the build). Each test here
+// has its own document, so the listeners one test adds never hear
+// another test's events.
+describe("when the app's code does not load", () => {
+  const FILE = "/vite-assets/index-abc123.js";
+  const COULD_NOT_LOAD = "Comeals could not load.";
+
+  // A sessionStorage, or one that throws on any use, like a browser set
+  // to block site data.
+  function makeStorage(blocked) {
+    const items = {};
+    return {
+      items,
+      getItem(key) {
+        if (blocked) throw new Error("SecurityError");
+        return key in items ? items[key] : null;
+      },
+      setItem(key, value) {
+        if (blocked) throw new Error("SecurityError");
+        items[key] = String(value);
+      },
+      removeItem(key) {
+        if (blocked) throw new Error("SecurityError");
+        delete items[key];
+      },
+    };
+  }
+
+  // Answers each version request with the next status in `statuses`;
+  // 0 means the request failed with no answer.
+  function makeVersionRequest(statuses) {
+    const opened = [];
+    function FakeRequest() {
+      this.open = (method, url) => opened.push([method, url]);
+      this.send = () => {
+        const status = statuses.shift();
+        if (status === 0) {
+          this.onerror();
+        } else {
+          this.status = status;
+          this.onload();
+        }
+      };
+    }
+    FakeRequest.opened = opened;
+    return FakeRequest;
+  }
+
+  function makePage({ blocked = false, statuses = [200], changes = {} } = {}) {
+    const doc = document.implementation.createHTMLDocument("Comeals");
+    // A document made this way has no cookies, and the check would turn
+    // the browser away for that. This one keeps the check's test cookie.
+    let cookie = "";
+    Object.defineProperty(doc, "cookie", {
+      get: () => cookie,
+      set: (value) => {
+        cookie = /max-age=0/.test(value) ? "" : value.split(";")[0];
+      },
+    });
+    doc.body.innerHTML =
+      '<div id="root"><header class="shell-header"></header>' +
+      '<h3 class="shell-loading">Loading...</h3></div>';
+    const script = doc.createElement("script");
+    script.type = "module";
+    script.setAttribute("src", FILE);
+    doc.head.appendChild(script);
+    const win = makeWindow({
+      document: doc,
+      sessionStorage: makeStorage(blocked),
+      location: { reload: vi.fn() },
+      setTimeout: vi.fn((fn) => fn()),
+      XMLHttpRequest: makeVersionRequest(statuses),
+      ...changes,
+    });
+    return { win, doc, script };
+  }
+
+  function fire(target, type) {
+    target.dispatchEvent(new Event(type));
+  }
+
+  function reports(win) {
+    return win.navigator.sendBeacon.mock.calls.map((call) => call[0]);
+  }
+
+  it("reloads once, after the server answers, and remembers the file", () => {
+    const { win, script } = makePage();
+    runCheck(win);
+
+    fire(script, "error");
+
+    expect(win.location.reload).toHaveBeenCalledTimes(1);
+    expect(win.XMLHttpRequest.opened).toEqual([["GET", "/api/v1/version"]]);
+    expect(win.sessionStorage.items.app_retry).toBe(FILE);
+    expect(reports(win)).toEqual([
+      "/api/v1/browser-reports?result=passed&touch=0",
+    ]);
+  });
+
+  // During a deploy every request gets Heroku's maintenance page, which
+  // never reloads itself. So the page asks again until the server
+  // answers.
+  it("waits while the server does not answer, then reloads", () => {
+    const { win, script } = makePage({ statuses: [503, 0, 200] });
+    runCheck(win);
+
+    fire(script, "error");
+
+    expect(win.XMLHttpRequest.opened).toHaveLength(3);
+    expect(win.setTimeout).toHaveBeenCalledTimes(2);
+    expect(win.setTimeout.mock.calls[0][1]).toBe(30000);
+    expect(win.location.reload).toHaveBeenCalledTimes(1);
+  });
+
+  it("on the second failure of the same file, shows a message and reports once", () => {
+    const { win, doc, script } = makePage();
+    win.sessionStorage.setItem("app_retry", FILE);
+    runCheck(win);
+
+    fire(script, "error");
+    fire(script, "error");
+
+    expect(win.location.reload).not.toHaveBeenCalled();
+    const root = doc.getElementById("root");
+    expect(root.querySelector("h2").textContent).toBe(COULD_NOT_LOAD);
+    expect(root.textContent).not.toContain("Loading...");
+    expect(reports(win)).toEqual([
+      "/api/v1/browser-reports?result=passed&touch=0",
+      `/api/v1/browser-reports?result=load_failed&error=${encodeURIComponent(
+        `Could not load ${FILE}`,
+      )}&touch=0`,
+    ]);
+    // The flag stays, so the Reload button cannot start a loop either.
+    expect(win.sessionStorage.items.app_retry).toBe(FILE);
+  });
+
+  it("the Reload button reloads the page", () => {
+    const { win, doc, script } = makePage();
+    win.sessionStorage.setItem("app_retry", FILE);
+    runCheck(win);
+    fire(script, "error");
+
+    const button = doc.querySelector("button");
+    expect(button.textContent).toBe("Reload");
+    expect(button.getAttribute("type")).toBe("button");
+    button.click();
+    expect(win.location.reload).toHaveBeenCalledTimes(1);
+  });
+
+  // A new deploy names its files anew. A flag left by a reload for an
+  // older build says nothing about this one.
+  it("counts a failure of a different file as a first failure", () => {
+    const { win, script } = makePage();
+    win.sessionStorage.setItem("app_retry", "/vite-assets/index-old.js");
+    runCheck(win);
+
+    fire(script, "error");
+
+    expect(win.location.reload).toHaveBeenCalledTimes(1);
+    expect(win.sessionStorage.items.app_retry).toBe(FILE);
+  });
+
+  it("never reloads when sessionStorage cannot be used, and reports at once", () => {
+    const { win, doc, script } = makePage({ blocked: true });
+    runCheck(win);
+
+    fire(script, "error");
+
+    expect(win.location.reload).not.toHaveBeenCalled();
+    expect(doc.querySelector("h2").textContent).toBe(COULD_NOT_LOAD);
+    expect(reports(win)).toHaveLength(2);
+  });
+
+  it("clears the flag when the script loads, so a later deploy can reload again", () => {
+    const { win, script } = makePage();
+    win.sessionStorage.setItem("app_retry", FILE);
+    runCheck(win);
+
+    fire(script, "load");
+
+    expect(win.sessionStorage.items.app_retry).toBeUndefined();
+  });
+
+  // In dev, Vite's own module script loads before the app's. Clearing the
+  // app's flag there would let a missing app file reload over and over.
+  it("keeps the flag when another module script loads", () => {
+    const { win, doc } = makePage();
+    win.sessionStorage.setItem("app_retry", FILE);
+    runCheck(win);
+    const other = doc.createElement("script");
+    other.type = "module";
+    other.setAttribute("src", "/@vite/client");
+    doc.head.appendChild(other);
+
+    fire(other, "load");
+
+    expect(win.sessionStorage.items.app_retry).toBe(FILE);
+  });
+
+  it("does not throw on a load when sessionStorage cannot be used", () => {
+    const { win, script } = makePage({ blocked: true });
+    runCheck(win);
+    expect(() => fire(script, "load")).not.toThrow();
+  });
+
+  it("ignores errors from anything that is not a module script with a file", () => {
+    const { win, doc } = makePage();
+    runCheck(win);
+    const image = doc.createElement("img");
+    const plain = doc.createElement("script");
+    plain.setAttribute("src", "/pusher.js");
+    const inline = doc.createElement("script");
+    inline.type = "module";
+    doc.body.append(image, plain, inline);
+
+    fire(image, "error");
+    fire(plain, "error");
+    fire(inline, "error");
+    fire(doc, "error");
+
+    expect(win.location.reload).not.toHaveBeenCalled();
+    expect(reports(win)).toHaveLength(1);
+  });
+
+  // The check's own message says what to do about an old browser. A
+  // failed script must not replace it.
+  it("leaves the old-browser message alone", () => {
+    const { win, doc, script } = makePage({
+      changes: { RegExp: RegExpWithoutLookbehind },
+    });
+    runCheck(win);
+
+    fire(script, "error");
+
+    expect(win.location.reload).not.toHaveBeenCalled();
+    expect(doc.querySelector("h2").textContent).toBe(TOO_OLD);
+    expect(reports(win)).toHaveLength(1);
+  });
+
+  it("cuts a long file name in the report to 200 characters", () => {
+    const { win, script } = makePage({ blocked: true });
+    script.setAttribute("src", "/" + "x".repeat(300));
+    runCheck(win);
+
+    fire(script, "error");
+
+    const sentError = decodeURIComponent(
+      reports(win)[1].match(/error=([^&]*)/)[1],
+    );
+    expect(sentError).toHaveLength(200);
+  });
+});

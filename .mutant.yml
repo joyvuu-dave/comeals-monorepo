@@ -27,9 +27,9 @@ matcher:
   # (2026-09-08); the rest followed on 2026-09-12. A full run is hours,
   # so bin/mutant is usually given a stage — one directory's worth of
   # subjects — after the `--`; docs/mutation-testing.md lists them.
-  # Current is not here: it only declares attributes. Nor are the two
+  # Current is not here: it only declares attributes. Nor are the three
   # error classes BrowserReportJob reports (UnsupportedBrowserSeen,
-  # BrowserCheckBroke), which have no methods. Neither are the
+  # BrowserCheckBroke, AppDidNotLoad), which have no methods. Neither are the
   # three edit-form serializers (EventFormSerializer,
   # CommonHouseReservationFormSerializer, GuestRoomReservationFormSerializer),
   # for the same reason: they have no method to mutate. The request specs

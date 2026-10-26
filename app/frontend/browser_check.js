@@ -17,12 +17,20 @@
 // A mistake in this file must never turn away a working browser. So
 // everything runs inside a try: an unexpected error lets the app start,
 // and the error is reported.
+//
+// It also watches the app's module script. If that script, or a file it
+// imports, cannot load, the page would show "Loading..." forever, and
+// nothing would report it, because Bugsnag is part of the app's code.
+// watchTheApp says what happens then.
 (function (window) {
   "use strict";
 
   var document = window.document;
   var EMAIL = "david.paul.riddle@gmail.com";
   var REPORT_PATH = "/api/v1/browser-reports";
+  var VERSION_PATH = "/api/v1/version";
+  var RETRY_FLAG = "app_retry";
+  var VERSION_RETRY_MS = 30 * 1000;
 
   // A page runs the check once. If this script were ever written into
   // the page twice, the page load would be counted twice.
@@ -127,6 +135,15 @@
     ],
   };
 
+  var COULD_NOT_LOAD = {
+    title: "Comeals could not load.",
+    lines: [
+      "Part of the page did not download. Please try again in a few " +
+        "minutes.",
+    ],
+    reload: true,
+  };
+
   function element(tag, style, text) {
     var node = document.createElement(tag);
     node.setAttribute("style", style);
@@ -154,6 +171,20 @@
         paragraph.appendChild(document.createTextNode(line[1]));
       }
       page.appendChild(paragraph);
+    }
+    if (message.reload) {
+      var button = element(
+        "button",
+        "font:inherit;font-weight:bold;padding:0.5rem 1.5rem;" +
+          "margin:0 0 1rem;border:1px solid #1b1b1b;border-radius:4px;" +
+          "background:#e9c46a;color:#1b1b1b;cursor:pointer;",
+        "Reload"
+      );
+      button.setAttribute("type", "button");
+      button.onclick = function () {
+        window.location.reload();
+      };
+      page.appendChild(button);
     }
     var help = element(
       "p",
@@ -189,10 +220,125 @@
     }
   }
 
+  // During a deploy Heroku answers every request with its maintenance
+  // page (an HTML 503), and that page never reloads itself. So before
+  // the page reloads, it asks the server for its version, again every
+  // VERSION_RETRY_MS while the answer is not ok, and reloads once the
+  // answer is ok. The page keeps showing "Loading..." meanwhile. This is
+  // src/helpers/when_server_answers.ts in old JavaScript.
+  function whenServerAnswers(then) {
+    function tryAgainLater() {
+      window.setTimeout(function () {
+        whenServerAnswers(then);
+      }, VERSION_RETRY_MS);
+    }
+    var request = new window.XMLHttpRequest();
+    request.open("GET", VERSION_PATH, true);
+    request.onload = function () {
+      if (request.status >= 200 && request.status < 300) {
+        then();
+      } else {
+        tryAgainLater();
+      }
+    };
+    request.onerror = tryAgainLater;
+    request.send();
+  }
+
+  // The flag in sessionStorage holds the path of the app's script that
+  // failed and reloaded the page. The path names the build, because each
+  // build's file names are new. True when this is the first failure of
+  // this script and the flag that says so is saved, so the page may
+  // reload. False when the page already reloaded for this same script.
+  //
+  // Also false when sessionStorage cannot be used: a browser set to
+  // block site data throws on any use of it, and one that is out of
+  // space throws on a write. Then the page cannot remember that it
+  // reloaded, and a file that stays missing would reload the page over
+  // and over. The same rule as src/helpers/lazy_retry.ts.
+  function firstFailureSaved(file) {
+    try {
+      var storage = window.sessionStorage;
+      if (storage.getItem(RETRY_FLAG) === file) return false;
+      storage.setItem(RETRY_FLAG, file);
+      return true;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  // The script loaded, so the reload worked. The flag goes, so a failure
+  // at a later deploy reloads the page again. Only this script's flag:
+  // the dev server has a second module script (Vite's own), which loads
+  // before the app's, and removing the app's flag there would let the
+  // app's script reload the page over and over.
+  function clearFlag(file) {
+    try {
+      var storage = window.sessionStorage;
+      if (storage.getItem(RETRY_FLAG) === file) storage.removeItem(RETRY_FLAG);
+    } catch (error) {
+      // Nothing to do: with no storage, no flag was saved.
+    }
+  }
+
+  // The app's code is a module script (the build puts it in the head,
+  // the dev server after this script). A browser fires "error" on that
+  // script when it, or any file it imports, cannot load, and "load" when
+  // it ran. Neither event bubbles, so the document catches them on their
+  // way down to the script. (Not the window: a "load" event on an
+  // element never passes through the window.) A module script runs, and fires its event,
+  // only after the whole page is read, so this script is always in time.
+  //
+  // On the first failure the page reloads once. If the script fails
+  // again on the reload, the page shows a message with a Reload button
+  // and sends one report. Not in a browser the check turned away: its
+  // message stays on the page.
+  function watchTheApp() {
+    var handled = false;
+
+    function appScript(event) {
+      var target = event.target;
+      if (!target || target.tagName !== "SCRIPT") return null;
+      if (target.type !== "module") return null;
+      return target.getAttribute("src");
+    }
+
+    document.addEventListener(
+      "load",
+      function (event) {
+        var file = appScript(event);
+        if (file) clearFlag(file);
+      },
+      true
+    );
+
+    document.addEventListener(
+      "error",
+      function (event) {
+        var file = appScript(event);
+        if (!file || handled || check.result === "failed") return;
+        handled = true;
+        if (firstFailureSaved(file)) {
+          whenServerAnswers(function () {
+            window.location.reload();
+          });
+          return;
+        }
+        showMessage(COULD_NOT_LOAD);
+        report(
+          "result=load_failed&error=" +
+            encodeURIComponent(("Could not load " + file).slice(0, 200))
+        );
+      },
+      true
+    );
+  }
+
   var check = { result: "passed", failed: [], tests: TESTS };
   window.comealsBrowserCheck = check;
 
   try {
+    watchTheApp();
     for (var i = 0; i < TESTS.length; i++) {
       if (!TESTS[i].run()) check.failed.push(TESTS[i].name);
     }
