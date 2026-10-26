@@ -96,6 +96,53 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       )
       expect_nothing_changed_in_production
     end
+
+    # SMOKE_BEFORE=skip lets a deploy go out when production fails the
+    # smoke test now, for example a deploy that fixes that. Then nobody
+    # knows whether the smoke logins worked before, so a refused login
+    # after the deploy is not called a reason to roll back.
+    context 'with SMOKE_BEFORE=skip' do
+      let(:skipped) do
+        'The smoke test before the deploy was skipped on purpose (SMOKE_BEFORE=skip). Nobody knows whether the ' \
+          'smoke logins worked before the deploy, so a refused login after it will not say to roll back.'
+      end
+
+      it 'skips the smoke test before the deploy, says so, and still smokes after' do
+        result = deploy.run('--yes', env: { 'SMOKE_BEFORE' => 'skip' })
+
+        expect(result.status).to eq(0)
+        expect(result.output).to include(skipped, 'Smoke test passed', 'Deploy complete!')
+        expect(result.output).not_to include('Production passes the smoke test before the deploy')
+        expect(deploy.calls_to('smoke')).to eq(['smoke https://comeals.com'])
+      end
+
+      it 'says to check the credentials, not to roll back, when a login is refused after the deploy' do
+        deploy.rule('smoke', 'comeals\\.com', exit: 2)
+
+        result = deploy.run('--yes', env: { 'SMOKE_BEFORE' => 'skip' })
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include(
+          skipped,
+          'The site refused a smoke login. Every smoke check that could run passed, so do not roll back for this.'
+        )
+        expect(result.output).not_to include('Roll back.')
+        expect_production(maintenance: false, web: 1, pushed: true)
+      end
+    end
+
+    # A value that looks like skip but is not one must not deploy with the
+    # check on while the person thinks it is off, or the other way round.
+    ['Skip', 'skip ', 'yes', 'true', 'no'].each do |value|
+      it "refuses SMOKE_BEFORE=#{value.inspect} before it runs anything" do
+        result = deploy.run('--yes', env: { 'SMOKE_BEFORE' => value })
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include("SMOKE_BEFORE is #{value.inspect}. It must be empty or skip. " \
+                                         'Nothing was changed.')
+        expect(deploy.calls).to eq([])
+      end
+    end
   end
 
   describe 'a push deploy (no migration changed)' do

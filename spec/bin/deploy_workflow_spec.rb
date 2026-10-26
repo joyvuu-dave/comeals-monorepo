@@ -272,9 +272,12 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       sandbox.rule('node', 'tests/smoke/smoke.js')
     end
 
-    def smoke_before(secrets = smoke_secrets)
-      sandbox.run_script('bin/lib/deploy/smoke-before', env: apps.merge('PROD_URL' => 'https://comeals.com')
-                                                                 .merge(secrets))
+    let(:summary) { File.join(sandbox.dir, 'step_summary.md') }
+
+    def smoke_before(secrets = smoke_secrets, skip: 'false')
+      sandbox.run_script('bin/lib/deploy/smoke-before',
+                         env: apps.merge('PROD_URL' => 'https://comeals.com', 'SKIP_SMOKE_BEFORE' => skip,
+                                         'GITHUB_STEP_SUMMARY' => summary).merge(secrets))
     end
 
     it 'smokes production with the sign-ins and says the login worked' do
@@ -311,6 +314,33 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
         "Find out why first: bin/smoke https://comeals.com\n"
       )
       expect(result.outputs).to be_empty
+    end
+
+    # The skip_smoke_before input lets a deploy go out when production
+    # fails the smoke test now, for example a deploy that fixes that. Then
+    # nobody knows whether the logins worked before, so login_worked stays
+    # unset, and a refused login after the promote does not roll back.
+    it 'skips the smoke test when asked, leaves login_worked unset, and says so in the log and the job summary' do
+      result = smoke_before(skip: 'true')
+
+      warning = 'The smoke test before the deploy was skipped on purpose (skip_smoke_before). Nobody knows ' \
+                'whether the smoke logins worked before the deploy, so a refused login after it will not roll ' \
+                'back by itself.'
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to eq("#{warning}\n")
+      expect(File.read(summary)).to eq("> [!WARNING]\n> #{warning}\n")
+      expect(result.outputs).to be_empty
+      expect(sandbox.calls_to('node')).to be_empty
+    end
+
+    # The input is a boolean, so GitHub gives "true" or "false". Anything
+    # else means the step was changed by mistake.
+    it 'refuses any other value of the skip input' do
+      result = smoke_before(skip: 'yes')
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to eq("SKIP_SMOKE_BEFORE is \"yes\". It must be true or false. Nothing was changed.\n")
+      expect(sandbox.calls_to('node')).to be_empty
     end
 
     # A secret that is not set reaches the step as an empty value. The
@@ -702,6 +732,16 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
         expect(names.index(before['name'])).to be < names.index(name)
       end
       expect(watch['env']['LOGIN_WORKED_BEFORE']).to eq('${{ steps.smoke_before.outputs.login_worked }}')
+    end
+
+    it 'has a skip_smoke_before input, off unless asked, and gives it to the smoke before the deploy' do
+      workflow = YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)
+      # YAML 1.1 reads the key "on" as true.
+      inputs = workflow[true]['workflow_dispatch']['inputs']
+      before = steps.find { it['id'] == 'smoke_before' }
+
+      expect(inputs['skip_smoke_before']).to include('type' => 'boolean', 'default' => false, 'required' => false)
+      expect(before['env']['SKIP_SMOKE_BEFORE']).to eq('${{ inputs.skip_smoke_before }}')
     end
   end
 end
