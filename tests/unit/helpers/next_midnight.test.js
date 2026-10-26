@@ -132,6 +132,13 @@ describe.each(["America/Chicago", "Asia/Tokyo"])(
         }
       }
       expect(problems).toEqual([]);
-    }, 60000);
+      // Its own limit, longer than the 30 seconds in vitest.config.mjs.
+      // On an idle machine the first of these two tests takes about 5
+      // seconds, because it also makes every zone's list of instants.
+      // With six full Vitest runs at once it took 48 seconds under
+      // Vitest 4 and 68 seconds under Vitest 5 (#247). The test is a
+      // loop with an end, so a long limit cannot hide a test that never
+      // ends.
+    }, 180_000);
   },
 );
