@@ -2,6 +2,7 @@
 
 require 'rails_helper'
 require 'open3'
+require Rails.root.join('lib/squashed_migrations_check')
 
 # Heroku runs one dyno per process type in the Procfile. The web dyno runs
 # Puma only. The jobs run on a dyno of their own, the worker, which runs
@@ -41,13 +42,21 @@ RSpec.describe 'Procfile' do
     include ThrowawayDatabase
 
     let(:dump_dir) { Dir.mktmpdir('release-dump') }
+    let(:versions_in_structure) do
+      SquashedMigrationsCheck.recorded_versions(Rails.root.join('db/structure.sql').read)
+    end
 
-    # SCHEMA sends the schema dump that db:migrate writes in the test
-    # environment to a folder of its own, so db/structure.sql is never
-    # touched.
+    # SCHEMA names the schema file that the release command reads and
+    # writes in the test environment: a copy of db/structure.sql in a
+    # folder of its own, so db/structure.sql is never touched.
     def run_release
-      run_on_throwaway_database(*processes.fetch('release').split,
-                                env: { 'SCHEMA' => File.join(dump_dir, 'structure.sql') })
+      schema = File.join(dump_dir, 'structure.sql')
+      FileUtils.cp(Rails.root.join('db/structure.sql'), schema)
+      run_on_throwaway_database(*processes.fetch('release').split, env: { 'SCHEMA' => schema })
+    end
+
+    def versions_in_throwaway_database
+      on_database(throwaway_database, 'SELECT version FROM schema_migrations').column_values(0).map { Integer(it, 10) }
     end
 
     before { create_throwaway_database }
@@ -83,14 +92,59 @@ RSpec.describe 'Procfile' do
       expect(throwaway_tables).to eq(['schema_migrations'])
     end
 
-    # A brand new app's database. db:migrate makes the two tables Rails
-    # keeps, as it did before the check. The app's own tables come from
-    # db/structure.sql.
-    it 'migrates an empty database the way it did before the check' do
+    # A brand new app's database. db:migrate builds it from db/structure.sql:
+    # in Rails 8.1, db:migrate first loads the schema file into a database
+    # that has no schema_migrations table (DatabaseTasks#migrate_all calls
+    # initialize_database, the same step db:prepare uses). This spec once
+    # pointed SCHEMA at a file that did not exist, which turned that step
+    # off, so it showed only the two tables Rails keeps.
+    it 'builds an empty database from db/structure.sql' do
       output, status = run_release
 
       expect(status).to be_success, output
-      expect(throwaway_tables).to eq(%w[ar_internal_metadata schema_migrations])
+      expect(throwaway_tables).to include('communities', 'meals', 'bills', 'solid_queue_jobs')
+      expect(versions_in_throwaway_database).to match_array(versions_in_structure)
+    end
+
+    # The release command must never load db/structure.sql over a database
+    # that has a schema_migrations table, whatever else it holds.
+    it 'does not load db/structure.sql over a database that has run migrations' do
+      on_database(throwaway_database, 'CREATE TABLE schema_migrations (version varchar PRIMARY KEY)',
+                  "INSERT INTO schema_migrations VALUES #{versions_in_structure.map { "('#{it}')" }.join(', ')}",
+                  'CREATE TABLE a_table_of_its_own (id integer)')
+
+      output, status = run_release
+
+      expect(status).to be_success, output
+      expect(throwaway_tables).to eq(%w[a_table_of_its_own ar_internal_metadata schema_migrations])
+    end
+
+    # Tables but no schema_migrations table: a table dropped by hand, or a
+    # restore that left it out. db:migrate would load db/structure.sql over
+    # the tables, and make every object it lists before the first one that
+    # is already there. So the check refuses it before db:migrate runs.
+    it 'refuses, and loads nothing, when the database has tables but no schema_migrations table' do
+      on_database(throwaway_database, 'CREATE TABLE meals (id integer)')
+
+      output, status = run_release
+
+      expect(status).not_to be_success, output
+      expect(output).to include('The database has tables (meals) but no record of the migrations it has run')
+      expect(throwaway_tables).to eq(['meals'])
+    end
+
+    # A schema_migrations table with no rows: a load of db/structure.sql
+    # that stopped part way (the INSERT INTO schema_migrations is its last
+    # statement), or rows deleted by hand. db:migrate does not load the
+    # schema when the table exists, so it would run nothing and succeed.
+    it 'refuses a database whose schema_migrations table has no rows' do
+      on_database(throwaway_database, 'CREATE TABLE schema_migrations (version varchar PRIMARY KEY)')
+
+      output, status = run_release
+
+      expect(status).not_to be_success, output
+      expect(output).to include('The database has tables (schema_migrations) but no record')
+      expect(throwaway_tables).to eq(%w[schema_migrations])
     end
   end
 
