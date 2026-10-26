@@ -116,3 +116,6 @@ assert_reset_token_passed
 # that runs CREATE and DROP DATABASE; the prepend in
 # config/initializers/database_tasks_statement_timeout.rb overrides it:
 public_schema_config
+# ActiveRecord's database tasks call this one for every structure dump;
+# lib/structure_dump_cleanup.rb prepends it:
+structure_dump

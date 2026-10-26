@@ -43,6 +43,17 @@ RSpec.describe StructureDumpCleanup do
   end
 
   describe '.clean!' do
+    it 'does not write a file that has none' do
+      Dir.mktmpdir('structure') do |dir|
+        path = File.join(dir, 'structure.sql')
+        File.write(path, extension)
+        File.chmod(0o444, path)
+
+        expect { described_class.clean!(path) }.not_to raise_error
+        expect(File.read(path)).to eq(extension)
+      end
+    end
+
     it 'rewrites the file without them' do
       Dir.mktmpdir('structure') do |dir|
         path = File.join(dir, 'structure.sql')
@@ -52,6 +63,32 @@ RSpec.describe StructureDumpCleanup do
 
         expect(File.read(path)).to eq(extension)
       end
+    end
+  end
+
+  # Every structure dump goes through
+  # ActiveRecord::Tasks::PostgreSQLDatabaseTasks#structure_dump.
+  describe StructureDumpCleanup::AfterDump do
+    let(:dumper) do
+      Class.new do
+        def initialize(text) = @text = text
+        def structure_dump(filename, _extra_flags) = File.write(filename, @text)
+      end
+    end
+
+    it 'cleans the file once pg_dump has written it' do
+      Dir.mktmpdir('structure') do |dir|
+        path = File.join(dir, 'structure.sql')
+        dumper.prepend(described_class).new(extension + comment).structure_dump(path, nil)
+
+        expect(File.read(path)).to eq(extension)
+      end
+    end
+
+    it 'is prepended to the database tasks when the rake tasks load' do
+      RakeTasks.ensure_loaded
+
+      expect(ActiveRecord::Tasks::PostgreSQLDatabaseTasks.ancestors).to include(described_class)
     end
   end
 end
