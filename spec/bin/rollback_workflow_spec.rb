@@ -1081,6 +1081,52 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     end
   end
 
+  # The workflow's smoke step, once the old code runs. bin/smoke ends with
+  # 2 when the site answered and refused a smoke login: the secrets are
+  # stale, not the site broken, and the rollback is already done.
+  describe 'bin/lib/rollback/smoke' do
+    before do
+      sandbox.note_env('SMOKE_URL')
+      sandbox.rule('node', 'tests/smoke/smoke.js')
+    end
+
+    def smoke = sandbox.run_script('bin/lib/rollback/smoke', 'https://comeals.com')
+
+    it 'smokes the site it is given and passes when the smoke test passes' do
+      result = smoke
+
+      expect(result.exitstatus).to eq(0)
+      expect(result.out).to eq('')
+      expect(sandbox.calls_to('node').map { [it.args, it.env] })
+        .to eq([[['tests/smoke/smoke.js'], { 'SMOKE_URL' => 'https://comeals.com' }]])
+    end
+
+    it 'fails, and says to check the secrets and not to roll back again, when a smoke login is refused' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 2)
+
+      result = smoke
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to eq(
+        "The rolled-back site refused a smoke login. Every smoke check that could run passed.\n" \
+        "The rollback itself is done: do not roll back again for this. Check the SMOKE_*\n" \
+        "secrets of the GitHub environment production, then run: bin/smoke https://comeals.com\n"
+      )
+    end
+
+    it 'fails, and says the old code does not serve, when the smoke test fails' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
+
+      result = smoke
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to eq(
+        "The rolled-back site failed the smoke test: the old code does not serve as it should.\n" \
+        "Follow docs/runbooks/undo-a-deploy.md.\n"
+      )
+    end
+  end
+
   # The Rollback workflow can run on staging, as a rehearsal. A step that
   # gets a GitHub token writes to GitHub (DEPLOY_HOLD, the release notes,
   # the follow-up issue), and the repository is public, so each one runs
@@ -1123,6 +1169,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
       expect(smoke['if'])
         .to eq("${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready == 'true' }}")
+      expect(smoke['run'].lines.last).to eq(%(bin/lib/rollback/smoke "${{ steps.find.outputs.url }}"\n))
+      expect(smoke['run']).not_to include('bin/smoke')
     end
 
     # The smoke test signs in with the owner's resident and admin accounts

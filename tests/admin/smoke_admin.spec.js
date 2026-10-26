@@ -3,7 +3,7 @@
 // tests/admin/seed.rb creates. On production bin/smoke runs the same
 // function as the owner's admin account.
 const { test, expect } = require("../helpers/test");
-const { checkAdmin, ADMIN_REFUSED } = require("../smoke/checks");
+const { checkAdmin, ADMIN_REFUSED, LoginRefused } = require("../smoke/checks");
 
 test.describe("the smoke test's admin check", () => {
   test("signs in, opens the dashboard and the reconciliations, and does not ask to be remembered", async ({
@@ -40,16 +40,37 @@ test.describe("the smoke test's admin check", () => {
     expect(logins[0]).not.toContain("admin_user%5Bremember_me%5D=1");
   });
 
-  test("fails with what to update when the login is refused", async ({
+  // A refused login is its own kind of failure (LoginRefused): bin/smoke
+  // then ends with its own exit code, and the callers say to check the
+  // credentials, not that the site is broken. This pins Devise's real
+  // words for a wrong password, which checkAdmin reads.
+  test("fails with what to check when the login is refused", async ({
     page,
     baseURL,
   }) => {
-    await expect(
-      checkAdmin(page, baseURL, "admin@example.com", "wrong"),
-    ).rejects.toThrow(ADMIN_REFUSED);
-    expect(ADMIN_REFUSED).toBe(
-      "smoke login refused for the admin account — update " +
-        "SMOKE_ADMIN_* (or ADMIN_*) in .env and the GitHub secrets",
-    );
+    const error = await checkAdmin(
+      page,
+      baseURL,
+      "admin@example.com",
+      "wrong",
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(LoginRefused);
+    expect(error.message).toBe(ADMIN_REFUSED);
+  });
+
+  test("fails with what to check when no admin has the email", async ({
+    page,
+    baseURL,
+  }) => {
+    const error = await checkAdmin(
+      page,
+      baseURL,
+      "nobody@example.com",
+      "password",
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(LoginRefused);
+    expect(error.message).toBe(ADMIN_REFUSED);
   });
 });

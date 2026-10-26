@@ -3,7 +3,15 @@ import {
   adminBaseFor,
   redact,
   signInResident,
-  RESIDENT_REFUSED,
+  checkAdmin,
+  LoginRefused,
+  unlessRefused,
+  countedProblems,
+  refusedReport,
+  EXIT,
+  ADMIN_REFUSED,
+  RESIDENT_WRONG_PASSWORD,
+  RESIDENT_UNKNOWN_EMAIL,
 } from "../smoke/checks.js";
 
 // The parts of the post-deploy smoke test (tests/smoke/smoke.js) that
@@ -64,8 +72,8 @@ describe("redact", () => {
 });
 
 // A page with just what signInResident uses. The token answer has the
-// status the test gives it.
-function fakePage(status) {
+// status and the JSON body the test gives it.
+function fakePage(status, body = {}) {
   const filled = {};
   let clicked = false;
   return {
@@ -84,6 +92,7 @@ function fakePage(status) {
         url: () => "https://comeals.com/api/v1/residents/token",
         request: () => ({ method: () => "POST" }),
         status: () => status,
+        json: async () => body,
       };
       if (!match(response)) throw new Error("the wrong request matched");
       if (
@@ -112,15 +121,72 @@ describe("signInResident", () => {
     expect(page.clicked()).toBe(true);
   });
 
-  // The API answers 400 for an unknown email and for a wrong password
-  // (Api::V1::ResidentsController#token).
-  it("says the login was refused, and what to update, on a 400", async () => {
-    await expect(signInResident(fakePage(400), "a", "b")).rejects.toThrow(
-      RESIDENT_REFUSED,
+  // The API answers 400 with "Incorrect password" for a wrong password
+  // and "No resident with email <email>" for an unknown email
+  // (Api::V1::ResidentsController#token). Both are a refused login:
+  // the site works, and the smoke credentials are wrong.
+  it("says the login was refused, why, and what to check, for a wrong password", async () => {
+    const attempt = signInResident(
+      fakePage(400, { message: "Incorrect password" }),
+      "a",
+      "b",
     );
-    expect(RESIDENT_REFUSED).toBe(
-      "smoke login refused for the resident account — update " +
-        "SMOKE_EMAIL/SMOKE_PASSWORD (or RESIDENT_*) in .env and the GitHub secrets",
+
+    await expect(attempt).rejects.toThrow(LoginRefused);
+    await expect(attempt).rejects.toThrow(RESIDENT_WRONG_PASSWORD);
+    expect(RESIDENT_WRONG_PASSWORD).toBe(
+      "the site refused the resident login (it says the password is " +
+        "wrong) — check SMOKE_EMAIL/SMOKE_PASSWORD (or RESIDENT_*) in .env " +
+        "and the GitHub secrets",
+    );
+  });
+
+  // The answer names the email. The message does not, so the email never
+  // reaches a log.
+  it("says the login was refused for an unknown email, without the email", async () => {
+    const attempt = signInResident(
+      fakePage(400, { message: "No resident with email who@example.com" }),
+      "who@example.com",
+      "b",
+    );
+
+    await expect(attempt).rejects.toThrow(LoginRefused);
+    await expect(attempt).rejects.toThrow(RESIDENT_UNKNOWN_EMAIL);
+    expect(RESIDENT_UNKNOWN_EMAIL).toBe(
+      "the site refused the resident login (it has no resident with " +
+        "that email) — check SMOKE_EMAIL/SMOKE_PASSWORD (or RESIDENT_*) " +
+        "in .env and the GitHub secrets",
+    );
+  });
+
+  // Rails also answers 400 for a request it cannot read. That is a broken
+  // site, not a refused login.
+  it("treats a 400 with any other message as a broken site", async () => {
+    const attempt = signInResident(
+      fakePage(400, { message: "Email required." }),
+      "a",
+      "b",
+    );
+
+    await expect(attempt).rejects.toThrow("the resident login answered 400");
+    await expect(attempt).rejects.not.toThrow(LoginRefused);
+  });
+
+  it("treats a 400 whose body is not JSON as a broken site", async () => {
+    const page = fakePage(400);
+    const realWait = page.waitForResponse;
+    page.waitForResponse = async (match) => {
+      const response = await realWait(match);
+      return {
+        ...response,
+        json: async () => {
+          throw new SyntaxError("Unexpected token <");
+        },
+      };
+    };
+
+    await expect(signInResident(page, "a", "b")).rejects.toThrow(
+      "the resident login answered 400",
     );
   });
 
@@ -128,5 +194,155 @@ describe("signInResident", () => {
     await expect(signInResident(fakePage(429), "a", "b")).rejects.toThrow(
       "the resident login answered 429",
     );
+  });
+});
+
+// A page with just what checkAdmin uses, on the admin login page after the
+// form was sent. With alert, the login page came back with that alert;
+// without it, the dashboard opened.
+function fakeAdminPage(alert) {
+  const onLoginPage = alert !== undefined;
+  return {
+    goto: async () => ({ status: () => 200 }),
+    fill: async () => {},
+    uncheck: async () => {},
+    click: async () => {},
+    locator: (selector) => ({
+      first: () => ({
+        waitFor: async () => {},
+        textContent: async () => (selector === ".flash_alert" ? alert : ""),
+      }),
+      count: async () =>
+        selector === "#admin_user_password" && onLoginPage ? 1 : 0,
+      textContent: async () => "",
+    }),
+  };
+}
+
+describe("checkAdmin", () => {
+  // Devise's words for a wrong email or a wrong password
+  // (config/locales/devise.en.yml, invalid and not_found_in_database).
+  it("says the login was refused when the login page comes back saying the email or password is wrong", async () => {
+    const attempt = checkAdmin(
+      fakeAdminPage("  Invalid Email or password.\n"),
+      "https://admin.comeals.com",
+      "a",
+      "b",
+    );
+
+    await expect(attempt).rejects.toThrow(LoginRefused);
+    await expect(attempt).rejects.toThrow(ADMIN_REFUSED);
+    expect(ADMIN_REFUSED).toBe(
+      "the site refused the admin login (it says the email or the " +
+        "password is wrong) — check SMOKE_ADMIN_* (or ADMIN_*) in .env and " +
+        "the GitHub secrets",
+    );
+  });
+
+  // The sign-in worked but the next page did not keep it (a broken
+  // session cookie, say): Devise sends the browser back to the login page
+  // with another alert. Every admin is locked out, so the site is broken.
+  it("treats the login page coming back with any other alert as a broken site", async () => {
+    const attempt = checkAdmin(
+      fakeAdminPage("You need to sign in before continuing."),
+      "https://admin.comeals.com",
+      "a",
+      "b",
+    );
+
+    await expect(attempt).rejects.toThrow(
+      'the admin login page came back with "You need to sign in before ' +
+        'continuing." — the site did not keep the sign-in',
+    );
+    await expect(attempt).rejects.not.toThrow(LoginRefused);
+  });
+});
+
+// bin/smoke's exit codes, which bin/deploy, the Deploy and Rollback
+// workflows and bin/staging-rehearsal read (the top of bin/smoke).
+describe("EXIT", () => {
+  it("has one code for a pass, one for a broken site, one for a refused login", () => {
+    expect(EXIT).toEqual({ passed: 0, broken: 1, loginRefused: 2 });
+  });
+});
+
+describe("unlessRefused", () => {
+  it("returns what the checks return when the login works", async () => {
+    const refused = [];
+
+    expect(await unlessRefused(refused, async () => ["a", "b"])).toEqual([
+      "a",
+      "b",
+    ]);
+    expect(refused).toEqual([]);
+  });
+
+  // The rest of the smoke test still runs: a refused resident login must
+  // not hide a broken admin site.
+  it("notes a refused login, and returns no passed checks", async () => {
+    const refused = [];
+
+    const passed = await unlessRefused(refused, async () => {
+      throw new LoginRefused("refused, check X");
+    });
+
+    expect(passed).toEqual([]);
+    expect(refused).toEqual(["refused, check X"]);
+  });
+
+  it("lets any other failure through", async () => {
+    await expect(
+      unlessRefused([], async () => {
+        throw new Error("the calendar did not render");
+      }),
+    ).rejects.toThrow("the calendar did not render");
+  });
+});
+
+describe("countedProblems", () => {
+  const base = "https://comeals.com";
+  const refusedAnswer = {
+    text: "console error: Failed to load resource: the server responded with a status of 400 (Bad Request)",
+    url: `${base}/api/v1/residents/token`,
+  };
+  const other400 = {
+    text: refusedAnswer.text,
+    url: `${base}/api/v1/browser-reports`,
+  };
+  const appError = { text: "page error: boom", url: "" };
+
+  // The browser logs the refused answer itself, with the token address
+  // as the line's location. That line is the refusal, not a second
+  // problem.
+  it("drops the browser's line for the refused resident login", () => {
+    expect(countedProblems([refusedAnswer, other400, appError], true)).toEqual([
+      other400.text,
+      appError.text,
+    ]);
+  });
+
+  it("keeps that line when the resident login was not refused", () => {
+    expect(countedProblems([refusedAnswer], false)).toEqual([
+      refusedAnswer.text,
+    ]);
+  });
+});
+
+describe("refusedReport", () => {
+  it("says which logins were refused, that this is not a pass, and what to check", () => {
+    expect(
+      refusedReport("https://comeals.com", [
+        "resident refused",
+        "admin refused",
+      ]),
+    ).toEqual([
+      "SMOKE LOGIN REFUSED against https://comeals.com:",
+      "  resident refused",
+      "  admin refused",
+      "The site answered, and every check that could run passed, but it " +
+        "refused a login, so the checks behind that login did not run. " +
+        "This is not a pass. Check the SMOKE_* credentials. If they are " +
+        "right, sign in by hand: if that fails too, the site is broken.",
+    ]);
   });
 });

@@ -416,6 +416,57 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(rollbacks).to eq(["heroku rollback #{prod}"])
     end
 
+    # bin/smoke ends with 2 when production answered and refused a smoke
+    # login: the secrets are stale, and every smoke check that could run
+    # passed. Rolling back would undo a good release (before this, it did).
+    # The other checks still run and still roll back a broken release, and
+    # the run still fails, so the release note stays a draft.
+    context 'when production refuses a smoke login' do
+      before { sandbox.rule('node', 'tests/smoke/smoke.js', exit: 2) }
+
+      it 'does not roll back, runs the other checks, and fails at the end saying to check the secrets' do
+        result = watch
+
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to include(
+          'Production refused a smoke login. Every smoke check that could run passed, so this is not a reason to ' \
+          "roll back. The other checks go on.\n"
+        )
+        expect(result.out).to end_with(
+          "No worrying lines in the production logs.\n" \
+          'Production passed every other check, but the smoke test could not sign in, so this run is not a pass ' \
+          'and the release stays a draft. Check the SMOKE_* secrets of the GitHub environment production, then ' \
+          "run: bin/smoke https://comeals.com\n"
+        )
+        expect(heroku_calls.grep(/deploy:verify/).map { it[/deploy:\w+/] })
+          .to eq(%w[deploy:verify_solid_queue deploy:verify_recurring_job])
+        expect(sandbox.calls_to('sleep').map(&:args)).to eq([['180']])
+        expect(rollbacks).to be_empty
+      end
+
+      it 'still rolls back when another check fails' do
+        sandbox.rule('heroku', "run --exit-code bin/rake deploy:verify_solid_queue #{prod}", exit: 1)
+
+        result = watch
+
+        expect(result.exitstatus).to eq(1)
+        expect(result.out).to include('Solid Queue is not running on production. Rolling back.')
+        expect(rollbacks).to eq(["heroku rollback #{prod}"])
+      end
+    end
+
+    # Any code but 0 and 2 is a broken site, or a smoke test that could
+    # not run, and rolls back as before.
+    it 'rolls back when the smoke test ends with any other code' do
+      sandbox.rule('node', 'tests/smoke/smoke.js', exit: 127)
+
+      result = watch
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include('Smoke failed on production. Rolling back.')
+      expect(rollbacks).to eq(["heroku rollback #{prod}"])
+    end
+
     it 'does not roll back only the code when the release added a migration' do
       sandbox.rule('node', 'tests/smoke/smoke.js', exit: 1)
       sandbox.rule('git', diff, out: "db/migrate/20261015000000_add_thing.rb\n")

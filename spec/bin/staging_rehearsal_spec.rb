@@ -564,8 +564,26 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
 
     expect(result.exitstatus).to eq(1)
     expect(result.out).to include('login page failed')
+    expect(result.out).to include('The read-only smoke failed on staging.')
     expect(sandbox.call_lines('node')).to eq(['node tests/smoke/smoke.js'])
     expect(last_web_scale).to eq('1')
+  end
+
+  # The rehearsal makes the smoke resident itself, just before. So a
+  # refused login on staging is not stale credentials: logins are broken
+  # on the candidate, or the seed did not save the resident.
+  it 'stops, and says the login or the seed is broken, when staging refuses the smoke resident' do
+    sandbox.rule('node', 'tests/smoke/smoke.js', exit: 2)
+
+    result = rehearse
+
+    expect(result.exitstatus).to eq(1)
+    expect(result.out).to include(
+      'Staging refused the smoke resident this rehearsal just made. This is not a problem with the credentials: ' \
+      'logins are broken on the candidate, or the seed did not save the resident.'
+    )
+    expect(result.out).not_to include('Read-only smoke passed')
+    expect(sandbox.call_lines('node')).to eq(['node tests/smoke/smoke.js'])
   end
 
   it 'stops when the aggressive smoke fails' do

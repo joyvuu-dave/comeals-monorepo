@@ -1461,6 +1461,37 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     expect_production(maintenance: false, web: 1, pushed: true)
   end
 
+  # bin/smoke ends with 2 when the site answered and refused a smoke
+  # login. Every check that could run passed, so the site is not called
+  # broken and there is nothing to roll back; but the checks behind the
+  # login did not run, so the deploy is not complete either. State left:
+  # no maintenance, web at 1, new code live.
+  it 'fails and says to check the smoke credentials, not to roll back, when the smoke login is refused' do
+    deploy.rule('smoke', 'comeals\\.com', exit: 2, stdout: "SMOKE LOGIN REFUSED against https://comeals.com:\n")
+
+    result = deploy.run('--yes')
+
+    expect(result.status).to eq(1)
+    expect(result.output).to include(
+      'SMOKE LOGIN REFUSED against https://comeals.com:',
+      'The site refused a smoke login. Every smoke check that could run passed, so do not roll back for this. ' \
+      'Check the SMOKE_* credentials (in .env: SMOKE_* or RESIDENT_*/ADMIN_*), then run: bin/smoke https://comeals.com'
+    )
+    expect(result.output).not_to include('Deploy complete!', 'Roll back.', recovery_banner)
+    expect_production(maintenance: false, web: 1, pushed: true)
+  end
+
+  # Any code but 0 and 2 is a broken site, or a smoke test that could
+  # not run; either way the deploy is not known to work.
+  it 'says to roll back when the smoke test ends with any other code' do
+    deploy.rule('smoke', 'comeals\\.com', exit: 127)
+
+    result = deploy.run('--yes')
+
+    expect(result.status).to eq(1)
+    expect(result.output).to include('SMOKE TEST FAILED — the deployed app is broken. Roll back.')
+  end
+
   # Everything the run prints, the build output Heroku sends back through
   # git push and the release phase output included, also goes to one file
   # per run. The person running the deploy keeps it.
