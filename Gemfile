@@ -116,7 +116,11 @@ end
 group :test do
   # Measures which lines of bin/deploy run under spec/bin/deploy_spec.rb,
   # which holds them at 100% on its own, apart from the SimpleCov result.
-  gem 'bashcov', require: false
+  # Held at 4.0.0: with 4.0.1 (a new lexer for multiline strings and
+  # heredocs), spec/bin/check_spec.rb fails, because bashcov then asks
+  # for blank lines, comments, "fi" and "}" in bin/check to run, and bash
+  # never traces those lines.
+  gem 'bashcov', '4.0.0', require: false
   gem 'simplecov', require: false
 end
 
