@@ -1194,6 +1194,17 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
                                  'BROWSER_OUTCOME' => '${{ steps.browser.outcome }}')
     end
 
+    # The steps before the restore have time limits so a slow download
+    # cannot use up the job. Even when every one of them uses all of its
+    # limit, the job keeps the 15 minutes it had for the restore, the
+    # rollback and what follows before #251 and #248 added steps in front.
+    it 'keeps 15 minutes for the rollback after the steps before it use all their time' do
+      job = YAML.safe_load_file(Rails.root.join('.github/workflows/rollback.yml').to_s)['jobs']['rollback']
+      before_restore = steps.take_while { it['id'] != 'restore' }
+
+      expect(job['timeout-minutes'] - before_restore.sum { it['timeout-minutes'].to_i }).to be >= 15
+    end
+
     # A run that could not smoke the site must not look like one that did.
     # That includes a run where the step that says whether it can run
     # failed itself: then it set no reason, so the step gives its own.

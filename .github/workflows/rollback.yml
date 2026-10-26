@@ -68,13 +68,15 @@ jobs:
     runs-on: ubuntu-24.04
     # The restore and the heroku rollback run in the first minutes (the
     # database is about 33 MB); everything after them is bookkeeping. If
-    # a later step hangs, fail in 22 minutes — production is already
+    # a later step hangs, fail in 35 minutes — production is already
     # fixed by then — instead of holding the shared "deploy" concurrency
-    # group for 6 hours. It was 15 until the smoke test's setup moved
-    # before the rollback (#251): on a slow day that setup and the
-    # PostgreSQL client may use up to 12 minutes before the rollback
-    # starts, and the rollback must still have time to finish.
-    timeout-minutes: 22
+    # group for 6 hours. It was 15 until steps with their own time limits
+    # were added before the restore: the smoke test's setup (#251) and,
+    # when a backup is restored, the PostgreSQL client and Ruby (#248).
+    # On a slow day those use up to 17 minutes before the rollback
+    # starts. 35 keeps the old 15 for the restore, the rollback and what
+    # follows, plus a few minutes for the short steps with no limit.
+    timeout-minutes: 35
     environment: production
     # The smoke test drives the Google Chrome the runner image already
     # has, not Playwright's Chromium: that one needs system packages from
