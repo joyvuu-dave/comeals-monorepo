@@ -8,7 +8,7 @@ require 'bigdecimal'
 # numbers. If the two disagree, either the app or the rules are wrong.
 #
 # It was written from two documents and nothing else:
-#   - CLAUDE.md, "Money Handling Standards" (rules 1 to 11 and "The Money
+#   - AGENTS.md, "Money Handling Standards" (rules 1 to 11 and "The Money
 #     Model")
 #   - MODELS.md, "Financial Models" (the flow diagram, "Signs", "The ledger
 #     grain"), "MealCharge", "The Multiplier System" and "Where the money
@@ -70,7 +70,7 @@ require 'bigdecimal'
 # 9. The unit cost a screen shows is not part of any line, so this oracle
 #    does not compute it.
 module PlainLedger
-  # "The ledger grain is 10^-8 dollars" (CLAUDE.md, money rule 4).
+  # "The ledger grain is 10^-8 dollars" (AGENTS.md, money rule 4).
   UNITS_PER_DOLLAR = 100_000_000
   GRAIN = BigDecimal('0.00000001')
   CENT = BigDecimal('0.01')
@@ -110,7 +110,7 @@ module PlainLedger
 
   # Given { resident_id => BigDecimal } that sums to exactly zero, the
   # whole-cent amounts { resident_id => BigDecimal } that also sum to
-  # exactly zero, by CLAUDE.md money rule 5.
+  # exactly zero, by AGENTS.md money rule 5.
   def self.round_to_cents(raw)
     raw.each_value { |amount| bigdecimal!(amount) }
     check_sums_to_zero(raw, 'balances')
@@ -214,7 +214,7 @@ module PlainLedger
     weights = ordered.map { |bill| units_of(bill.fetch(:amount), 'bill amount') }
     shares = subsidized ? largest_remainder_split(effective_cost, weights) : weights
 
-    # Signs: "A credit (cooking) is positive" (CLAUDE.md, money rule 11).
+    # Signs: "A credit (cooking) is positive" (AGENTS.md, money rule 11).
     ordered.zip(shares).map { |bill, units| { resident_id: bill.fetch(:resident_id), units: units } }
   end
 
@@ -234,7 +234,7 @@ module PlainLedger
     ordered = eaters.sort_by { |eater| eater.fetch(:key) }
     shares = largest_remainder_split(effective_cost, ordered.map { |eater| eater.fetch(:weight) })
 
-    # Signs: "a debit (eating) is negative" (CLAUDE.md, money rule 11).
+    # Signs: "a debit (eating) is negative" (AGENTS.md, money rule 11).
     ordered.zip(shares).map { |eater, units| { resident_id: eater.fetch(:resident_id), units: -units } }
   end
 

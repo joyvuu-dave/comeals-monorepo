@@ -9,7 +9,7 @@ class ApplicationController < ActionController::Base
   # never has to guess. Setting it to the boolean (not the token) keeps the
   # secret out of anything that dumps Current.
   before_action :expose_read_only_admin_token
-  # Every wall-clock time is read in the community's zone (CLAUDE.md). The
+  # Every wall-clock time is read in the community's zone (AGENTS.md). The
   # API has its own wrapper (ApiController#set_community_timezone); this
   # one covers admin, where a typed time is parsed and a stored time is
   # shown in Time.zone. Without it both used the app's fixed zone

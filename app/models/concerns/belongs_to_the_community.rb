@@ -2,7 +2,7 @@
 # frozen_string_literal: true
 
 # Every row in these tables points at the one Community row. The app serves
-# exactly one community (see CLAUDE.md: the communities table can never hold
+# exactly one community (see AGENTS.md: the communities table can never hold
 # a second row), so nothing should ever have to pass community_id around.
 # This concern fills it in. Forms, controllers, factories, and rake tasks can
 # all leave it out.

@@ -14,7 +14,7 @@
 #   "must be whole cents" error the field still shows the typo the error
 #   names, not a rounded value that looks valid.
 # - number_to_rounded rounds with BigDecimal math. format('%.2f', ...)
-#   would convert through Float, which money never touches (CLAUDE.md).
+#   would convert through Float, which money never touches (AGENTS.md).
 module MoneyFieldHelper
   def money_field_value(amount, blank_when_zero: false)
     return nil if amount.nil?

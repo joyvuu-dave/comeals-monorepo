@@ -45,7 +45,7 @@ RSpec.describe 'the calendar cache after a time zone change' do
     expect(Rails.cache.exist?(community.calendar_cache_key(2026, 3))).to be(false)
   end
 
-  # CLAUDE.md, money rule 8: the month is cached for one hour.
+  # AGENTS.md, money rule 8: the month is cached for one hour.
   it 'keeps the month for one hour' do
     travel_to(Time.zone.local(2026, 4, 15, 12, 0)) { month_timezone }
     key = community.calendar_cache_key(2026, 4)

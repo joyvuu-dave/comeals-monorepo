@@ -294,7 +294,7 @@ module Api
       # on success; a refusal by a model guard or a validation raises,
       # unwinds the transaction, and is rendered here as a 400 with the
       # record's own sentences. Every single-record write action goes
-      # through here, so a new one cannot skip the lock (CLAUDE.md, money
+      # through here, so a new one cannot skip the lock (AGENTS.md, money
       # rule 9) or answer a refusal with a 500.
       #
       # before_settled_check is with_meal_lock's: only a guest add passes

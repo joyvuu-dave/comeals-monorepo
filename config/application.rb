@@ -68,7 +68,7 @@ module Comeals
     config.middleware.insert_before Rack::Sendfile, AssetCacheControl
 
     # Dump the schema as SQL. The database is the last line of defense
-    # (CLAUDE.md): reconciled-meal immutability lives in triggers, and
+    # (AGENTS.md): reconciled-meal immutability lives in triggers, and
     # schema.rb cannot represent triggers, so a schema.rb-built database
     # would lack them, with no error or warning (issue #26).
     config.active_record.schema_format = :sql

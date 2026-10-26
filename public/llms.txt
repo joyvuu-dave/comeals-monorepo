@@ -12,7 +12,7 @@ The app at https://comeals.com is a React single-page app. Its pages hold no tex
 
 - [Source code](https://github.com/joyvuu-dave/comeals-monorepo): Rails API plus React app in one repository.
 - [Architecture decisions](https://github.com/joyvuu-dave/comeals-monorepo/tree/main/docs/adr): the records behind the money rules, locking, and admin access.
-- [CLAUDE.md](https://github.com/joyvuu-dave/comeals-monorepo/blob/main/CLAUDE.md): the project's rules in one file, including how money is handled.
+- [AGENTS.md](https://github.com/joyvuu-dave/comeals-monorepo/blob/main/AGENTS.md): the project's rules in one file, including how money is handled.
 
 ## Optional
 

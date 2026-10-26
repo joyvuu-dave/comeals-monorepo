@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# The rounding rule, pinned one case at a time (CLAUDE.md, money rule 5:
+# The rounding rule, pinned one case at a time (AGENTS.md, money rule 5:
 # truncate toward zero, then hand the leftover pennies to the largest
 # remainders, ties to the lowest resident id).
 #

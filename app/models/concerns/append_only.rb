@@ -3,7 +3,7 @@
 
 # Financial records are append-only: once written they are never edited
 # or deleted through the application — corrections settle as new entries
-# in the next reconciliation (CLAUDE.md, money rule 7). Including this
+# in the next reconciliation (AGENTS.md, money rule 7). Including this
 # and declaring the two refusal messages installs the guards:
 #
 #   include AppendOnly

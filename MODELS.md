@@ -49,7 +49,7 @@ the `prevent_community_delete` database trigger both refuse to delete the row.
 The `before_destroy` is `prepend: true`, so it refuses before the dependent
 cascades delete anything (#26).
 `Community.instance` is how the rest of the app reads it. Controllers do not
-scope queries by community — see ADR 0002 and CLAUDE.md.
+scope queries by community — see ADR 0002 and AGENTS.md.
 
 ```
 Community
@@ -255,7 +255,7 @@ the resident. Show it only through `BalanceDisplayHelper#balance_tag`.
 
 **The plain ledger is the stronger oracle.** `spec/support/oracle/plain_ledger.rb`
 is a second copy of the balance arithmetic, written on 2026-09-09 from
-CLAUDE.md and this file alone by an agent that was told not to open the app,
+AGENTS.md and this file alone by an agent that was told not to open the app,
 so it cannot share a misreading with `MealLedger` or `Settlement`. It takes
 plain hashes, not rows. Two specs compare the app against it.
 `spec/services/meal_ledger_against_plain_ledger_spec.rb` feeds both sides 400
@@ -306,7 +306,7 @@ Every share above is allocated, never divided. See "The ledger grain".
 Signs: positive means the community owes the person. A credit is positive, a
 debit is negative. This is set once in `MealLedger` ("Signs" section) and
 every stored amount inherits it. No screen shows the sign itself; see
-CLAUDE.md money rule 11.
+AGENTS.md money rule 11.
 
 ### The ledger grain
 
@@ -350,7 +350,7 @@ to read. No line is computed from it, so a debit of an eater with
 multiplier 2 can differ from twice the unit cost by one unit.
 
 Rounding to cents happens once, at settlement, on the per-resident totals,
-by the same largest-remainder method at the cent (CLAUDE.md money rule 5).
+by the same largest-remainder method at the cent (AGENTS.md money rule 5).
 
 ### Bill
 
@@ -1472,7 +1472,7 @@ largest-remainder method, so the rounded balances sum to exactly zero.
   how a share is split). A settled meal with attendance but no
   lines (settled before 2026-08-02) returns nil and the screen shows nothing.
 - `spec/support/oracle/plain_ledger.rb` — the test oracle, not production:
-  a second copy of the arithmetic written from this file and CLAUDE.md by
+  a second copy of the arithmetic written from this file and AGENTS.md by
   someone who had not read the code. Compared in
   `spec/services/meal_ledger_against_plain_ledger_spec.rb` and
   `spec/tasks/stored_ledger_against_plain_ledger_spec.rb`. Never edit it to
@@ -1537,7 +1537,7 @@ that waited for a write that came first finds the meal row changed: at
 SERIALIZABLE it fails as a conflict and is tried again with a fresh
 snapshot, and at READ COMMITTED (psql) it reads the new row. `Meal` freezes
 its own `cancelled_at`, `cap`, `date`, and `reconciliation_id`, backed by
-`meals_protect_settled`. See ADR 0003 and CLAUDE.md.
+`meals_protect_settled`. See ADR 0003 and AGENTS.md.
 
 The protect, reject and insert triggers all step aside when the session
 setting `comeals.allow_settled_writes` is `on`. That is for deliberate

@@ -33,7 +33,7 @@
 # always being yesterday. Reconciliation refuses to be created any other
 # way (Reconciliation::NotSettled).
 #
-# The money rules this enforces are in CLAUDE.md ("Money Handling
+# The money rules this enforces are in AGENTS.md ("Money Handling
 # Standards"); the concurrency rules are in docs/adr/0003 and 0005.
 class Settlement
   extend T::Sig

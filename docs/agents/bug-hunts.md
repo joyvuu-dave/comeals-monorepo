@@ -1,7 +1,7 @@
 # Bug hunt log
 
 One entry per run of the `bug-hunt` skill
-(`.claude/skills/bug-hunt/SKILL.md`), newest first. Say which hunts ran
+(`.agents/skills/bug-hunt/SKILL.md`), newest first. Say which hunts ran
 and what they found, including "found nothing". The next run reads this
 to pick the hunt that has waited longest.
 
@@ -85,7 +85,7 @@ branch, none fixed in the hunt. The branches:
   inside it (`Settlement.settle!` stops at the commit; `run!` keeps
   both). Also a green pin:
   `spec/db/meal_charges_sum_zero_reparent_spec.rb`. Also
-  noticed: the concurrency sentence in CLAUDE.md overstates (logout and
+  noticed: the concurrency sentence in AGENTS.md overstates (logout and
   the two password paths answer 409 without a retry); `settlement.rb:176`
   divides on the money path (exact, but ADR 0008 says to look for one);
   the deletion-policy list omits `meal_charges` and `mail_deliveries`.
@@ -181,10 +181,10 @@ run.
 ## 2026-08-26 (invariant, delta)
 
 Hunt run: invariant, as a delta on the 2026-08-25 run — every rule
-sentence in CLAUDE.md and the ADRs added or changed since (three), and
+sentence in AGENTS.md and the ADRs added or changed since (three), and
 every row whose enforcer changed since (four).
 
-- CLAUDE.md time-zone bullet: **false since 6a4f6c9.** It said the
+- AGENTS.md time-zone bullet: **false since 6a4f6c9.** It said the
   community zone applies "never in a job, a rake task, or admin"; admin
   is wrapped by `ApplicationController#use_community_timezone` now.
   Sentence fixed. The `bin/check` grep it names covers what it says
@@ -405,7 +405,7 @@ Found nothing.
 
 ## 2026-08-25
 
-Hunt run: invariant, all the way through (108 sentences in CLAUDE.md and
+Hunt run: invariant, all the way through (108 sentences in AGENTS.md and
 the seven ADRs). Rows: `docs/agents/invariant-hunt-2026-08-25.md`.
 
 - Found: a rotation recolored by a delete in another month can be served
@@ -435,7 +435,7 @@ Hunts run: money (by hand, before the skill existed), cache, time, dead
 column.
 
 - Money: `MealLedger`, `Settlement`, `allocate_to_cents`, and the
-  settled-child trigger checked against every rule in CLAUDE.md. Found
+  settled-child trigger checked against every rule in AGENTS.md. Found
   nothing.
 - Cache: `meal-<id>` was cached and only its own writes cleared it. Red
   spec `spec/requests/api/v1/stale_meal_form_cache_spec.rb`. Fixed by

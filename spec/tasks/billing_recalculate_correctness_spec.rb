@@ -8,7 +8,7 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 # (spec/support/oracle/plain_ledger.rb, written from the rules) and against
 # balances worked out by hand.
 #
-# One dataset, covering the money edge cases CLAUDE.md names: capped and
+# One dataset, covering the money edge cases AGENTS.md names: capped and
 # subsidized meals, two cooks, no_cost bills, guests, and a child-only
 # (zero-multiplier) meal. Random ledgers through the same path are in
 # spec/tasks/stored_ledger_against_plain_ledger_spec.rb.

@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# Every wall-clock time is read in the community's zone (CLAUDE.md). The
+# Every wall-clock time is read in the community's zone (AGENTS.md). The
 # API gets that from ApiController#set_community_timezone; admin had no
 # such wrapper, so a time typed into an admin form was parsed in the app's
 # fixed zone (Pacific), and a time shown on an admin page was in it too.

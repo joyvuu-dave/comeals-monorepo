@@ -212,7 +212,7 @@ What it buys:
 
 Size: about 400 rows per settlement (30 residents, 13 meals), ~5,000 a year.
 
-**The objection, and the answer.** CLAUDE.md rule 8 bans denormalized caches for
+**The objection, and the answer.** AGENTS.md rule 8 bans denormalized caches for
 financial data. The target of that rule is a _mutable value that can drift_ — a
 counter, a running total, anything `counter_culture` used to do. `meal_charges`
 is the opposite: written once inside the settlement transaction, never updated,

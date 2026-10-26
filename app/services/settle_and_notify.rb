@@ -127,7 +127,7 @@ class SettleAndNotify
   # not only conflicts: a lock wait that ran out, a statement cancelled
   # by statement_timeout (the refresh's DEFERRABLE read waits against
   # it), or a bug. Each step has a backup: the calendar months are keyed
-  # by a version read from the rows (CLAUDE.md, rule 8), a client that
+  # by a version read from the rows (AGENTS.md, rule 8), a client that
   # missed a push fetches again when it reconnects, and the balances are
   # a cache the nightly job rebuilds (money rule 6).
   sig { params(step: String, blk: T.proc.void).void }

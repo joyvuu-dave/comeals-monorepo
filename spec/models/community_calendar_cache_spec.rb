@@ -4,7 +4,7 @@ require 'rails_helper'
 
 # The two pieces of the calendar cache that live on Community: which
 # months a changed day reaches, and the version a stored month is read
-# under (CLAUDE.md, "No denormalized counters or caches").
+# under (AGENTS.md, "No denormalized counters or caches").
 RSpec.describe Community do
   let(:community) { create(:community) }
 

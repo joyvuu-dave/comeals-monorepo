@@ -72,7 +72,7 @@ about.
 
 ## First choice: a correction
 
-You don't edit the settled ledger. You add to it (CLAUDE.md money rule 7).
+You don't edit the settled ledger. You add to it (AGENTS.md money rule 7).
 
 If a settled dinner was wrong — a cook's cost, who ate, an eater's price,
 a guest — a superuser corrects the dinner (ADR 0011 rule 6). The

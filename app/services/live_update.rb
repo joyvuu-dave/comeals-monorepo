@@ -61,7 +61,7 @@
 # failure (spec/requests/api/v1/live_update_cache_clear_refused_spec.rb).
 # So every step of the flush reports its failure (Rails.error.report)
 # and goes on. A missed clear costs nothing: the month entry is keyed by
-# a version read from the rows (CLAUDE.md, rule 8), so a stale entry is
+# a version read from the rows (AGENTS.md, rule 8), so a stale entry is
 # a miss anyway. A client that missed a push refetches on its next
 # reconnect (data_store_app.js handleReconnect).
 module LiveUpdate

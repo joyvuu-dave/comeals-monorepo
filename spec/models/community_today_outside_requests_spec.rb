@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# "Every wall-clock time is read in the community's zone" (CLAUDE.md). Inside
+# "Every wall-clock time is read in the community's zone" (AGENTS.md). Inside
 # an API request that is true by ApiController#set_community_timezone, which
 # wraps the call in Time.use_zone. Jobs, rake tasks, and admin have no such
 # wrapper, so Time.zone there is the app's fixed default (Pacific). These

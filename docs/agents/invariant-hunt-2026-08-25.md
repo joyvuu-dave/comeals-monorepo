@@ -1,8 +1,8 @@
 # Invariant hunt, 2026-08-25
 
-Every sentence in `CLAUDE.md` and `docs/adr/*.md` that says never, always,
+Every sentence in `AGENTS.md` and `docs/adr/*.md` that says never, always,
 must, only, or exactly, with the code that enforces it, one path that
-skips that code, and a verdict. Method: `.claude/skills/bug-hunt/SKILL.md`.
+skips that code, and a verdict. Method: `.agents/skills/bug-hunt/SKILL.md`.
 Four read-only reviewers produced the rows; the two findings were then
 proved with red specs (see `bug-hunts.md`, 2026-08-25).
 
@@ -37,11 +37,11 @@ where the rule is not enforced; each is discussed under "Findings".
 
 ## Suspects that are rule gaps, not wrong results (no spec; David decides)
 
-- CLAUDE.md "never pass `community:` from a rake task": the two test
+- AGENTS.md "never pass `community:` from a rake task": the two test
   fixture tasks (`lib/tasks/test/*.rake`) pass it about 30 times. Harmless
   (`||=` and one row). Either exempt test tasks in the sentence or clean
   them.
-- CLAUDE.md "never `Time.zone.today`": `db/seeds.rb` (11 sites) and
+- AGENTS.md "never `Time.zone.today`": `db/seeds.rb` (11 sites) and
   `lib/tasks/test/seed_integration.rake` read the app zone; both are
   outside the `bin/check` grep. Dev and test data only.
 - ADR 0001: money strings are typed only in the three `.ts` files;
@@ -76,7 +76,7 @@ where the rule is not enforced; each is discussed under "Findings".
 
 ## Rows
 
-### CLAUDE.md, top through Code Standards (reviewer 1)
+### AGENTS.md, top through Code Standards (reviewer 1)
 
 | #   | Sentence                                                                                                                    | Enforcer                                                                                                                                                                                                                                                                                                       | Skipping path                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | Verdict                                                                                                                                                                                                                                                                                                                                                                                  |
 | --- | --------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -112,7 +112,7 @@ Also found while checking, outside the rows: `lib/tasks/test/*.rake` are the onl
 
 SUSPECTS: 2 — rows 3, 17
 
-### CLAUDE.md, Architecture Decisions to the end (reviewer 2)
+### AGENTS.md, Architecture Decisions to the end (reviewer 2)
 
 | #   | Sentence                                                                                                        | Enforcer                                                                                                                                                                                                                                                                                    | Skipping path                                                                                                                                                                                                                                                                                                                                                                         | Verdict                                                                                                                                                                                    |
 | --- | --------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |

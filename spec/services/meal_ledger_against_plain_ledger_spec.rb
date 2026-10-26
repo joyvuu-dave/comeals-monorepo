@@ -4,7 +4,7 @@ require 'rails_helper'
 require Rails.root.join('spec/support/oracle/plain_ledger')
 
 # The independent oracle. PlainLedger (spec/support/oracle/plain_ledger.rb)
-# was written from CLAUDE.md and MODELS.md alone, by an agent that was told
+# was written from AGENTS.md and MODELS.md alone, by an agent that was told
 # not to read the app, so it cannot share a misreading with MealLedger and
 # Settlement. This spec feeds both the same ledgers and compares every
 # number. A disagreement is one of three things: a bug here, a bug in the
@@ -54,7 +54,7 @@ RSpec.describe MealLedger do
       end
     end
 
-    # The edges CLAUDE.md names, one ledger each, so a disagreement says
+    # The edges AGENTS.md names, one ledger each, so a disagreement says
     # which rule it is about.
     def meal(index, cap: nil, bills: [], eaters: [], guests: [])
       meal = Meal.new(id: index, date: Date.new(2026, 4, 1) + index, cap: cap)

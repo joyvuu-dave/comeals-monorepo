@@ -50,7 +50,7 @@ Each edit names one cook. `from` is that cook's bill as the page saw it,
 and `to` is the bill the person wants. An add has no `from` and a remove
 has no `to`. `op` says which of the three it is. The sides alone would
 tell, but naming the op makes a request easy to read and its errors
-easy to word, and explicit beats implicit (CLAUDE.md). A cook the edits
+easy to word, and explicit beats implicit (AGENTS.md). A cook the edits
 do not name is never touched, so a page cannot remove a cook it never
 saw.
 

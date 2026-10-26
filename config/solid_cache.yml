@@ -2,7 +2,7 @@
 #
 # There is deliberately no `database:` key here. That key is what makes
 # solid_cache open a second database connection; without it, it uses the
-# primary connection, which is what we want — CLAUDE.md, "The production
+# primary connection, which is what we want — AGENTS.md, "The production
 # cache is solid_cache, in the primary database", says why. The table's
 # columns and indexes were copied from the gem's schema template
 # (solid_cache 1.0.10); keep db/structure.sql in step if it changes.

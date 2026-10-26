@@ -136,7 +136,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   end
 
   # After a deploy, the migrations production ran are deleted and
-  # db/structure.sql is the record of the schema (CLAUDE.md). A deleted
+  # db/structure.sql is the record of the schema (AGENTS.md). A deleted
   # migration changes nothing in the database: its version stays in
   # schema_migrations, and the release phase's db:migrate has nothing to
   # run for it. So deleting one alone is a push deploy, and a new

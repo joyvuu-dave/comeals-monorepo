@@ -10,7 +10,7 @@
 # Date.parse and Date.iso8601 alone take more, and some of it has no
 # year or no month. They fill the missing part in from the machine's own
 # clock, in the machine's own zone, not from the community's today
-# (CLAUDE.md, "Every wall-clock time is a community setting"):
+# (AGENTS.md, "Every wall-clock time is a community setting"):
 # Date.parse reads "12" as the 12th of this month, and Date.iso8601 reads
 # "--10-12" as October 12 of this year and "2026-10" as October 1. Until
 # 2026-10-16 the calendar read its date with Date.parse and the

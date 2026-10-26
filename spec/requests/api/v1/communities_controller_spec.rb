@@ -116,7 +116,7 @@ RSpec.describe 'Communities API' do
     # start with no year or no month, such as "12", "--10-12", "Sunday"
     # or "October", and fills in the rest from the machine's own clock,
     # in the machine's own zone, not from the community's today
-    # (CLAUDE.md, "Every wall-clock time is a community setting").
+    # (AGENTS.md, "Every wall-clock time is a community setting").
     # travel_to cannot change that clock: Ruby's date library reads it
     # inside C. Found by mutant, which swapped in Date.iso8601 and three
     # other parsers that refuse "12". Date.iso8601 alone is not enough:

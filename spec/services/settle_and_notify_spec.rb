@@ -139,7 +139,7 @@ RSpec.describe SettleAndNotify do
   # (the nightly refresh job running at the same moment) is not the
   # settlement's: it is tried again, and if it keeps failing it is
   # reported and the call goes on to mail the cooks — the balances are a
-  # cache the nightly job rebuilds (CLAUDE.md, money rule 6), and raising
+  # cache the nightly job rebuilds (AGENTS.md, money rule 6), and raising
   # would tell the caller "nothing was saved" about a settlement that is
   # in the database. Found by spec/concurrency/request_storm_spec.rb.
   describe 'when the balance refresh conflicts after the settlement committed' do

@@ -322,7 +322,7 @@ check_prettier() {
   fi
 }
 
-# CLAUDE.md: every wall-clock time is read in the community's zone, through
+# AGENTS.md: every wall-clock time is read in the community's zone, through
 # Community#today. Time.zone is the app's fixed default zone (and only the
 # community's inside an API request, where ApiController wraps the call),
 # so a date read from it is wrong for jobs and admin whenever the two zones
@@ -381,7 +381,7 @@ check_new_js_files() {
   fi
 }
 
-# CLAUDE.md bans FIXME/TODO/HACK markers in financial code: unfinished
+# AGENTS.md bans FIXME/TODO/HACK markers in financial code: unfinished
 # work must be finished or become a tracked issue, not a comment. This
 # greps the money-path directories so a marker fails the check run.
 check_todo_markers() {

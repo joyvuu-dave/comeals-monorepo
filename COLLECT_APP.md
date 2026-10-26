@@ -61,7 +61,7 @@ The token has no expiry. Revocation happens when the resident's password changes
 
 **All money values in JSON are string-encoded decimals.** Examples: `"42.50"`, `"7.08"`, `"-23.10"`.
 
-- **JSON floats are unacceptable for financial data** — they lose precision with no error, and round in ways nobody expects. Violates CLAUDE.md's "never use Float for money" rule at the wire-format level.
+- **JSON floats are unacceptable for financial data** — they lose precision with no error, and round in ways nobody expects. Violates AGENTS.md's "never use Float for money" rule at the wire-format level.
 - **Integer cents were considered and rejected.** Per-meal `unit_cost` is an intermediate full-precision value (only final balances get Hamilton-rounded to cents), so an integer-cents scheme doesn't fit uniformly across the response.
 - **String decimals decode cleanly into Swift's `Decimal` type** via a custom `JSONDecoder` strategy, preserving the full precision from the Rails `BigDecimal`.
 

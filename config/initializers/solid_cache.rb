@@ -1,7 +1,7 @@
 # typed: false
 # frozen_string_literal: true
 
-# solid_cache keeps its entries in the primary database (see CLAUDE.md), so
+# solid_cache keeps its entries in the primary database (see AGENTS.md), so
 # every cache write and every Rack::Attack counter is an ordinary transaction
 # against the same database as the money code. Once the app runs at
 # SERIALIZABLE, PostgreSQL can refuse any of them for a conflict.

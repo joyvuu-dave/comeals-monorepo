@@ -89,7 +89,7 @@ RSpec.describe 'bin/rollback-check', bash_coverage: BashCoverage.new('spec/bin/r
   end
 
   # After a deploy, the migrations production ran are deleted
-  # (CLAUDE.md). The database keeps what they made, so the older code
+  # (AGENTS.md). The database keeps what they made, so the older code
   # still runs on it.
   it 'passes when migrations were only deleted' do
     old = commit('db/migrate/20260101000000_first.rb' => 'class First; end', 'app/a.rb' => '')

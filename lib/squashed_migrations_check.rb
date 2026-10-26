@@ -5,7 +5,7 @@
 #
 # After each deploy that runs migrations, the migrations production ran
 # are deleted from db/migrate/, and db/production_schema_version.txt names
-# the newest of them (CLAUDE.md, "Migrations and db/structure.sql"). A
+# the newest of them (AGENTS.md, "Migrations and db/structure.sql"). A
 # database whose newest migration is older than that needs migrations that
 # no longer exist as files. db:migrate cannot run them, so it runs nothing
 # and succeeds, and the new code runs on a database without the tables it

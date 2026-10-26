@@ -40,7 +40,7 @@ RSpec.describe BalanceDisplayHelper do
     end
 
     it 'rounds a full-precision running balance to cents for display' do
-      # 50 / 7, the repeating decimal from the money model in CLAUDE.md.
+      # 50 / 7, the repeating decimal from the money model in AGENTS.md.
       expect(helper.balance_tag(BigDecimal('-7.14285714'))).to include('owes $7.14')
     end
 
@@ -260,7 +260,7 @@ RSpec.describe BalanceDisplayHelper do
       expect(html).not_to include('✓')
     end
 
-    # No screen shows a sign (CLAUDE.md, money rule 11): the direction is
+    # No screen shows a sign (AGENTS.md, money rule 11): the direction is
     # a word, the amount is the size of the difference.
     it 'shows a difference the other way in the error style, with no minus sign' do
       html = helper.settlement_totals_tag([BigDecimal('8'), BigDecimal('-16')], 'residents')

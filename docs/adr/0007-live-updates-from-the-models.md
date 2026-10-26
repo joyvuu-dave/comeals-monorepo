@@ -221,7 +221,7 @@ library connects.
   callbacks that note `LiveUpdate`. The list at the top of
   `app/serializers/calendar_serializer.rb` names both, and
   `spec/requests/api/v1/live_update_contract_spec.rb` is where its case
-  goes. The rule in CLAUDE.md stands: a cache comes with the written
+  goes. The rule in AGENTS.md stands: a cache comes with the written
   list of every write that changes it.
 - A resident change now makes every open screen refetch once. That is
   a handful of screens and a handful of writes a week.

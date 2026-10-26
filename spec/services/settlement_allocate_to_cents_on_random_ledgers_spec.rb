@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# The money hunt's property spec (.claude/skills/bug-hunt/SKILL.md): 100
+# The money hunt's property spec (.agents/skills/bug-hunt/SKILL.md): 100
 # random ledgers (spec/support/random_ledger.rb) through MealLedger and
 # described_class.allocate_to_cents, in memory, no database. What must hold for every one of them:
 #

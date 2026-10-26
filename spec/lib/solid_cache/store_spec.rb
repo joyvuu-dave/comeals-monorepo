@@ -19,7 +19,7 @@ RSpec.describe SolidCache::Store do
 
   # Shaped like what a serializer hands back: string keys, nested
   # arrays and hashes, and a BigDecimal, since money in this app is never a
-  # Float (see CLAUDE.md).
+  # Float (see AGENTS.md).
   let(:serialized_payload) do
     {
       'id' => 1,

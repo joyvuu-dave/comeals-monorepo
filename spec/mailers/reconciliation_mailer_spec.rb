@@ -119,7 +119,7 @@ RSpec.describe ReconciliationMailer do
       # has committed: SettleAndNotify queues it after settling, and the
       # send_cooking_slot_email task queues it for Reconciliation.last,
       # which is already settled. So the cook's meals are already locked
-      # (CLAUDE.md, money rule 7). The mail must not ask for changes that
+      # (AGENTS.md, money rule 7). The mail must not ask for changes that
       # the app will now refuse, or say the lock is still to come (#106).
       it 'does not ask the cook to fix costs of meals the settlement has already locked' do
         [mail.text_part, mail.html_part].each do |part|

@@ -77,7 +77,7 @@ RSpec.describe 'the guest_add_keys table' do
   end
 
   # A key says only that a guest add for this meal was written. When the
-  # meal goes (an open meal that never happened, CLAUDE.md "Deletion
+  # meal goes (an open meal that never happened, AGENTS.md "Deletion
   # policy"), its keys mean nothing and go with it.
   it 'is deleted with its meal' do
     insert(key: 'k')

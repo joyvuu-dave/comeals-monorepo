@@ -30,14 +30,14 @@ seams, each checked to a done condition, does.
    recent merges touched. Add a dated entry when done, even for
    "found nothing".
 7. **A fix that changes what a rule sentence claims changes the
-   sentence in the same commit.** CLAUDE.md and the ADRs state rules as
+   sentence in the same commit.** AGENTS.md and the ADRs state rules as
    facts ("admin has no zone wrapper", "refuses self-demotion"); a fix
    that makes such a fact false leaves a sentence the next invariant hunt
    has to catch. Two of them were caught on 2026-08-26, both from fixes
    made the same day. Grep the docs for the words the fix touches before
    committing it.
 8. **Flag the incidental.** Anything wrong that is not a bug (a false
-   sentence in CLAUDE.md, a stale comment, a column nothing reads) goes
+   sentence in AGENTS.md, a stale comment, a column nothing reads) goes
    in the report under "Also noticed", with a file and line.
 9. **Run the code before you believe a claim about Rails.** A finding
    that rests on how Rails behaves ("`closed_was` is nil on a new
@@ -55,7 +55,7 @@ proves nothing.
 
 ### Invariant hunt
 
-List every sentence in `CLAUDE.md` and `docs/adr/*.md` that says
+List every sentence in `AGENTS.md` and `docs/adr/*.md` that says
 "never", "always", "must", "only", or "exactly". For each one:
 
 - name the code that enforces it (a constraint, a trigger, a model
@@ -111,7 +111,7 @@ the storm passes.
 For `MealLedger`, `Settlement`, `allocate_to_cents`, and
 `billing:recalculate`:
 
-- write a spec for each edge from CLAUDE.md that has no spec yet: zero
+- write a spec for each edge from AGENTS.md that has no spec yet: zero
   attendees, one attendee, only children, only guests, zero cost,
   capped meal, multi-cook, a cook who also eats, a bill over $9,999.99
   in a sum;

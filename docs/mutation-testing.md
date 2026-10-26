@@ -53,7 +53,7 @@ The exact subject list for a stage is the matching block of
 `.mutant.yml`; pass it after `--`. It is not part of `bin/check`. Run
 the stage a change touched after the change, and every stage after a
 batch of merges the way a bug hunt runs
-(`.claude/skills/bug-hunt/SKILL.md`). Never at the same time as
+(`.agents/skills/bug-hunt/SKILL.md`). Never at the same time as
 `bin/check` on the same machine: a mutation that times out under load
 counts as not killed, and the browser suites are load.
 
@@ -347,7 +347,7 @@ survivors, no timeout, under 10 minutes.
 
 - Done. `Settlement.allocate_to_cents`: sorting candidates by `[id]` instead
   of `[r, id]` survives, and so does `[r, nil]`. No spec pins which
-  resident gets a leftover penny. CLAUDE.md rule 5 says the largest
+  resident gets a leftover penny. AGENTS.md rule 5 says the largest
   remainder first, ties to the lowest resident id, and the property
   spec checks only that the result sums to zero and stays within a
   cent, which both orders satisfy. Needs a spec with three or more
@@ -390,7 +390,7 @@ lines.empty?` can go too: `insert_all([])` returns an empty result
   `line.kind`.
 - Done. `Settlement.run!`: the `community:` argument only reaches
   `Reconciliation.new`, where `BelongsToTheCommunity` fills the column
-  anyway. CLAUDE.md says never to pass it. The parameter can go, and
+  anyway. AGENTS.md says never to pass it. The parameter can go, and
   with it the argument that `spec/support/settle.rb` passes.
 - Done, removed. `Settlement.allocate_to_cents`: `.round` on the penny count does
   nothing. The residual is a sum of two-decimal values, so it is always
@@ -1530,7 +1530,7 @@ Run 1, 358 alive, by kind:
   - `CommunitiesController` (13). `calendar` (5): the year the payload
     names, at both ends of a year; January 2027's six weeks start on
     December 27, 2026. `cached_month` (7): the one-hour life of the
-    cached month (CLAUDE.md, money rule 8), and the days the cache
+    cached month (AGENTS.md, money rule 8), and the days the cache
     version is read for, which only `calendar_cache_race_spec.rb`
     shows; its row names the controller now. `birthdays` (1), a method
     this branch changed: `params.key?(:start)` for `params[:start]`.
@@ -2754,7 +2754,7 @@ Run 1, 99 alive, by kind:
   `YYYY-MM-DD`. `Date.parse` also takes a date with no year or no month,
   such as `12`, `Sunday` or `October`, and fills in the rest from the
   machine's own clock, in the machine's own zone, not from the
-  community's today (CLAUDE.md, "Every wall-clock time is a community
+  community's today (AGENTS.md, "Every wall-clock time is a community
   setting"). So on a dyno in UTC, at 6 PM on October 31 in Los Angeles,
   `/calendar/12` answered with November. `travel_to` does not change
   that clock, because Ruby's date library reads it inside C. The four

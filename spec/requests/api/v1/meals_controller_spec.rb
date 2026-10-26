@@ -667,7 +667,7 @@ RSpec.describe 'Meals API' do
 
   # ---------------------------------------------------------------------------
   # Reconciled meal immutability (Regression test for BUG-2)
-  # CLAUDE.md rule 7: "Once a meal is reconciled, its bills and attendance
+  # AGENTS.md rule 7: "Once a meal is reconciled, its bills and attendance
   # cannot change." update_bills already enforces this; these tests verify
   # the same guard exists on attendance and metadata endpoints.
   # ---------------------------------------------------------------------------

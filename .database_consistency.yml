@@ -50,7 +50,7 @@ Reconciliation:
     ForeignKeyCascadeChecker:
       enabled: false
 
-# The communities table holds exactly one row, forever (CLAUDE.md). An
+# The communities table holds exactly one row, forever (AGENTS.md). An
 # index on community_id, or a case-insensitive unique index on name, would
 # serve a second community that can never exist.
 Community:
