@@ -214,11 +214,11 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_production(maintenance: false, web: 1, pushed: true, worker: 1)
       steps = deploy.calls_to('heroku')
                     .grep(/maintenance|ps:scale|ps -a|pg:psql|releases|SLUG_COMMIT|cache\.clear|billing|ledger/)
-                    .map { it.sub(/^heroku pg:psql .*schema_migrations.*/, 'heroku pg:psql schema_migrations') }
+                    .map { it.sub(/^heroku pg:psql .*(pg_class|schema_migrations).*/, 'heroku pg:psql schema') }
                     .map { it.sub(/^heroku pg:psql .*solid_queue_processes.*/, 'heroku pg:psql') }
                     .map { it.delete_suffix(' --json').delete_suffix(' -a comeals-monorepo') }
       expect(steps).to eq([
-                            'heroku config:get HEROKU_SLUG_COMMIT', 'heroku pg:psql schema_migrations',
+                            'heroku config:get HEROKU_SLUG_COMMIT', 'heroku pg:psql schema', 'heroku pg:psql schema',
                             'heroku releases', 'heroku maintenance:on',
                             'heroku ps:scale', 'heroku ps:scale web=0 worker=0',
                             'heroku ps', 'heroku pg:psql',
@@ -668,10 +668,11 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   # restored from an older backup needs migrations that no longer exist,
   # and the release phase's db:migrate would run nothing (staging,
   # 2026-10-24). The release phase refuses such a database
-  # (lib/squashed_migrations_check.rb); bin/deploy asks first, so it stops
-  # before the backup and before maintenance goes on.
+  # (lib/squashed_migrations_check.rb); bin/deploy asks first, with the
+  # same rule (bin/lib/schema-check), so it stops before the backup and
+  # before maintenance goes on.
   describe 'the database schema version' do
-    let(:schema_query) { /\Aheroku pg:psql -c .*schema_migrations.* -a comeals-monorepo\z/ }
+    let(:schema_query) { /\Aheroku pg:psql -c .*pg_class.* -a comeals-monorepo\z/ }
     let(:behind_message) do
       'The database is behind db/production_schema_version.txt. Its newest migration is 20260101000000, ' \
         'but the file says 20260201000000: the migrations up to 20260201000000 were deleted from db/migrate/ ' \
@@ -685,8 +686,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.status).to eq(0)
-      expect(result.output).to include('The database has run migration 20260201000000, which is not behind ' \
-                                       'db/production_schema_version.txt (20260201000000)')
+      expect(result.output).to include('The database has run every deleted migration; its newest is 20260201000000')
       order = deploy.calls
       read = order.index { it.match?(schema_query) }
       expect(read).to be < order.index('npm ci')
@@ -699,7 +699,7 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes')
 
       expect(result.status).to eq(0)
-      expect(result.output).to include('The database has run migration 20260301000000')
+      expect(result.output).to include('The database has run every deleted migration; its newest is 20260301000000')
     end
 
     it 'refuses before anything in production changes when the database is behind, and says what to do' do
@@ -755,56 +755,87 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     end
 
     # A brand new app, before its schema is loaded from db/structure.sql.
-    # The release phase lets it through too.
-    it 'goes on when the database has no schema_migrations table' do
-      deploy.rule('heroku', '^pg:psql .*schema_migrations',
-                  exit: 1, stderr: "ERROR:  relation \"schema_migrations\" does not exist\n")
+    # The release phase lets it through too, and builds it.
+    it 'goes on when the database has no tables, and does not ask for the versions' do
+      deploy.production(tables: [], schema_versions: [])
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(0)
-      expect(result.output).to include('The database has run no migration, so it is new')
+      expect(result.output).to include('The database has no tables, so it is new: the release phase builds it ' \
+                                       'from db/structure.sql')
+      expect(deploy.calls.grep(/version=/)).to eq([])
     end
 
-    it 'goes on when schema_migrations has no rows' do
-      deploy.production(schema_version: 'none')
+    # No schema_migrations table: db:migrate would load db/structure.sql
+    # over the tables.
+    it 'refuses a database with tables but no schema_migrations table' do
+      deploy.production(tables: %w[meals], schema_versions: [])
 
       result = deploy.run('--yes')
 
-      expect(result.status).to eq(0)
-      expect(result.output).to include('The database has run no migration, so it is new')
+      expect(result.status).to eq(1)
+      expect(result.output).to include('The database has tables (meals) but no record', 'Nothing was changed.')
+      expect(deploy.calls.grep(/version=/)).to eq([])
+      expect_nothing_changed_in_production
     end
 
-    it 'refuses, and names the error, when it cannot read schema_migrations' do
-      deploy.rule('heroku', '^pg:psql .*schema_migrations', exit: 1, stderr: "\n !    Couldn't find that app.\n\n")
+    it 'refuses, and names the error, when it cannot read the tables' do
+      deploy.rule('heroku', '^pg:psql .*pg_class', exit: 1, stderr: "\n !    Couldn't find that app.\n\n")
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
       expect(result.output).to include(
-        "Could not read the newest migration in the database of comeals-monorepo ( !    Couldn't find that app.). " \
+        "Could not read the tables in the database of comeals-monorepo ( !    Couldn't find that app.). " \
         'Nothing was changed.'
       )
       expect_nothing_changed_in_production
     end
 
-    it 'refuses when the read succeeds but names no version' do
-      deploy.rule('heroku', '^pg:psql .*schema_migrations', stdout: "(0 rows)\n")
+    it 'refuses, and names the error, when it cannot read the migrations' do
+      deploy.rule('heroku', "^pg:psql .*'version='", exit: 1, stderr: "ERROR:  canceling statement\n")
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
-      expect(result.output).to include('in the database of comeals-monorepo ((0 rows)). Nothing was changed.')
+      expect(result.output).to include('Could not read the migrations in the database of comeals-monorepo (ERROR:  ' \
+                                       'canceling statement). Nothing was changed.')
+      expect_nothing_changed_in_production
+    end
+
+    # A read that stopped part way must not look like a database with no
+    # tables, which goes on.
+    it 'refuses when the read succeeds but has no end=ok line' do
+      deploy.rule('heroku', '^pg:psql .*pg_class', stdout: " line \n------\n table=meals\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('in the database of comeals-monorepo ( table=meals). Nothing was changed.')
       expect_nothing_changed_in_production
     end
 
     it 'says "no output" when the failed read printed nothing' do
-      deploy.rule('heroku', '^pg:psql .*schema_migrations', exit: 1)
+      deploy.rule('heroku', '^pg:psql .*pg_class', exit: 1)
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
       expect(result.output).to include('in the database of comeals-monorepo (no output)')
+    end
+
+    it 'refuses, and says why, when db/structure.sql cannot be read' do
+      deploy.commits[:head] = deploy.commit({ 'db/structure.sql' => "CREATE TABLE meals ();\n" }, 'no list')
+      deploy.git('update-ref', 'refs/remotes/origin/main', head)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('Could not check the database of comeals-monorepo against db/structure.sql ' \
+                                       '(db/structure.sql has no INSERT INTO schema_migrations list). Nothing was ' \
+                                       'changed.')
+      expect_nothing_changed_in_production
     end
 
     it 'refuses when db/production_schema_version.txt does not hold one version' do
@@ -826,9 +857,12 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       result = deploy.run('--yes', env: { 'DEPLOY_APP' => 'comeals-staging' })
 
       expect(result.status).to eq(0)
-      expect(deploy.calls.grep(/schema_migrations/)).to eq(
-        ["heroku pg:psql -c SELECT 'newest=' || coalesce(max(version::bigint)::text, 'none') AS schema " \
-         'FROM schema_migrations -a comeals-staging']
+      expect(deploy.calls.grep(/pg_class|schema_migrations/)).to eq(
+        ["heroku pg:psql -c SELECT 'table=' || c.relname AS line FROM pg_class c JOIN pg_namespace n ON n.oid = " \
+         "c.relnamespace WHERE c.relkind IN ('r', 'p') AND n.nspname = ANY (current_schemas(false)) UNION ALL " \
+         "SELECT 'end=ok' -a comeals-staging",
+         "heroku pg:psql -c SELECT 'version=' || version AS line FROM schema_migrations UNION ALL SELECT 'end=ok' " \
+         '-a comeals-staging']
       )
     end
   end

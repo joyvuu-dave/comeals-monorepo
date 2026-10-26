@@ -22,11 +22,10 @@
 # So the release phase runs `deploy:verify_schema_version` before
 # db:migrate (Procfile). Every way of deploying (bin/deploy, the Deploy
 # workflow, a plain git push) runs the release phase, and Heroku does not
-# promote a release whose release phase fails. bin/deploy asks part of the
-# question earlier, with heroku pg:psql: it compares only the newest
-# version, so it stops before the backup and before maintenance goes on
-# for a database that is behind, but not for one missing an older
-# migration.
+# promote a release whose release phase fails. bin/deploy asks the same
+# question earlier, and bin/lib/rollback/check-backup asks it of a backup
+# before the restore. Both use this rule through bin/lib/schema-check, so
+# all three refuse the same databases in the same words.
 #
 # A database with no tables at all is new, and passes: db:migrate loads
 # db/structure.sql into it before it migrates (Rails 8.1 does this when
@@ -45,7 +44,7 @@ module SquashedMigrationsCheck
   # lines are skipped, the same way spec/simplecov_profile.rb reads it.
   sig { params(text: String).returns(Integer) }
   def self.squashed_version(text)
-    versions = text.lines(chomp: true).reject { |line| line.start_with?('#') || line.blank? }
+    versions = text.lines(chomp: true).reject { |line| line.start_with?('#') || line.strip.empty? }
     raise ArgumentError, "#{VERSION_FILE} must hold one version, not #{versions}" unless versions.size == 1
 
     Integer(versions.first, 10)

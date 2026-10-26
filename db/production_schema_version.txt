@@ -15,9 +15,8 @@
 # new migration was given an old date, and production would never run it.
 # spec/simplecov_profile.rb reads this as PRODUCTION_SCHEMA_VERSION.
 #
-# The release phase (deploy:verify_schema_version, in the Procfile)
-# refuses a database that has not run every migration db/structure.sql
-# lists up to this one, and bin/deploy one whose newest migration is
-# older than this: the missing migrations have no files, so db:migrate
-# would run nothing.
+# The release phase (deploy:verify_schema_version, in the Procfile),
+# bin/deploy and the Rollback workflow refuse a database that has not run
+# every migration db/structure.sql lists up to this one: the missing
+# migrations have no files, so db:migrate would run nothing.
 20261023140000

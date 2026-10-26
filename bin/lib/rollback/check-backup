@@ -4,17 +4,19 @@
 # and refuses a backup that does not fit the code of the release it goes
 # back to (#248):
 #
-# - A backup whose newest migration is older than that release's
-#   db/production_schema_version.txt. The migrations up to that version
-#   were deleted from db/migrate/ after production ran them. The rollback
+# - A backup that has not run every migration that release's
+#   db/structure.sql lists up to its db/production_schema_version.txt
+#   (the release phase's rule, through bin/lib/schema-check). The
+#   migrations up to that version were deleted from db/migrate/ after
+#   production ran them. The rollback
 #   runs the old code's release phase, and its db:migrate cannot run a
 #   migration that has no file. So the old code would run on a database
 #   without the tables and columns those migrations made. A release with
 #   the squash guard (deploy:verify_schema_version) refuses such a
 #   database, but only after the restore, with maintenance on and web at
 #   0. A release from before the guard does not refuse it at all.
-#   bin/deploy and lib/squashed_migrations_check.rb make the same
-#   comparison for the live database, in the same words.
+#   bin/deploy and the release phase use the same rule for the live
+#   database, in the same words.
 # - A backup with a migration newer than every version that release
 #   knows: the old code would run on a schema made by newer code, which
 #   is what the rollback is meant to undo.
@@ -129,6 +131,7 @@ copying=false
 ended=false
 count=0
 newest=0
+versions=()
 while IFS= read -r line; do
   if [ "$copying" = false ]; then
     [[ $line == COPY*schema_migrations* ]] && copying=true
@@ -142,6 +145,7 @@ while IFS= read -r line; do
     cannot_read "schema_migrations holds a row that is not a version"
   fi
   count=$((count + 1))
+  versions+=("$line")
   if [ "$line" -gt "$newest" ]; then
     newest=$line
   fi
@@ -162,14 +166,29 @@ if [ "$count" = 0 ]; then
   exit 1
 fi
 
-if [ -n "$squashed" ] && [ "$newest" -lt "$squashed" ]; then
-  echo "Backup $BACKUP is behind the $file of $TARGET. Its newest migration is $newest, but the file says $squashed:"
-  echo "the migrations up to $squashed were deleted from db/migrate/ after production ran them. db:migrate cannot run"
-  echo "a migration that has no file, so the code of $TARGET would run on a database without the tables and columns"
-  echo "those migrations made. Backup $BACKUP was not restored, and nothing was changed. Do one of these: run this again"
-  echo "with a backup taken after production ran migration $squashed (heroku pg:backups -a $APP), or with a release"
-  echo "whose $file is $newest or older."
-  exit 1
+# The release phase's rule (lib/squashed_migrations_check.rb, through
+# bin/lib/schema-check), with the target commit's own version file and
+# db/structure.sql: the backup must hold every migration that
+# db/structure.sql lists up to that version, not only one as new.
+if [ -n "$squashed" ]; then
+  # A commit with no db/structure.sql gives the rule an empty file, which
+  # it cannot read, so the backup is refused.
+  structure=$(git show "$TARGET_SHA:db/structure.sql") || true
+  rows=$(printf 'version=%s\n' "${versions[@]}")
+  rule_script="$(dirname "$0")/../schema-check"
+  status=0
+  rule=$(ruby "$rule_script" <(echo "$squashed") <(echo "$structure") <<< "$rows"$'\nend=ok' 2>&1) || status=$?
+  if [ "$status" = 1 ]; then
+    echo "Backup $BACKUP does not fit the code of $TARGET."
+    echo "$rule"
+    echo "Backup $BACKUP was not restored, and nothing was changed."
+    exit 1
+  fi
+  if [ "$status" != 0 ]; then
+    echo "Could not check backup $BACKUP against the db/structure.sql of $TARGET: $rule"
+    echo "So the backup was not restored, and nothing was changed."
+    exit 1
+  fi
 fi
 if [ "$newest" -gt "$known" ]; then
   echo "Backup $BACKUP has migration $newest, which the code of $TARGET does not know: the newest version it knows is"
@@ -181,7 +200,7 @@ fi
 echo "Backup $BACKUP has run $count migrations, the newest $newest, which is not newer than the newest version"
 echo "the code of $TARGET knows ($known)."
 if [ -n "$squashed" ]; then
-  echo "It is not behind the $file of $TARGET ($squashed) either."
+  echo "It has run every migration the db/structure.sql of $TARGET lists up to its $file ($squashed) too."
 else
   echo "The commit of $TARGET has no $file. It still holds every migration file, so its release phase"
   echo "runs any migration the backup does not have."

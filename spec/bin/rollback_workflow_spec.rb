@@ -9,13 +9,17 @@ require 'rails_helper'
 RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new('spec/bin/rollback_workflow_spec.rb') do
   include_context 'with a script sandbox'
 
-  let(:sandbox) { new_sandbox(real: %w[python3]) }
+  # ruby runs bin/lib/schema-check, the release phase's rule, for real.
+  let(:sandbox) { new_sandbox(real: %w[python3 ruby]) }
   let(:bad) { 'b' * 40 }
   let(:good) { 'a' * 40 }
   let(:prod) { '-a comeals-monorepo' }
 
   # The files the scripts source or run besides themselves.
-  before { %w[bin/lib/json.sh bin/lib/wait_until_stopped.sh bin/rollback-check bin/smoke].each { sandbox.link(it) } }
+  before do
+    %w[bin/lib/json.sh bin/lib/wait_until_stopped.sh bin/lib/schema-check bin/rollback-check bin/smoke]
+      .each { sandbox.link(it) }
+  end
 
   def heroku_calls = sandbox.call_lines('heroku')
 
@@ -234,7 +238,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(result.out).to eq(
         "Backup b245 has run 2 migrations, the newest 20261023140000, which is not newer than the newest version\n" \
         "the code of v612 knows (20261023140000).\n" \
-        "It is not behind the db/production_schema_version.txt of v612 (20261023140000) either.\n"
+        'It has run every migration the db/structure.sql of v612 lists up to its db/production_schema_version.txt ' \
+        "(20261023140000) too.\n"
       )
       expect(heroku_calls).to eq(["heroku pg:backups:url b245 #{prod}"])
       expect(sandbox.calls_to('curl').map(&:args)).to eq([['-sf', url]])
@@ -277,10 +282,10 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include(
-        'Backup b245 is behind the db/production_schema_version.txt of v612. Its newest migration is ' \
-        "20261016130000, but the file says 20261023140000:\n",
-        'Backup b245 was not restored, and nothing was changed.',
-        '(heroku pg:backups -a comeals-monorepo)'
+        "Backup b245 does not fit the code of v612.\n",
+        'The database is behind db/production_schema_version.txt. Its newest migration is 20261016130000, but ' \
+        'the file says 20261023140000:',
+        "Backup b245 was not restored, and nothing was changed.\n"
       )
       expect(heroku_calls).to eq(["heroku pg:backups:url b245 #{prod}"])
     end
@@ -300,6 +305,21 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
         'The database has not run 1 of the migrations that were deleted from db/migrate/ after production ran ' \
         'them: 20170515164827.',
         "Backup b245 was not restored, and nothing was changed.\n"
+      )
+    end
+
+    # The rule cannot read the target's db/structure.sql: the backup is
+    # not restored, because nobody checked it.
+    it 'refuses when the target commit has no db/structure.sql to check against' do
+      sandbox.rule('git', "show #{good}:db/structure.sql", exit: 128, err: 'fatal: path does not exist')
+
+      result = check
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to include(
+        'Could not check backup b245 against the db/structure.sql of v612: db/structure.sql has no INSERT INTO ' \
+        "schema_migrations list\n",
+        'So the backup was not restored, and nothing was changed.'
       )
     end
 
@@ -334,7 +354,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     # A backup with a migration the old code does not know holds a schema
     # made by newer code: the rollback would not undo what it is for.
     context 'when the backup is newer than the code it goes back to' do
-      let(:newer) { dump("20261023140000\n20261101120000\n") }
+      let(:newer) { dump("20170515164827\n20261023140000\n20261101120000\n") }
 
       it 'refuses it, naming the version the code does not know' do
         sandbox.rule('pg_restore', '*', out: newer)
@@ -383,7 +403,8 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       end
 
       it 'refuses a backup taken after the new release migrated' do
-        sandbox.rule('pg_restore', '*', out: dump("20261023120000\n20261023140000\n"))
+        sandbox.rule('pg_restore', '*',
+                     out: dump("20261016130000\n20261021140000\n20261023120000\n20261023140000\n"))
 
         result = check
 
@@ -1079,11 +1100,14 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       names = steps.pluck('name')
       check = steps.find { it['name'] == 'Check the backup' }
       install = steps.find { it['name'] == 'Install the PostgreSQL 18 client, to read the backup' }
+      ruby = steps.find { it['name'] == 'Install Ruby and the gems, to check the backup' }
       restore = steps.find { it['id'] == 'restore' }
 
       expect(check['run']).to eq('bin/lib/rollback/check-backup')
-      expect([install, check].pluck('if')).to all(eq(restore['if']))
+      expect(ruby).to include('uses' => 'ruby/setup-ruby@v1', 'with' => { 'bundler-cache' => true })
+      expect([install, ruby, check].pluck('if')).to all(eq(restore['if']))
       expect(names.index(install['name'])).to be < names.index(check['name'])
+      expect(names.index(ruby['name'])).to be < names.index(check['name'])
       expect(names.index(check['name'])).to be < names.index(restore['name'])
       expect(check['env']).to eq('TARGET' => '${{ steps.find.outputs.target }}',
                                  'TARGET_SHA' => '${{ steps.find.outputs.target_sha }}')

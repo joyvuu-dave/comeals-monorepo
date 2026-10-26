@@ -16,8 +16,9 @@ set -euo pipefail
 #      - If not → push deploy (brief downtime during restart). A deleted
 #        migration does not count: production ran it, its version stays
 #        in schema_migrations, and the release phase has nothing to run.
-#   3. Refuses a database that is behind db/production_schema_version.txt,
-#      before anything changes (check_database_not_behind).
+#   3. Refuses a database the release phase would refuse (one missing a
+#      migration whose file was deleted, or one with tables but no
+#      versions), before anything changes (check_database_schema).
 #
 # Heroku buildpack order: Node (Vite build) → Ruby (bundle + Sprockets).
 #
@@ -567,50 +568,77 @@ detect_pending_migrations() {
 
 # After each deploy that runs migrations, the migrations production ran
 # are deleted from db/migrate/, and db/production_schema_version.txt names
-# the newest of them. A database whose newest migration is older (one
-# restored from an older backup) needs migrations that no longer exist,
-# so the release phase's db:migrate would run nothing, and the new code
-# would run without the tables it needs (staging, 2026-10-24). The release
-# phase refuses such a database (deploy:verify_schema_version in the
-# Procfile, lib/squashed_migrations_check.rb, which says the same words).
-# This asks first, so the deploy stops before the slow local checks, the
-# backup and maintenance. A database with no schema_migrations table, or
-# no row in it, has run no migration: it is new, and goes on.
-# Versions are compared as numbers, as Rails does.
-SCHEMA_VERSION_SQL="SELECT 'newest=' || coalesce(max(version::bigint)::text, 'none') AS schema FROM schema_migrations"
+# the newest of them. A database that has not run one of them (one
+# restored from an older backup) needs migrations that no longer exist, so
+# the release phase's db:migrate would run nothing, and the new code would
+# run without the tables it needs (staging, 2026-10-24). A database with
+# tables but no row in schema_migrations would get db/structure.sql
+# loaded over its tables, or nothing at all. The release phase refuses
+# both (deploy:verify_schema_version in the Procfile,
+# lib/squashed_migrations_check.rb). This asks the same question first,
+# with the same rule (bin/lib/schema-check), so the deploy stops before
+# the slow local checks, the backup and maintenance.
+#
+# Two reads, because the second fails when there is no schema_migrations
+# table: the tables in the schemas the app uses (the same list Rails
+# reads), then the rows of schema_migrations. Each ends with end=ok, so a
+# read that stopped part way is not taken for an empty database.
+TABLES_SQL="SELECT 'table=' || c.relname AS line FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE c.relkind IN ('r', 'p') AND n.nspname = ANY (current_schemas(false)) UNION ALL SELECT 'end=ok'"
+VERSIONS_SQL="SELECT 'version=' || version AS line FROM schema_migrations UNION ALL SELECT 'end=ok'"
 
-check_database_not_behind() {
+# Runs one read and leaves what it printed in SCHEMA_READ; on failure,
+# says why and stops.
+SCHEMA_READ=""
+read_schema() {
+  local what=$1 sql=$2 out
+  if out=$(heroku pg:psql -c "$sql" -a "$APP" 2>&1) && [[ $out == *end=ok* ]]; then
+    SCHEMA_READ=$out
+    return
+  fi
+  # The last line that is not blank, which is where psql and the Heroku
+  # CLI put the error.
+  out=$(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n 1) || true
+  fail "Could not read the $what in the database of $APP (${out:-no output}). Nothing was changed."
+  exit 1
+}
+
+check_database_schema() {
   step "Pre-flight: the database has run the deleted migrations"
 
-  local file=db/production_schema_version.txt versions squashed out newest
-  versions=$(grep -v -e '^#' -e '^[[:space:]]*$' "$file" 2>/dev/null) || true
-  if ! [[ $versions =~ ^[0-9]{14}$ ]]; then
+  # The file first, so a broken one stops the deploy before heroku is
+  # asked anything.
+  local file=db/production_schema_version.txt tables versions='' out status
+  if ! [[ $(grep -v -e '^#' -e '^[[:space:]]*$' "$file" 2>/dev/null) =~ ^[0-9]{14}$ ]]; then
     fail "$file must hold one version of 14 digits. Nothing was changed."
     exit 1
   fi
-  squashed=$versions
+  read_schema tables "$TABLES_SQL"
+  tables=$SCHEMA_READ
+  if [[ $tables =~ (^|[[:space:]])table=schema_migrations($|[[:space:]]) ]]; then
+    read_schema migrations "$VERSIONS_SQL"
+    versions=$SCHEMA_READ
+  fi
 
-  if out=$(heroku pg:psql -c "$SCHEMA_VERSION_SQL" -a "$APP" 2>&1) && [[ $out =~ newest=([0-9]+|none) ]]; then
-    newest=${BASH_REMATCH[1]}
-  elif [[ $out == *'relation "schema_migrations" does not exist'* ]]; then
-    newest=none
-  else
-    # The last line that is not blank, which is where psql and the
-    # Heroku CLI put the error.
-    out=$(printf '%s\n' "$out" | grep -v '^[[:space:]]*$' | tail -n 1) || true
-    fail "Could not read the newest migration in the database of $APP (${out:-no output}). Nothing was changed."
-    exit 1
-  fi
-  if [ "$newest" = none ]; then
-    ok "The database has run no migration, so it is new"
-    return
-  fi
-  if [ "$newest" -lt "$squashed" ]; then
-    fail "The database is behind $file. Its newest migration is $newest, but the file says $squashed: the migrations up to $squashed were deleted from db/migrate/ after production ran them. db:migrate cannot run a migration that has no file, so this code would run on a database without the tables and columns those migrations made. Do one of these: restore a backup taken after production ran migration $squashed, or deploy a commit whose $file is $newest or older (that commit still has the migration files)."
-    info "Nothing was changed."
-    exit 1
-  fi
-  ok "The database has run migration $newest, which is not behind $file ($squashed)"
+  status=0
+  out=$(printf '%s\n%s\n' "$tables" "$versions" \
+    | ruby "$(dirname "$0")/lib/schema-check" "$file" db/structure.sql 2>&1) || status=$?
+  case "$status:$out" in
+    0:new)
+      ok "The database has no tables, so it is new: the release phase builds it from db/structure.sql"
+      ;;
+    0:newest=*)
+      ok "The database has run every deleted migration; its newest is ${out#newest=}"
+      ;;
+    1:*)
+      fail "$out"
+      info "Nothing was changed."
+      exit 1
+      ;;
+    *)
+      fail "Could not check the database of $APP against db/structure.sql ($out). Nothing was changed."
+      exit 1
+      ;;
+  esac
 }
 
 # --- Deploy functions ---------------------------------------------------------
@@ -1066,7 +1094,7 @@ main() {
   fi
 
   detect_pending_migrations
-  check_database_not_behind
+  check_database_schema
 
   preflight_quality
 

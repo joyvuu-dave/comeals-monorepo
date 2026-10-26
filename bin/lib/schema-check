@@ -1,0 +1,60 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# The release phase's rule (lib/squashed_migrations_check.rb), for the bash
+# scripts that look at a database before they change anything: bin/deploy
+# reads the live database, and bin/lib/rollback/check-backup reads a
+# backup. They use this, so all three refuse the same databases with the
+# same words.
+#
+#   bin/lib/schema-check VERSION_FILE STRUCTURE_FILE < lines
+#
+# VERSION_FILE and STRUCTURE_FILE are the db/production_schema_version.txt
+# and the db/structure.sql of the code that will run on the database. Each
+# line of standard input that is `version=N` is a row of schema_migrations,
+# and each `table=NAME` is a table. Other lines, such as the headers psql
+# prints, are skipped. The input must hold a line `end=ok`, which the
+# scripts' SQL prints last, so a read that stopped part way is never taken
+# for a database with no tables.
+#
+# Exits 0 and prints `new` (no tables) or `newest=N`; exits 1 and prints
+# why the database is refused; exits 2 when an input cannot be read.
+
+root = File.expand_path('../..', __dir__)
+ENV['BUNDLE_GEMFILE'] ||= File.join(root, 'Gemfile')
+require 'bundler/setup'
+require 'sorbet-runtime'
+require File.join(root, 'lib/squashed_migrations_check')
+
+def unreadable(why)
+  puts why
+  exit 2
+end
+
+unreadable('Usage: bin/lib/schema-check VERSION_FILE STRUCTURE_FILE < lines') unless ARGV.size == 2
+
+versions = []
+tables = []
+ended = false
+$stdin.each_line do |line|
+  case line.strip
+  when /\Aversion=(\d{1,18})\z/ then versions << Integer(Regexp.last_match(1), 10)
+  when /\Atable=(\S+)\z/ then tables << Regexp.last_match(1)
+  when 'end=ok' then ended = true
+  end
+end
+unreadable('The list of tables and migrations ended part way: it has no end=ok line.') unless ended
+
+begin
+  squashed = SquashedMigrationsCheck.squashed_version(File.read(ARGV[0], encoding: 'UTF-8'))
+  recorded = SquashedMigrationsCheck.recorded_versions(File.read(ARGV[1], encoding: 'UTF-8'))
+rescue ArgumentError, SystemCallError => e
+  unreadable(e.message)
+end
+
+reason = SquashedMigrationsCheck.problem(database: versions, squashed:, recorded:, tables:)
+if reason
+  puts reason
+  exit 1
+end
+puts versions.empty? ? 'new' : "newest=#{versions.max}"
