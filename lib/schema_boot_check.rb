@@ -17,15 +17,16 @@ require_relative 'squashed_migrations_check'
 #
 # It refuses two kinds of database:
 #
-#   - one that is behind db/production_schema_version.txt: it needs
-#     migrations whose files were deleted (SquashedMigrationsCheck has the
-#     rule; this does not repeat it);
+#   - one that is missing a migration whose file was deleted, or that has
+#     tables but no versions (SquashedMigrationsCheck has the rule; this
+#     does not repeat it);
 #   - one that has not run a migration that is still in db/migrate/: a
 #     backup from before the last deploy, restored onto that deploy's
 #     code.
 #
-# A database that has run no migration passes, as it does in the release
-# check: it is a new database, and its tables come from db/structure.sql.
+# It also refuses a database with no tables. The release check lets that
+# one through, because db:migrate builds it; here nothing would, and web
+# would fail on every request.
 #
 # Only web and the worker run it, not an initializer, so every other
 # process still starts: the release phase, whose db:migrate runs before
@@ -39,6 +40,9 @@ module SchemaBootCheck
 
   class DatabaseBehind < StandardError; end
 
+  NO_TABLES = 'The database has no tables. On a laptop, run bin/rails db:prepare. On Heroku, deploy: the ' \
+              'release phase builds the tables from db/structure.sql.'
+
   # `process` names the process in the message, like "The web process".
   sig { params(process: String).void }
   def self.verify!(process)
@@ -47,7 +51,7 @@ module SchemaBootCheck
     rescue SquashedMigrationsCheck::DatabaseBehind => e
       raise DatabaseBehind, refusal(process, e.message)
     end
-    return if newest.nil?
+    raise DatabaseBehind, refusal(process, NO_TABLES) if newest.nil?
 
     pending = pending_versions(ActiveRecord::Base.connection_pool.migration_context)
     return if pending.empty?
