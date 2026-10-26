@@ -35,7 +35,7 @@ RSpec.describe SchemaBootCheck do
     let(:pool) { ActiveRecord::Base.connection_pool }
 
     before do
-      File.write(File.join(dir, '20991231000000_a_later_change.rb'),
+      File.write(File.join(dir, "#{PRODUCTION_SCHEMA_VERSION + 1}_a_later_change.rb"),
                  "class ALaterChange < ActiveRecord::Migration[8.1]; end\n")
       context = ActiveRecord::MigrationContext.new(dir, pool.schema_migration, pool.internal_metadata)
       allow(pool).to receive(:migration_context).and_return(context)
@@ -47,7 +47,8 @@ RSpec.describe SchemaBootCheck do
       expect { described_class.verify!('The jobs process') }.to raise_error(
         described_class::DatabaseBehind,
         'The jobs process will not start. The database has not run 1 migration that is in db/migrate/: ' \
-        '20991231000000. Run it with bin/rake db:migrate (on Heroku: heroku run bin/rake db:migrate, or ' \
+        "#{PRODUCTION_SCHEMA_VERSION + 1}. Run it with bin/rake db:migrate (on Heroku: heroku run bin/rake " \
+        'db:migrate, or ' \
         'deploy again, which runs it in the release phase). heroku run (a console or a rake task) still ' \
         'starts, so the database can be looked at and repaired there. (lib/schema_boot_check.rb)'
       )

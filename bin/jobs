@@ -1,6 +1,11 @@
 #!/usr/bin/env ruby
 
 require_relative "../config/environment"
+require_relative "../lib/schema_boot_check"
 require "solid_queue/cli"
+
+# The worker refuses a database the code does not fit, before Solid Queue
+# starts (lib/schema_boot_check.rb).
+SchemaBootCheck.verify!("The jobs process")
 
 SolidQueue::Cli.start(ARGV)
