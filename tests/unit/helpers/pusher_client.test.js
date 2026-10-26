@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { vitestWaitFor } from "./wait_for.js";
+import { fakeLocation } from "./fake_location.js";
 
 // The Pusher transport. Each test gets a fresh module (the client keeps
 // `started` and the real instance at module level) and its own env.
@@ -208,6 +209,79 @@ describe("pusherClient", () => {
 
       idle[0]();
       await vitestWaitFor(() => expect(Fake.instances).toHaveLength(1));
+    });
+  });
+
+  // pusher-js is its own file (a chunk). After a deploy, a page loaded
+  // before it can ask for a chunk the server no longer has, and a phone
+  // on a bad network can fail to get it. The page then reloads once, the
+  // same as when a page's code fails (lazy_retry.ts). Without this the
+  // page ran with no live updates, and the failed import reached Bugsnag
+  // as an unhandled rejection ("Importing a module script failed." in
+  // Safari, on the login page at "/").
+  describe("when pusher-js fails to load", () => {
+    let fake;
+    let notifyError;
+
+    beforeEach(() => {
+      sessionStorage.clear();
+      fake = fakeLocation();
+      vi.stubGlobal("__BUILD_ID__", "build-2");
+      // The server answers, so the reload goes ahead at once.
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(() => Promise.resolve({ ok: true, status: 200 })),
+      );
+      vi.doMock("pusher-js", () => {
+        throw new TypeError("Importing a module script failed.");
+      });
+      notifyError = vi.fn();
+      vi.doMock("../../../app/frontend/src/helpers/bugsnag", () => ({
+        notifyError,
+      }));
+    });
+
+    afterEach(() => {
+      vi.doUnmock("pusher-js");
+      vi.doUnmock("../../../app/frontend/src/helpers/bugsnag");
+      vi.unstubAllGlobals();
+      fake.restore();
+      sessionStorage.clear();
+    });
+
+    it("reloads once, after beforeReload, and reports nothing", async () => {
+      const { startPusher } = await freshClient({ key: "k" });
+      const beforeReload = vi.fn();
+
+      startPusher(beforeReload);
+
+      await vitestWaitFor(() =>
+        expect(fake.location.reload).toHaveBeenCalledTimes(1),
+      );
+      // The reload ends every request on its way, so the bills saves
+      // are handed to the browser first (#150).
+      expect(beforeReload).toHaveBeenCalledTimes(1);
+      expect(beforeReload.mock.invocationCallOrder[0]).toBeLessThan(
+        fake.location.reload.mock.invocationCallOrder[0],
+      );
+      expect(sessionStorage.getItem("chunk_retry")).toBe("build-2");
+      expect(notifyError).not.toHaveBeenCalled();
+    });
+
+    // The page already reloaded once in this build, and that did not
+    // help. The page goes on without live updates, and the failure goes
+    // to Bugsnag once, as a caught error.
+    it("reports to Bugsnag, with no reload, when it fails again after the reload", async () => {
+      sessionStorage.setItem("chunk_retry", "build-2");
+      const { startPusher } = await freshClient({ key: "k" });
+      const beforeReload = vi.fn();
+
+      startPusher(beforeReload);
+
+      await vitestWaitFor(() => expect(notifyError).toHaveBeenCalledTimes(1));
+      expect(notifyError.mock.calls[0][0]).toBeInstanceOf(Error);
+      expect(beforeReload).not.toHaveBeenCalled();
+      expect(fake.location.reload).not.toHaveBeenCalled();
     });
   });
 
