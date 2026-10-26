@@ -282,11 +282,20 @@ describe("on a phone on Baker Island (UTC-12)", () => {
 
   // The day numbers are links. Midnight on Mar 20 in UTC is noon on
   // Mar 19 on Baker Island.
-  it("goes to the day whose number was clicked", () => {
+  it("goes to the day whose number was clicked", async () => {
     drawCalendar("2026-03-15", month(2026, 3, []));
     fireEvent.click(screen.getByRole("button", { name: "20" }));
     expect(screen.getByTestId("where")).toHaveTextContent(
       /^\/calendar\/all\/2026-03-20$/,
     );
+    // When the address changes, the calendar writes a timing report to
+    // the console two animation frames later (nav_trace.js), and this
+    // is the file's last test. Without this wait, the report could come
+    // after the file had ended, while Vitest was closing the worker's
+    // connection, and Vitest 5 then fails the run with "Closing rpc
+    // while onUserConsoleLog was pending".
+    await new Promise((resolve) => {
+      requestAnimationFrame(() => requestAnimationFrame(resolve));
+    });
   });
 });
