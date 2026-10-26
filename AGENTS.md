@@ -1,4 +1,6 @@
-# CLAUDE.md - Comeals Monorepo
+# AGENTS.md - Comeals Monorepo
+
+These are the rules for every coding agent that works in this repo: Claude Code, Codex, Gemini CLI, or any other. `CLAUDE.md` and `GEMINI.md` are links to this file, so all of them read the same text. Make changes in `AGENTS.md`.
 
 ## Project Overview
 
@@ -32,7 +34,7 @@ bin/storm                  # Real-server concurrency storm: many Puma threads, m
 
 ## Parallel agents and worktrees
 
-Other Claude sessions may be working in sibling worktrees of this repo at the same time. The rules that keep them from colliding (full rulebook: `docs/agents/worktrees.md`):
+Other agent sessions may be working in sibling worktrees of this repo at the same time. The rules that keep them from colliding (full rulebook: `docs/agents/worktrees.md`):
 
 - **The main checkout belongs to the human.** If you are asked to change code and you are in the main checkout (`comeals-monorepo`), first run `bin/agent-worktree <short-task-name>` and work in the worktree it creates: `../comeals-<task-name>`, branch `agent/<task-name>`. Do not edit files in the main checkout.
 - **Your test database is yours alone.** The worktree's `.env` sets `TEST_DB_SUFFIX`, so RSpec, rake, and `bin/check` there use a private database. Run tests freely and in parallel with other sessions.
@@ -45,7 +47,7 @@ Other Claude sessions may be working in sibling worktrees of this repo at the sa
 
 **Be an opinionated pair programmer.** This is a personal project with one developer. There is no committee to appease. Push back on design choices that are wrong. Propose an alternative when something looks wrong, even if you cannot yet say exactly why. Don't hedge with "you could do X or Y" — say which one is right and why.
 
-**A suspected bug is not a finding until there is a failing spec.** Write the red spec in a worktree first, then report the spec, not the hunch. A spec proves the bug is real, shows exactly what is wrong, and stays as the regression test after the fix. The `bug-hunt` skill (`.claude/skills/bug-hunt/SKILL.md`) is the checked-in way to look for bugs on purpose.
+**A suspected bug is not a finding until there is a failing spec.** Write the red spec in a worktree first, then report the spec, not the hunch. A spec proves the bug is real, shows exactly what is wrong, and stays as the regression test after the fix. The `bug-hunt` skill (`.agents/skills/bug-hunt/SKILL.md`) is the checked-in way to look for bugs on purpose. If your tool does not load skills, read that file and follow it.
 
 **Be rigorous.** This codebase should be a textbook example of correct software. No shortcuts. No "good enough for now." If there's a standard way to do something (an RFC, a well-known pattern, a financial industry convention), follow it.
 
@@ -146,6 +148,10 @@ SETTLEMENT (reconciliation): Rounded to cents using largest-remainder allocation
 - **Site monitoring:** Better Stack (uptime.betterstack.com, team t586972) checks `https://comeals.com` and `https://comeals.com/api/v1/version` every 3 minutes from four regions, and alerts by email when a keyword is missing from the response (`<title>Comeals</title>`, `"version"`). The public status page is `https://status.comeals.com` (a CNAME at DNSimple to `statuspage.betteruptime.com`). Phone-call alerts need a paid Better Stack seat; the free plan alerts by email only. This replaced a GitHub Actions cron workflow (`site-up.yml`, removed 2026-08-22): GitHub delays and drops scheduled runs, so the "every 5 minutes" workflow actually ran every 20–100 minutes, and its healthchecks.io check fired false "late" alerts.
 
 ## Agent skills
+
+### Skills in this repo
+
+A skill checked into this repo lives in `.agents/skills/<name>/SKILL.md`. Codex and Gemini CLI read that folder. Claude Code reads only `.claude/skills`, so each skill also needs a link there, made from the repo root with `ln -s ../../.agents/skills/<name> .claude/skills/<name>`. Without that link, Claude Code does not see the skill.
 
 ### Issue tracker
 
