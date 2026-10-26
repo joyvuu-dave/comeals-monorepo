@@ -1199,7 +1199,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
 
       expect(smoke['if'])
         .to eq("${{ !cancelled() && steps.roll.outcome == 'success' && steps.smoke_ready.outputs.ready == 'true' }}")
-      expect(smoke['run'].lines.last).to eq(%(bin/lib/rollback/smoke "${{ steps.find.outputs.url }}"\n))
+      expect(smoke['run'].strip).to eq('bin/lib/rollback/smoke "${{ steps.find.outputs.url }}"')
       expect(smoke['run']).not_to include('bin/smoke')
     end
 
