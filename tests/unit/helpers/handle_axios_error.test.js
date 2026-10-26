@@ -67,6 +67,24 @@ describe("handleAxiosError", () => {
       expect(toastStore.toasts).toHaveLength(0);
       expect(console.error).not.toHaveBeenCalled();
     });
+
+    // The person tapped something, and the tap did nothing, so the
+    // stack says why, beside the banner (error-handling.spec.js).
+    it("still shows a 401 when not silent", () => {
+      handleAxiosError({
+        response: { status: 401, data: { message: "Signed out." } },
+      });
+
+      expect(toastsOnScreen()).toEqual([["Signed out.", "error"]]);
+    });
+
+    it("logs nothing for a 401 with no message either, when silent", () => {
+      const error = { response: { status: 401, data: "<html>401</html>" } };
+
+      handleAxiosError(error, { silent: true });
+
+      expect(console.error).not.toHaveBeenCalled();
+    });
   });
 
   // Only the errors ApiController rescues carry a message. Any other

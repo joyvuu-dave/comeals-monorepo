@@ -1106,14 +1106,9 @@ test.describe("Visual Baselines", () => {
   });
 
   test.describe("with a 401 backend", () => {
-    // The mocked 401 makes the browser log a request failure, and
-    // handle_axios_error logs the server's message.
-    test.use({
-      allowedConsoleErrors: combinePatterns(
-        httpFailurePattern,
-        /^You are not authenticated\.$/,
-      ),
-    });
+    // The mocked 401 makes the browser log a request failure. The app
+    // logs nothing for it: the banner shows it (#246).
+    test.use({ allowedConsoleErrors: httpFailurePattern });
 
     test("session expired banner", async ({ page, context }) => {
       await setupAuthenticatedPage(page, context);

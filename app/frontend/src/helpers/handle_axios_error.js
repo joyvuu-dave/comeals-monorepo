@@ -33,10 +33,18 @@ function showInStack(message, type) {
 // `options.show`, its own way to show a message inside the form
 // (use_form_messages.ts), and the message goes there instead (#137).
 // Hands back what `show` hands back, or null when `options.silent` is true.
+//
+// A 401 means the session has ended. The axios response interceptor
+// (data_store_app.js) has already raised the signed-out banner by the
+// time the caller's catch runs, so a silent caller logs nothing for it:
+// it is not an error in the app (#246). A caller that shows its
+// failures still shows it, because there the person tapped something
+// and should be told that this tap did nothing.
 export default function handleAxiosError(error, options) {
   var silent = options && options.silent;
   var show = (options && options.show) || showInStack;
   if (error.response) {
+    if (silent && error.response.status === 401) return null;
     var data = error.response.data;
     if (data && data.message) {
       if (silent) {
