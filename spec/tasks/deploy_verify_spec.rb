@@ -39,10 +39,11 @@ RSpec.describe 'deploy:verify_solid_queue' do
   describe 'deploy:verify_schema_version' do
     after { Rake::Task['deploy:verify_schema_version'].reenable }
 
-    it 'passes and names the version when the database has run every deleted migration' do
+    it 'passes and names the newest version when the database has run every deleted migration' do
       expect { Rake::Task['deploy:verify_schema_version'].invoke }
-        .to output("deploy:verify_schema_version: the database has run migration #{PRODUCTION_SCHEMA_VERSION}, " \
-                   "so it is not behind db/production_schema_version.txt.\n").to_stdout
+        .to output('deploy:verify_schema_version: the database has run every deleted migration, the ones ' \
+                   'db/structure.sql lists up to db/production_schema_version.txt. Its newest migration is ' \
+                   "#{PRODUCTION_SCHEMA_VERSION}.\n").to_stdout
     end
 
     it 'raises when the database is behind db/production_schema_version.txt' do

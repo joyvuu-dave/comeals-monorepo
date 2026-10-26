@@ -22,8 +22,9 @@ namespace :deploy do
   task verify_schema_version: :environment do
     newest = SquashedMigrationsCheck.verify!
     if newest
-      puts "deploy:verify_schema_version: the database has run migration #{newest}, " \
-           "so it is not behind #{SquashedMigrationsCheck::VERSION_FILE}."
+      puts 'deploy:verify_schema_version: the database has run every deleted migration, the ones ' \
+           "#{SquashedMigrationsCheck::STRUCTURE_FILE} lists up to #{SquashedMigrationsCheck::VERSION_FILE}. " \
+           "Its newest migration is #{newest}."
     else
       puts 'deploy:verify_schema_version: the database has run no migration, so it is new. ' \
            'db:migrate goes on as usual.'

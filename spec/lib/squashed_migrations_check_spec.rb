@@ -47,24 +47,61 @@ RSpec.describe SquashedMigrationsCheck do
     end
   end
 
+  describe '.recorded_versions' do
+    let(:structure) do
+      "CREATE TABLE a ();\n\nINSERT INTO \"schema_migrations\" (version) VALUES\n('20261023140000'),\n" \
+        "('20170515164827');\n\n"
+    end
+
+    it 'reads the INSERT INTO schema_migrations list, as numbers' do
+      expect(described_class.recorded_versions(structure)).to eq([20_261_023_140_000, 20_170_515_164_827])
+    end
+
+    it 'refuses a file with no list' do
+      expect { described_class.recorded_versions("CREATE TABLE a ();\n") }
+        .to raise_error(ArgumentError, 'db/structure.sql has no INSERT INTO schema_migrations list')
+    end
+
+    it 'reads the file the deploy ships, which names the version in db/production_schema_version.txt' do
+      expect(described_class.recorded_versions(Rails.root.join('db/structure.sql').read))
+        .to include(PRODUCTION_SCHEMA_VERSION)
+    end
+  end
+
   describe '.problem' do
-    it 'is satisfied when the database has run the newest deleted migration' do
-      expect(described_class.problem(newest: 20_261_023_140_000, squashed: 20_261_023_140_000)).to be_nil
+    let(:squashed) { 20_261_023_140_000 }
+    let(:recorded) { [20_170_515_164_827, 20_261_016_130_000, squashed] }
+
+    def problem(database, recorded: self.recorded) = described_class.problem(database:, squashed:, recorded:)
+
+    it 'is satisfied when the database has run every deleted migration' do
+      expect(problem(recorded)).to be_nil
     end
 
     it 'is satisfied when the database is ahead of the file' do
-      expect(described_class.problem(newest: 20_261_030_000_000, squashed: 20_261_023_140_000)).to be_nil
+      expect(problem(recorded + [20_261_030_000_000])).to be_nil
+    end
+
+    # Rows production has that db/structure.sql does not list, such as
+    # migrations from before the oldest one it keeps, are not a problem.
+    it 'is satisfied when the database has versions db/structure.sql does not list' do
+      expect(problem([20_150_101_000_000] + recorded)).to be_nil
+    end
+
+    # A migration that is still in db/migrate/ is db:migrate's job.
+    it 'is satisfied when the database has not run a migration newer than the file' do
+      expect(problem(recorded, recorded: recorded + [20_261_030_000_000])).to be_nil
     end
 
     # A brand new app: the database has no schema_migrations rows yet, and
     # db:migrate creates the table, as it always has. Its schema comes
     # from db/structure.sql, not from migrations.
     it 'is satisfied when the database has run no migration at all' do
-      expect(described_class.problem(newest: nil, squashed: 20_261_023_140_000)).to be_nil
+      expect(problem([])).to be_nil
     end
 
     it 'names both versions and says what to do when the database is behind' do
-      expect(described_class.problem(newest: 20_261_016_130_000, squashed: 20_261_023_140_000)).to eq(
+      expect(problem([20_170_515_164_827, 20_261_016_130_000])).to eq(
         'The database is behind db/production_schema_version.txt. Its newest migration is 20261016130000, ' \
         'but the file says 20261023140000: the migrations up to 20261023140000 were deleted from db/migrate/ ' \
         'after production ran them. db:migrate cannot run a migration that has no file, so this code would ' \
@@ -75,7 +112,27 @@ RSpec.describe SquashedMigrationsCheck do
     end
 
     it 'refuses a database one version behind' do
-      expect(described_class.problem(newest: 20_261_023_139_999, squashed: 20_261_023_140_000)).to be_a(String)
+      expect(problem([20_261_023_139_999])).to be_a(String)
+    end
+
+    it 'names the missing versions and says what to do when the database is missing an older one' do
+      expect(problem([20_170_515_164_827, squashed])).to eq(
+        'The database has not run 1 of the migrations that were deleted from db/migrate/ after production ran ' \
+        'them: 20261016130000. Its newest migration is not older than db/production_schema_version.txt ' \
+        '(20261023140000), but db/structure.sql lists these as run, and they are not in schema_migrations. ' \
+        'db:migrate cannot run a migration that has no file, so this code would run on a database without the ' \
+        'tables and columns those migrations made. Do one of these: restore a backup taken after production ' \
+        'ran migration 20261023140000, or deploy a commit whose db/production_schema_version.txt is older than ' \
+        '20261016130000 (that commit still has the migration files).'
+      )
+    end
+
+    it 'names at most ten missing versions, oldest first, and counts the rest' do
+      older = (1..12).map { 20_200_101_000_000 + it }
+
+      expect(problem([squashed], recorded: older.reverse + [squashed]))
+        .to include("them: #{older.first(10).join(', ')} and 2 more. ")
+        .and include('is older than 20200101000001 ')
     end
   end
 
@@ -118,11 +175,10 @@ RSpec.describe SquashedMigrationsCheck do
 
     it 'raises with the problem when the database is behind the file' do
       connection.execute("DELETE FROM schema_migrations WHERE version::bigint >= #{PRODUCTION_SCHEMA_VERSION}")
-      newest = described_class.newest_version
-
       expect { described_class.verify! }.to raise_error(
         described_class::DatabaseBehind,
-        described_class.problem(newest:, squashed: PRODUCTION_SCHEMA_VERSION)
+        described_class.problem(database: described_class.database_versions, squashed: PRODUCTION_SCHEMA_VERSION,
+                                recorded: described_class.recorded_versions(Rails.root.join('db/structure.sql').read))
       )
     end
 

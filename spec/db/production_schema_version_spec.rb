@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
+require Rails.root.join('lib/squashed_migrations_check')
 
 # After each deploy, the migrations production ran are deleted and
 # db/production_schema_version.txt names the newest of them (its comment
@@ -13,8 +14,7 @@ RSpec.describe 'db/production_schema_version.txt' do
   # The versions db/structure.sql records as run: its INSERT INTO
   # schema_migrations list, which is what a new database starts with.
   let(:versions_in_structure) do
-    Rails.root.join('db/structure.sql').read[/INSERT INTO "schema_migrations" \(version\) VALUES\n(.*?);/m, 1]
-         .scan(/'(\d+)'/).flatten.map { Integer(it, 10) }
+    SquashedMigrationsCheck.recorded_versions(Rails.root.join('db/structure.sql').read)
   end
 
   def at_or_before_production(versions) = versions.select { |version| version <= PRODUCTION_SCHEMA_VERSION }

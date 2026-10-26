@@ -17,8 +17,10 @@ RSpec.describe SchemaBootCheck do
 
   it 'refuses a database that is behind the deleted migrations, and says what still works' do
     connection.execute("DELETE FROM schema_migrations WHERE version::bigint >= #{PRODUCTION_SCHEMA_VERSION}")
-    newest = SquashedMigrationsCheck.newest_version
-    reason = SquashedMigrationsCheck.problem(newest:, squashed: PRODUCTION_SCHEMA_VERSION)
+    reason = SquashedMigrationsCheck.problem(
+      database: SquashedMigrationsCheck.database_versions, squashed: PRODUCTION_SCHEMA_VERSION,
+      recorded: SquashedMigrationsCheck.recorded_versions(Rails.root.join('db/structure.sql').read)
+    )
 
     expect { described_class.verify!('The web process') }.to raise_error(
       described_class::DatabaseBehind,
