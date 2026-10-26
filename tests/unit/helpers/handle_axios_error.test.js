@@ -43,6 +43,30 @@ describe("handleAxiosError", () => {
       expect(toastStore.toasts).toHaveLength(0);
       expect(console.error).toHaveBeenCalledWith("No.");
     });
+
+    // A 401 means the session has ended. The axios response
+    // interceptor (data_store_app.js) raises the signed-out banner for
+    // every 401 before the caller's catch runs, so the person already
+    // sees it. It is not an error in the app, and a log of it fails the
+    // browser tests that see a 401 (#246).
+    it("logs nothing for a 401 when silent: the signed-out banner shows it", () => {
+      const result = handleAxiosError(
+        {
+          response: {
+            status: 401,
+            data: {
+              message:
+                "You are not authenticated. Please try signing in and then try again.",
+            },
+          },
+        },
+        { silent: true },
+      );
+
+      expect(result).toBeNull();
+      expect(toastStore.toasts).toHaveLength(0);
+      expect(console.error).not.toHaveBeenCalled();
+    });
   });
 
   // Only the errors ApiController rescues carry a message. Any other

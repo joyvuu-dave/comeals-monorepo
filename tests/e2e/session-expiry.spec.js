@@ -7,18 +7,13 @@ const {
 const { setupAuthenticatedPage } = require("../helpers/setup");
 
 // Every test here feeds the app a 401 or a dead network. Expected
-// noise: the browser's request-failed line, plus the messages
-// handle_axios_error logs on exactly these paths. The calendar asks for
-// its month again after the boot-time request was answered with an
-// error (month_fetch.js revalidate), and logs the server's message when
-// that one is refused too. The calendar used to mount 300 ms after the
-// first answer, so the first test had ended by then; since the calendar
-// mounts at once (index.jsx loadedCalendar), the log comes inside it.
+// noise: the browser's request-failed line, plus the line
+// handle_axios_error logs when a request with `silent: true` gets no
+// answer. A 401 is not on this list: the signed-out banner shows it,
+// and nothing logs it (#246).
 test.use({
   allowedConsoleErrors: combinePatterns(
     httpFailurePattern,
-    /^You are not authenticated\.$/,
-    /^You are not authenticated\. Please try signing in and then try again\.$/,
     /^Error: no response received from server\.$/,
   ),
 });
@@ -41,6 +36,10 @@ test.describe("Session Expiry", () => {
         }),
       });
     });
+    const monthAnswers = [];
+    page.on("requestfinished", (request) => {
+      if (/\/calendar\//.test(request.url())) monthAnswers.push(request);
+    });
 
     await page.goto("/calendar/all/2026-01-15/");
 
@@ -51,6 +50,15 @@ test.describe("Session Expiry", () => {
     // "Log in" button should be present
     const loginButton = page.locator("button", { hasText: "Sign in" });
     await expect(loginButton).toBeVisible();
+
+    // The boot-time request for the month raises the banner. Once the
+    // calendar mounts, it asks for the month again (month_fetch.js
+    // revalidate), and that answer is a 401 too. Whether that answer
+    // came before the test ended was a race, and when it did, its log
+    // failed the test (#246). Wait for it, and for one more turn of the
+    // page's event loop, so the page has handled it every time.
+    await expect.poll(() => monthAnswers.length).toBeGreaterThanOrEqual(2);
+    await page.evaluate(() => new Promise((done) => setTimeout(done, 0)));
   });
 
   test("does NOT show session-expired banner on successful auth", async ({
