@@ -3,7 +3,7 @@
 // read-only — it never submits a form that writes, never touches a
 // meal, never creates anything. The sign-in steps are in ./checks.js,
 // which says what a login itself writes.
-const { chromium } = require("@playwright/test");
+const { launchBrowser } = require("./browser");
 const {
   adminBaseFor,
   redact,
@@ -64,7 +64,7 @@ async function checkMonthGrid(page, base, monthIndex, label) {
 }
 
 async function main() {
-  const browser = await chromium.launch();
+  const browser = await launchBrowser();
   const context = await browser.newContext({
     timezoneId: "America/Los_Angeles",
   });

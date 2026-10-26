@@ -1085,7 +1085,7 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
     it 'gives the smoke test the sign-ins from the secrets, on production only' do
       smoke = steps.find { it['name'] == 'Smoke the rolled-back site' }
 
-      expect(smoke['env'].except('PLAYWRIGHT_INSTALL_MINUTES')).to eq(
+      expect(smoke['env']).to eq(
         %w[SMOKE_EMAIL SMOKE_PASSWORD SMOKE_ADMIN_EMAIL SMOKE_ADMIN_PASSWORD].index_with do |name|
           "${{ inputs.app == 'comeals-monorepo' && secrets.#{name} || '' }}"
         end
@@ -1111,6 +1111,26 @@ RSpec.describe 'the Rollback workflow scripts', bash_coverage: BashCoverage.new(
       expect(names.index(check['name'])).to be < names.index(restore['name'])
       expect(check['env']).to eq('TARGET' => '${{ steps.find.outputs.target }}',
                                  'TARGET_SHA' => '${{ steps.find.outputs.target_sha }}')
+    end
+
+    # #251. The smoke test used Playwright's Chromium, and installing it
+    # with --with-deps took system packages from Ubuntu's mirror. On run
+    # 40354841180 the mirror was slow, the install ran out of time after
+    # the rollback, and nobody tested the rolled-back site. Now the smoke
+    # test uses the Google Chrome the runner image already has, and starts
+    # it before the first step that changes anything, so a browser that
+    # does not start stops the run while production is untouched.
+    it "starts the smoke test's browser, the runner's own Chrome, before anything changes" do
+      job = YAML.safe_load_file(Rails.root.join('.github/workflows/rollback.yml').to_s)['jobs']['rollback']
+      names = steps.pluck('name')
+      check = steps.find { it['name'] == "Check that the smoke test's browser starts" }
+      first_change = steps.index { %w[restore roll].include?(it['id']) }
+
+      expect(job['env']).to eq('SMOKE_BROWSER_CHANNEL' => 'chrome')
+      expect(check['run']).to eq('node tests/smoke/browser.js')
+      expect(check).not_to have_key('if')
+      expect(names.index(check['name'])).to be < first_change
+      expect(steps.map { it['run'].to_s }.grep(/playwright|apt-get .*fonts/)).to eq([])
     end
 
     it 'gives no other step a way to write to GitHub' do

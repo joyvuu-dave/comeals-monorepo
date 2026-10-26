@@ -517,5 +517,21 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
       expect(YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)['env'].keys.grep(/SMOKE/))
         .to eq([])
     end
+
+    # #251: the smoke tests use the Google Chrome the runner image already
+    # has, not Playwright's Chromium, whose --with-deps install waits on
+    # Ubuntu's package mirror. The browser is started once before the
+    # staging rehearsal, so one that does not start stops the run before
+    # anything changes.
+    it "starts the smoke test's browser, the runner's own Chrome, before the staging rehearsal" do
+      job = YAML.safe_load_file(Rails.root.join('.github/workflows/deploy.yml').to_s)['jobs']['daily-deploy']
+      names = steps.pluck('name')
+      check = steps.find { it['name'] == "Check that the smoke test's browser starts" }
+
+      expect(job['env']).to eq('SMOKE_BROWSER_CHANNEL' => 'chrome')
+      expect(check['run']).to eq('node tests/smoke/browser.js')
+      expect(names.index(check['name'])).to be < names.index('Staging rehearsal')
+      expect(steps.map { it['run'].to_s }.grep(/playwright/)).to eq([])
+    end
   end
 end

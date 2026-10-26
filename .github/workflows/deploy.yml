@@ -42,6 +42,12 @@ jobs:
     # /fail) still run when the timeout cancels the job.
     timeout-minutes: 60
     environment: production
+    # The smoke tests drive the Google Chrome the runner image already
+    # has, not Playwright's Chromium: that one needs system packages from
+    # Ubuntu's mirror, and a slow mirror can take longer than the whole
+    # install should (#251). tests/smoke/browser.js reads this.
+    env:
+      SMOKE_BROWSER_CHANNEL: chrome
     steps:
       - uses: actions/checkout@v6
         with:
@@ -86,7 +92,7 @@ jobs:
           CANDIDATE: ${{ steps.compare.outputs.candidate }}
         run: bin/lib/deploy/green-gate
 
-      - name: Set up Node and browsers for the smoke tests
+      - name: Set up Node for the smoke tests
         if: steps.compare.outputs.proceed == 'true'
         uses: actions/setup-node@v6
         with:
@@ -94,9 +100,12 @@ jobs:
           cache: npm
       - name: Install smoke dependencies
         if: steps.compare.outputs.proceed == 'true'
-        run: |
-          npm ci
-          bin/lib/playwright-install install --with-deps chromium
+        run: npm ci
+      # Before the staging rehearsal, so a browser that does not start
+      # stops the run before anything changes.
+      - name: Check that the smoke test's browser starts
+        if: steps.compare.outputs.proceed == 'true'
+        run: node tests/smoke/browser.js
 
       # The release note: commit messages between the live sha and the
       # candidate, turned into plain language by Claude. If the call
