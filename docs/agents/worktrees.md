@@ -1,8 +1,9 @@
 # Parallel agents and worktrees
 
-Several Claude sessions can work on this repo at the same time. Each one
+Several agent sessions (Claude Code, Codex, Gemini CLI or another tool)
+can work on this repo at the same time. Each one
 works in its own git worktree, so they never see each other's edits. This
-doc is the full rulebook; the short version lives in CLAUDE.md.
+doc is the full rulebook; the short version lives in AGENTS.md.
 
 ## The model
 
@@ -114,9 +115,11 @@ already on GitHub.
 run alone for an abandoned task) refuses while the worktree has
 uncommitted changes, and it always keeps the branch.
 
-For the agent to run `bin/agent-merge` itself, the command must be
-allowed in the Claude Code permission settings (for example
-`"Bash(bin/agent-merge *)"` in `.claude/settings.local.json`). Allowing
+For the agent to run `bin/agent-merge` itself, the agent's tool must
+allow the command. In Claude Code that is a permission rule, for example
+`"Bash(bin/agent-merge *)"` in `.claude/settings.local.json`. Codex and
+Gemini CLI have their own settings for which commands may run without
+asking; allow this one command there. Allowing
 this one script is deliberately narrower than allowing `git merge` and
 `git push` in general: the script can only land a fast-forward of an
 `agent/` branch, and the human's spoken "merge it" stays the gate.
