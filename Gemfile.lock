@@ -102,7 +102,7 @@ GEM
     connection_pool (3.0.2)
     crass (1.0.8)
     csv (3.3.6)
-    database_consistency (3.0.16)
+    database_consistency (3.1.1)
       activerecord (>= 3.2)
     date (3.6.0)
     debride (1.15.2)
@@ -366,7 +366,7 @@ GEM
     rack-session (2.1.2)
       base64 (>= 0.1.0)
       rack (>= 3.0.0)
-    rack-test (2.2.0)
+    rack-test (2.3.0)
       rack (>= 1.3)
     rack-timeout (0.7.0)
     rackup (2.3.1)
@@ -717,7 +717,7 @@ CHECKSUMS
   connection_pool (3.0.2) sha256=33fff5ba71a12d2aa26cb72b1db8bba2a1a01823559fb01d29eb74c286e62e0a
   crass (1.0.8) sha256=7a0145c7a2c59f8e7923b3a69ce819c444823a00a5127d805298fea13be24efe
   csv (3.3.6) sha256=aba61e7e507a66f03d45cb1f3c4b6359861c3504038b422962875dce099e4456
-  database_consistency (3.0.16) sha256=80f8de7232f36ef231c178d2f212f038db61258e79abb2a9d03635ea6bc5ab4e
+  database_consistency (3.1.1) sha256=79225f39eb29a447f781b298515abc0c11674c843d7ec99084556fddc4de5504
   date (3.6.0) sha256=18ac945c4e24ebd93534f8eab8c2fd8c5604b3e977105b3798d62a1e8d27b580
   debride (1.15.2) sha256=5e5c50b150a37c418a7d48a2137ebb9f29d8a72fa550e626a4e1f8d418b79538
   descendants_tracker (0.0.4) sha256=e9c41dd4cfbb85829a9301ea7e7c48c2a03b26f09319db230e6479ccdc780897
@@ -834,7 +834,7 @@ CHECKSUMS
   rack-attack (6.8.0) sha256=f2499fdebf85bcc05573a22dff57d24305ac14ec2e4156cd3c28d47cafeeecf2
   rack-mini-profiler (5.0.0) sha256=99c5ba087fa91c8d9ba80a43f6b2213f1ebead6e863d49286170129d391302e1
   rack-session (2.1.2) sha256=595434f8c0c3473ae7d7ac56ecda6cc6dfd9d37c0b2b5255330aa1576967ffe8
-  rack-test (2.2.0) sha256=005a36692c306ac0b4a9350355ee080fd09ddef1148a5f8b2ac636c720f5c463
+  rack-test (2.3.0) sha256=b118d177cc002c572fc1b6fd8d19c9ed5881a36e8d6f689f9e618f9f861241e8
   rack-timeout (0.7.0) sha256=757337e9793cca999bb73a61fe2a7d4280aa9eefbaf787ce3b98d860749c87d9
   rackup (2.3.1) sha256=6c79c26753778e90983761d677a48937ee3192b3ffef6bc963c0950f94688868
   rails-dom-testing (2.3.0) sha256=8acc7953a7b911ca44588bf08737bc16719f431a1cc3091a292bca7317925c1d
