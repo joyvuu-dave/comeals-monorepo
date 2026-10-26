@@ -1440,74 +1440,87 @@ end
 
 # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:164
 class Ransack::Helpers::FormHelper::SortLink
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:165
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:176
   def initialize(search, attribute, args, params); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:186
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:197
   def default_arrow; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:182
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:193
   def down_arrow; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:203
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:214
   def html_options(args); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:190
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:201
   def name; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:178
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:189
   def up_arrow; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:197
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:208
   def url_options; end
 
   private
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:285
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:295
   def default_sort_order(attr_name); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:272
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:282
   def detect_previous_sort_direction_and_invert_it(attr_name); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:304
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:314
   def direction_text(dir); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:280
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:290
   def existing_sort_direction(f = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:234
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:244
   def extract_label_and_mutate_args!(args); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:239
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:249
   def extract_options_and_mutate_args!(args); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:229
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:239
   def extract_sort_fields_and_mutate_args!(args); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:300
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:310
   def no_sort_direction_specified?(dir = T.unsafe(nil)); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:290
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:300
   def order_indicator; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:221
+  # Indifferent access, so RESERVED_URL_OPTIONS also matches the string
+  # keys of a plain Hash.
+  #
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:234
   def parameters_hash(params); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:264
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:274
   def parse_sort(field); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:259
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:269
   def recursive_sort_params_build(fields); end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:244
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:254
   def search_and_sort_params; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:248
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:258
   def search_params; end
 
-  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:253
+  # pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:263
   def sort_params; end
 end
+
+# Keys url_for reads as instructions for building the link, not as
+# query params. The request's params are carried over into the link,
+# so a crafted query string could otherwise change its scheme, host,
+# port, path prefix or route (GHSA-58rx-96gf-w92x). Userinfo needs
+# :user and :password together, so dropping :password is enough to
+# keep a ?user= filter.
+#
+# pkg:gem/ransack#lib/ransack/helpers/form_helper.rb:171
+Ransack::Helpers::FormHelper::SortLink::RESERVED_URL_OPTIONS = T.let(T.unsafe(nil), Array)
 
 # pkg:gem/ransack#lib/ransack/invalid_search_error.rb:2
 class Ransack::InvalidSearchError < ::ArgumentError; end

@@ -10,10 +10,10 @@ module Bullet
   extend ::Bullet::Dependency
 
   class << self
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def add_footer; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def add_footer=(_arg0); end
 
     # pkg:gem/bullet#lib/bullet.rb:113
@@ -25,10 +25,10 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:55
     def alert=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def always_append_html_body; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def always_append_html_body=(_arg0); end
 
     # Rails.root might be nil if `railties` is a dependency on a project that does not use Rails
@@ -51,7 +51,7 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:55
     def console=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:279
+    # pkg:gem/bullet#lib/bullet.rb:294
     def console_enabled?; end
 
     # pkg:gem/bullet#lib/bullet.rb:37
@@ -81,19 +81,19 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:86
     def enabled?; end
 
-    # pkg:gem/bullet#lib/bullet.rb:173
+    # pkg:gem/bullet#lib/bullet.rb:188
     def end_request; end
 
-    # pkg:gem/bullet#lib/bullet.rb:237
+    # pkg:gem/bullet#lib/bullet.rb:252
     def footer_info; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:298
     def footer_position; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:37
     def footer_position=(_arg0); end
 
-    # pkg:gem/bullet#lib/bullet.rb:223
+    # pkg:gem/bullet#lib/bullet.rb:238
     def gather_inline_notifications; end
 
     # pkg:gem/bullet#lib/bullet.rb:126
@@ -102,7 +102,7 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:55
     def honeybadger=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:287
+    # pkg:gem/bullet#lib/bullet.rb:302
     def inject_into_page?; end
 
     # pkg:gem/bullet#lib/bullet.rb:37
@@ -111,31 +111,31 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:93
     def n_plus_one_query_enable?; end
 
-    # pkg:gem/bullet#lib/bullet.rb:216
+    # pkg:gem/bullet#lib/bullet.rb:231
     def notification?; end
 
-    # pkg:gem/bullet#lib/bullet.rb:212
+    # pkg:gem/bullet#lib/bullet.rb:227
     def notification_collector; end
 
     # pkg:gem/bullet#lib/bullet.rb:55
     def opentelemetry=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def orm_patches_applied; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def orm_patches_applied=(_arg0); end
 
-    # pkg:gem/bullet#lib/bullet.rb:192
+    # pkg:gem/bullet#lib/bullet.rb:207
     def pause; end
 
-    # pkg:gem/bullet#lib/bullet.rb:200
+    # pkg:gem/bullet#lib/bullet.rb:215
     def paused?; end
 
-    # pkg:gem/bullet#lib/bullet.rb:229
+    # pkg:gem/bullet#lib/bullet.rb:244
     def perform_out_of_channel_notifications(env = T.unsafe(nil)); end
 
-    # pkg:gem/bullet#lib/bullet.rb:259
+    # pkg:gem/bullet#lib/bullet.rb:274
     def profile; end
 
     # pkg:gem/bullet#lib/bullet.rb:55
@@ -147,34 +147,34 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:130
     def reset_safelist; end
 
-    # pkg:gem/bullet#lib/bullet.rb:196
+    # pkg:gem/bullet#lib/bullet.rb:211
     def resume; end
 
     # pkg:gem/bullet#lib/bullet.rb:55
     def rollbar=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:43
+    # pkg:gem/bullet#lib/bullet.rb:44
     def safelist; end
 
     # pkg:gem/bullet#lib/bullet.rb:55
     def sentry=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:204
+    # pkg:gem/bullet#lib/bullet.rb:219
     def skip; end
 
     # pkg:gem/bullet#lib/bullet.rb:37
     def skip_html_injection=(_arg0); end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def skip_http_headers; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def skip_http_headers=(_arg0); end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def skip_user_in_notification; end
 
-    # pkg:gem/bullet#lib/bullet.rb:44
+    # pkg:gem/bullet#lib/bullet.rb:45
     def skip_user_in_notification=(_arg0); end
 
     # pkg:gem/bullet#lib/bullet.rb:55
@@ -192,16 +192,21 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:37
     def stacktrace_includes=(_arg0); end
 
-    # pkg:gem/bullet#lib/bullet.rb:188
+    # pkg:gem/bullet#lib/bullet.rb:203
     def start?; end
 
-    # pkg:gem/bullet#lib/bullet.rb:152
+    # pkg:gem/bullet#lib/bullet.rb:164
     def start_request; end
+
+    # Fiber storage reaches child fibers; start_request gives each request its own, and the owner check keeps it off new threads.
+    #
+    # pkg:gem/bullet#lib/bullet.rb:153
+    def state; end
 
     # pkg:gem/bullet#lib/bullet.rb:55
     def terminal_notifier=(arg); end
 
-    # pkg:gem/bullet#lib/bullet.rb:243
+    # pkg:gem/bullet#lib/bullet.rb:258
     def text_notifications; end
 
     # pkg:gem/bullet#lib/bullet.rb:37
@@ -210,7 +215,7 @@ module Bullet
     # pkg:gem/bullet#lib/bullet.rb:97
     def unused_eager_loading_enable?; end
 
-    # pkg:gem/bullet#lib/bullet.rb:251
+    # pkg:gem/bullet#lib/bullet.rb:266
     def warnings; end
 
     # pkg:gem/bullet#lib/bullet.rb:55
@@ -218,10 +223,10 @@ module Bullet
 
     private
 
-    # pkg:gem/bullet#lib/bullet.rb:304
+    # pkg:gem/bullet#lib/bullet.rb:319
     def build_request_uri(env); end
 
-    # pkg:gem/bullet#lib/bullet.rb:295
+    # pkg:gem/bullet#lib/bullet.rb:310
     def for_each_active_notifier_with_notification; end
   end
 end
@@ -637,76 +642,76 @@ class Bullet::NotificationCollector
   def reset; end
 end
 
-# pkg:gem/bullet#lib/bullet/rack.rb:8
+# pkg:gem/bullet#lib/bullet/rack.rb:13
 class Bullet::Rack
   include ::Bullet::Dependency
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:13
+  # pkg:gem/bullet#lib/bullet/rack.rb:18
   def initialize(app); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:62
+  # pkg:gem/bullet#lib/bullet/rack.rb:67
   def append_to_html_body(response_body, content); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:17
+  # pkg:gem/bullet#lib/bullet/rack.rb:22
   def call(env); end
 
   # fix issue if response's body is a Proc
   #
-  # pkg:gem/bullet#lib/bullet/rack.rb:53
+  # pkg:gem/bullet#lib/bullet/rack.rb:58
   def empty?(response); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:73
+  # pkg:gem/bullet#lib/bullet/rack.rb:78
   def footer_note(nonce = T.unsafe(nil)); end
 
   # Make footer styles work with ContentSecurityPolicy style-src as self
   #
-  # pkg:gem/bullet#lib/bullet/rack.rb:78
+  # pkg:gem/bullet#lib/bullet/rack.rb:83
   def footer_style(nonce = T.unsafe(nil)); end
 
   private
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:150
+  # pkg:gem/bullet#lib/bullet/rack.rb:155
   def file?(headers); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:109
+  # pkg:gem/bullet#lib/bullet/rack.rb:114
   def footer_border_radius; end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:172
+  # pkg:gem/bullet#lib/bullet/rack.rb:177
   def footer_console_message(nonce = T.unsafe(nil)); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:94
+  # pkg:gem/bullet#lib/bullet/rack.rb:99
   def footer_position_css; end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:158
+  # pkg:gem/bullet#lib/bullet/rack.rb:163
   def html_request?(headers, response); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:162
+  # pkg:gem/bullet#lib/bullet/rack.rb:167
   def response_body(response); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:124
+  # pkg:gem/bullet#lib/bullet/rack.rb:129
   def set_header(headers, header_name, header_array); end
 
   # Simple query string parser
   #
-  # pkg:gem/bullet#lib/bullet/rack.rb:141
+  # pkg:gem/bullet#lib/bullet/rack.rb:146
   def simple_parse_query_string(query_string); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:132
+  # pkg:gem/bullet#lib/bullet/rack.rb:137
   def skip_html_injection?(request); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:154
+  # pkg:gem/bullet#lib/bullet/rack.rb:159
   def sse?(headers); end
 
-  # pkg:gem/bullet#lib/bullet/rack.rb:198
+  # pkg:gem/bullet#lib/bullet/rack.rb:203
   def with_security_policy_nonce(headers); end
 
   # Make footer work for XHR requests by appending data to the footer
   #
-  # pkg:gem/bullet#lib/bullet/rack.rb:188
+  # pkg:gem/bullet#lib/bullet/rack.rb:193
   def xhr_script(nonce = T.unsafe(nil)); end
 end
 
-# pkg:gem/bullet#lib/bullet/rack.rb:11
+# pkg:gem/bullet#lib/bullet/rack.rb:16
 Bullet::Rack::NONCE_MATCHER = T.let(T.unsafe(nil), Regexp)
 
 # pkg:gem/bullet#lib/bullet/registry.rb:4
