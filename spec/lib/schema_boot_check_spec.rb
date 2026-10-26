@@ -19,7 +19,8 @@ RSpec.describe SchemaBootCheck do
     connection.execute("DELETE FROM schema_migrations WHERE version::bigint >= #{PRODUCTION_SCHEMA_VERSION}")
     reason = SquashedMigrationsCheck.problem(
       database: SquashedMigrationsCheck.database_versions, squashed: PRODUCTION_SCHEMA_VERSION,
-      recorded: SquashedMigrationsCheck.recorded_versions(Rails.root.join('db/structure.sql').read)
+      recorded: SquashedMigrationsCheck.recorded_versions(Rails.root.join('db/structure.sql').read),
+      tables: connection.tables
     )
 
     expect { described_class.verify!('The web process') }.to raise_error(
@@ -71,11 +72,10 @@ RSpec.describe SchemaBootCheck do
     end
   end
 
-  # A brand new app's database has run no migration. The release check
-  # lets it through too.
-  it 'passes a database that has run no migration' do
+  it 'refuses a database that has tables but has run no migration' do
     connection.execute('DELETE FROM schema_migrations')
 
-    expect { described_class.verify!('The web process') }.not_to raise_error
+    expect { described_class.verify!('The web process') }
+      .to raise_error(described_class::DatabaseBehind, /\AThe web process will not start. The database has tables/)
   end
 end

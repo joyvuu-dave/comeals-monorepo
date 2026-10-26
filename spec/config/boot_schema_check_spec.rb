@@ -73,6 +73,16 @@ RSpec.describe 'the schema check at boot' do
     end
   end
 
+  # A brand new app's database, before its first release. The release
+  # check lets it through too.
+  describe 'on a database with no tables' do
+    it 'loads config.ru' do
+      output, status = load_config_ru
+
+      expect(status).to be_success, output
+    end
+  end
+
   describe 'on a database that has run every migration' do
     before do
       _output, status = Open3.capture2e('psql', '--quiet', '--no-psqlrc', '--set', 'ON_ERROR_STOP=1',

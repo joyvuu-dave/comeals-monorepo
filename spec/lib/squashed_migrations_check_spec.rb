@@ -72,7 +72,9 @@ RSpec.describe SquashedMigrationsCheck do
     let(:squashed) { 20_261_023_140_000 }
     let(:recorded) { [20_170_515_164_827, 20_261_016_130_000, squashed] }
 
-    def problem(database, recorded: self.recorded) = described_class.problem(database:, squashed:, recorded:)
+    def problem(database, recorded: self.recorded, tables: %w[meals schema_migrations])
+      described_class.problem(database:, squashed:, recorded:, tables:)
+    end
 
     it 'is satisfied when the database has run every deleted migration' do
       expect(problem(recorded)).to be_nil
@@ -96,8 +98,27 @@ RSpec.describe SquashedMigrationsCheck do
     # A brand new app: the database has no schema_migrations rows yet, and
     # db:migrate creates the table, as it always has. Its schema comes
     # from db/structure.sql, not from migrations.
-    it 'is satisfied when the database has run no migration at all' do
-      expect(problem([])).to be_nil
+    it 'is satisfied when the database has no tables and has run no migration' do
+      expect(problem([], tables: [])).to be_nil
+    end
+
+    # No schema_migrations table: db:migrate would load db/structure.sql
+    # over the tables. An empty one: db:migrate would do nothing.
+    it 'refuses a database that has tables but no versions, and names the tables' do
+      expect(problem([], tables: %w[schema_migrations meals])).to eq(
+        'The database has tables (meals, schema_migrations) but no record of the migrations it has run: ' \
+        'schema_migrations is missing or has no rows. So it is not a new database. With no schema_migrations ' \
+        'table, db:migrate would load db/structure.sql over these tables, and with an empty one it would do ' \
+        'nothing, so this code would run on a database it does not fit. Do one of these: restore a backup of ' \
+        'this database, or, if this is a new app with no data to keep, empty its database (heroku pg:reset) ' \
+        'and deploy again.'
+      )
+    end
+
+    it 'names at most ten tables and counts the rest' do
+      tables = (1..11).map { "table_#{it.to_s.rjust(2, '0')}" }
+
+      expect(problem([], tables:)).to include("(#{tables.first(10).join(', ')} and 1 more)")
     end
 
     it 'names both versions and says what to do when the database is behind' do
@@ -178,7 +199,8 @@ RSpec.describe SquashedMigrationsCheck do
       expect { described_class.verify! }.to raise_error(
         described_class::DatabaseBehind,
         described_class.problem(database: described_class.database_versions, squashed: PRODUCTION_SCHEMA_VERSION,
-                                recorded: described_class.recorded_versions(Rails.root.join('db/structure.sql').read))
+                                recorded: described_class.recorded_versions(Rails.root.join('db/structure.sql').read),
+                                tables: connection.tables)
       )
     end
 
@@ -193,8 +215,19 @@ RSpec.describe SquashedMigrationsCheck do
       expect { described_class.verify! }.to raise_error(described_class::DatabaseBehind, /#{oldest}/)
     end
 
-    it 'passes on a database with no schema_migrations table, and returns nil' do
+    # The test database has every table, so with no schema_migrations
+    # table it is not new. A new database passes: spec/config/procfile_spec.rb
+    # runs the release command on one.
+    it 'raises on a database that has tables but no schema_migrations table' do
       connection.execute('ALTER TABLE schema_migrations RENAME TO schema_migrations_hidden')
+
+      expect { described_class.verify! }
+        .to raise_error(described_class::DatabaseBehind, /but no record of the migrations it has run/)
+    end
+
+    it 'returns nil for a database with no tables and no versions' do
+      allow(described_class).to receive(:database_versions).and_return([])
+      allow(connection).to receive(:tables).and_return([])
 
       expect(described_class.verify!).to be_nil
     end

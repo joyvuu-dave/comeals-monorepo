@@ -26,8 +26,8 @@ namespace :deploy do
            "#{SquashedMigrationsCheck::STRUCTURE_FILE} lists up to #{SquashedMigrationsCheck::VERSION_FILE}. " \
            "Its newest migration is #{newest}."
     else
-      puts 'deploy:verify_schema_version: the database has run no migration, so it is new. ' \
-           'db:migrate goes on as usual.'
+      puts 'deploy:verify_schema_version: the database has no tables, so it is new. ' \
+           "db:migrate builds it from #{SquashedMigrationsCheck::STRUCTURE_FILE}."
     end
   end
 end

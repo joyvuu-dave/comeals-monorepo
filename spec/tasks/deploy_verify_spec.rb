@@ -55,12 +55,22 @@ RSpec.describe 'deploy:verify_solid_queue' do
         .to raise_error(SquashedMigrationsCheck::DatabaseBehind, /The database is behind/)
     end
 
-    it 'passes and says so on a new database, which has run no migration' do
+    # The test database has every table, so the new database is made up
+    # here: no versions and no tables.
+    it 'passes and says so on a new database, which has no tables' do
+      allow(SquashedMigrationsCheck).to receive(:database_versions).and_return([])
+      allow(ActiveRecord::Base.connection).to receive(:tables).and_return([])
+
+      expect { Rake::Task['deploy:verify_schema_version'].invoke }
+        .to output('deploy:verify_schema_version: the database has no tables, so it is new. ' \
+                   "db:migrate builds it from db/structure.sql.\n").to_stdout
+    end
+
+    it 'raises when the database has tables but no versions' do
       ActiveRecord::Base.connection.execute('DELETE FROM schema_migrations')
 
       expect { Rake::Task['deploy:verify_schema_version'].invoke }
-        .to output('deploy:verify_schema_version: the database has run no migration, so it is new. ' \
-                   "db:migrate goes on as usual.\n").to_stdout
+        .to raise_error(SquashedMigrationsCheck::DatabaseBehind, /but no record of the migrations it has run/)
     end
   end
 end

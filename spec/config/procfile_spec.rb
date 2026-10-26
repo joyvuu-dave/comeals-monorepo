@@ -9,7 +9,8 @@ require Rails.root.join('lib/squashed_migrations_check')
 # bin/jobs: Solid Queue's supervisor, in async mode, with config/queue.yml
 # (spec/config/initializers/solid_queue_spec.rb). The release phase
 # checks that the database is not behind db/production_schema_version.txt
-# (lib/squashed_migrations_check.rb), then migrates.
+# (lib/squashed_migrations_check.rb), then migrates. On a database with no
+# tables, db:migrate first builds it from db/structure.sql.
 #
 # Async mode runs the dispatcher, the worker and the scheduler as threads
 # of the supervisor's one process, instead of three forked processes. One

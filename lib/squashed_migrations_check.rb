@@ -28,9 +28,11 @@
 # for a database that is behind, but not for one missing an older
 # migration.
 #
-# A database that has run no migration at all is new, and passes: its
-# schema comes from db/structure.sql, not from migrations, and db:migrate
-# makes schema_migrations as it always has.
+# A database with no tables at all is new, and passes: db:migrate loads
+# db/structure.sql into it before it migrates (Rails 8.1 does this when
+# there is no schema_migrations table), and the file's last statement
+# fills schema_migrations. A database with tables but no versions is
+# refused (see .problem).
 module SquashedMigrationsCheck
   extend T::Sig
 
@@ -76,25 +78,54 @@ module SquashedMigrationsCheck
   def self.newest_version = database_versions.max
 
   # A sentence that says what is wrong and what to do, or nil when the
-  # database has run every deleted migration. `database` holds the
-  # versions in schema_migrations, `recorded` the versions in
-  # db/structure.sql, and `squashed` the version in VERSION_FILE.
+  # database has run every deleted migration, or is new. `database` holds
+  # the versions in schema_migrations, `recorded` the versions in
+  # db/structure.sql, `squashed` the version in VERSION_FILE, and `tables`
+  # the tables in the database.
   #
   # Every deleted migration is compared, not only the newest: a database
   # whose newest migration is new enough can still be missing an older one
   # (#248, item 3).
+  #
+  # A new database has no tables and no versions. One with tables but no
+  # versions is refused: with no schema_migrations table, db:migrate loads
+  # db/structure.sql over the tables that are there, and makes every
+  # object the file lists before the first one that already exists; with
+  # an empty schema_migrations table (a load that stopped part way), it
+  # loads nothing and runs nothing.
   sig do
-    params(database: T::Array[Integer], squashed: Integer, recorded: T::Array[Integer]).returns(T.nilable(String))
+    params(database: T::Array[Integer], squashed: Integer, recorded: T::Array[Integer],
+           tables: T::Array[String]).returns(T.nilable(String))
   end
-  def self.problem(database:, squashed:, recorded:)
+  def self.problem(database:, squashed:, recorded:, tables:)
     newest = database.max
-    return nil if newest.nil?
+    return (tables.empty? ? nil : not_new(tables)) if newest.nil?
     return behind(newest:, squashed:) if newest < squashed
 
     missing = (recorded.select { it <= squashed } - database).sort
     return nil if missing.empty?
 
     gap(missing:, squashed:)
+  end
+
+  sig { params(tables: T::Array[String]).returns(String) }
+  def self.not_new(tables)
+    "The database has tables (#{first_few(tables.sort)}) but no record of the migrations it has run: " \
+      'schema_migrations is missing or has no rows. So it is not a new database. With no schema_migrations ' \
+      "table, db:migrate would load #{STRUCTURE_FILE} over these tables, and with an empty one it would do " \
+      'nothing, so this code would run on a database it does not fit. Do one of these: restore a backup of ' \
+      'this database, or, if this is a new app with no data to keep, empty its database (heroku pg:reset) ' \
+      'and deploy again.'
+  end
+
+  # At most this many tables or versions are named, so the message stays
+  # short enough to read in the release output.
+  NAMED = 10
+
+  sig { params(items: T::Array[T.any(Integer, String)]).returns(String) }
+  def self.first_few(items)
+    named = items.first(NAMED).join(', ')
+    items.size > NAMED ? "#{named} and #{items.size - NAMED} more" : named
   end
 
   sig { params(newest: Integer, squashed: Integer).returns(String) }
@@ -107,16 +138,11 @@ module SquashedMigrationsCheck
       'migration files).'
   end
 
-  # At most this many missing versions are named, so the message stays
-  # short enough to read in the release output.
-  NAMED = 10
-
   sig { params(missing: T::Array[Integer], squashed: Integer).returns(String) }
   def self.gap(missing:, squashed:)
-    named = missing.first(NAMED).join(', ')
-    named += " and #{missing.size - NAMED} more" if missing.size > NAMED
     "The database has not run #{missing.size} of the migrations that were deleted from db/migrate/ after " \
-      "production ran them: #{named}. Its newest migration is not older than #{VERSION_FILE} (#{squashed}), " \
+      "production ran them: #{first_few(missing)}. Its newest migration is not older than #{VERSION_FILE} " \
+      "(#{squashed}), " \
       "but #{STRUCTURE_FILE} lists these as run, and they are not in schema_migrations. db:migrate cannot run " \
       'a migration that has no file, so this code would run on a database without the tables and columns ' \
       'those migrations made. Do one of these: restore a backup taken after production ran migration ' \
@@ -125,14 +151,15 @@ module SquashedMigrationsCheck
   end
 
   # Raises DatabaseBehind when the database is missing a deleted
-  # migration. Returns the newest version in the database, nil for a new
-  # database.
+  # migration, or has tables but no versions. Returns the newest version
+  # in the database, nil for a new database.
   sig { returns(T.nilable(Integer)) }
   def self.verify!
     database = database_versions
     reason = problem(database:,
                      squashed: squashed_version(Rails.root.join(VERSION_FILE).read),
-                     recorded: recorded_versions(Rails.root.join(STRUCTURE_FILE).read))
+                     recorded: recorded_versions(Rails.root.join(STRUCTURE_FILE).read),
+                     tables: ActiveRecord::Base.connection.tables)
     raise DatabaseBehind, reason if reason
 
     database.max
