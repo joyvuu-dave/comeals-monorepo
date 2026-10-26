@@ -54,7 +54,10 @@ latest.dump
 /test-results/
 /tests/test-results/
 
-# AI tooling (Claude Code)
+# Claude Code's local files, such as settings.local.json. Only
+# .claude/skills is committed. It holds one link per skill into
+# .agents/skills, so Claude Code reads the same skills as Codex and
+# Gemini CLI.
 .claude/*
 !.claude/skills/
 
