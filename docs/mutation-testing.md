@@ -4483,3 +4483,151 @@ Redundant code, removed (1): `|(_, resident_id)|` in
 in its place, and for a pair the two mean the same thing: Ruby takes the
 pair apart either way. The round of 2026-10-17 counted this as noise.
 The code now has no parentheses, so there is no mutation to answer.
+
+### 2026-10-27, full run, and the code added since 2026-10-19
+
+The full run 40437889353 on GitHub (on 8601cbaf): 38,665 mutations,
+1,286 alive, 11 timeouts, 96.67%. The run of 2026-10-19 had 586 alive.
+Every subject with more survivors than on 2026-10-19 was new code or
+code changed since: 46 subjects, 704 alive.
+
+Most of them, 577, were in the browser report (BrowserReport,
+BrowserDescription, Api::V1::BrowserReportsController, BrowserReportJob,
+BrowserCount). `browser_reports_spec.rb` is described by a sentence and
+had no row in `spec/support/mutant/specs.rb`, so mutant ran no example
+for three of those classes. Five rows were added: the request spec, the
+`browser_counts` race spec, the admin Browsers page, the
+`attendance_versions` table spec and the deploy task spec.
+
+The 46 subjects were then run here, six workers, in two groups.
+
+| Run                                   | Mutations | Killed | Alive | Timeouts |
+| ------------------------------------- | --------- | ------ | ----- | -------- |
+| browser report, with the rows         | 1,070     | 994    | 76    | 0        |
+| browser report, after the examples    | 1,070     | 1,055  | 15    | 0        |
+| the other 29, with the first examples | 1,383     | 1,284  | 99    | 10       |
+| the other 29, after the examples      | 1,383     | 1,328  | 55    | 10       |
+
+One of the last run's 55 was a neutral failure: a race example in
+`bills_idempotency_key_race_spec.rb` timed out under the load of the
+other workers. `MealsController#show_cooks` run alone killed all 18.
+So 69 are left: 15 and 54. One of the 54, `Integer` for `to_i` in
+`AttendanceVersionCheck#attendance_version_now`, has an example now
+(below), so 68.
+
+Missing examples, each with one now. Each mutation, made by hand,
+fails its example. The browser report's examples killed 61 of its 76,
+and the rest killed 44 of the other 99 and the one below:
+
+- The browser report's refusals: each refusal now expects its
+  reason word for word, and a list sent as the tests or the error is
+  refused. An iPhone with a touch screen is a phone. A version the
+  gem reads as "" is no version (`Integer` for `to_i` raised). An
+  empty Sec-Fetch-Site is taken, and a same-origin value that is not
+  the spec's own frozen string (`equal?` for `!=` passed while both
+  were the same literal). A large body is read only to one byte past
+  the limit. A report that cannot be queued is reported with its
+  result.
+- `BrowserReportJob#perform`: a load_failed report tries no count
+  (without the check the write failed validation, the job was tried
+  again, and the owner got a second alert). A count refused as a
+  conflict is tried five times, a quarter second apart at first.
+- `BrowserCount.add_one!`: a bad device and a version of zero are
+  refused with the model's message, before the write.
+- `SolidQueueCheck`: the sleep between looks when no sleeper is given
+  (the default sleeper's mutations), three looks in five seconds,
+  the seconds a run took, and 0 when the worker's clock is behind,
+  "waiting" for a job with no status, and the two answers with no
+  job: a run already recorded and no reason.
+- `SchemaBootCheck.pending_versions`: two folders, a subfolder, the
+  versions in order, and a version the database has run left out.
+- `SquashedMigrationsCheck.problem`: the newest version from a list in
+  any order, and a database that lacks the file's own version.
+- `StructureDumpCleanup.without_extension_comments`: every comment, not
+  the first.
+- `AttendanceVersionCheck`: the 404's message on a write that sent a
+  version; and 404, not 500, for a resident id that is not a number
+  (`Integer` for `to_i`).
+- `MealsController#show_cooks`: the form reads the versions before the
+  rows. The example commits a sign-up between the two reads.
+- `AttendanceVersion.of` and `.by_resident_id`: one person with a
+  different count on two meals.
+- `Settlement#forget_cached_meals`: no push token in a settlement's
+  push, even when `Current` has one.
+- `CommunitiesController#hosts`: the order by unit name. The example
+  existed, and it passed with the ORDER BY dropped: the database gave
+  the rows back in unit order anyway. The rows are touched after they
+  are made now, so they are stored out of unit order, and the example
+  fails without the ORDER BY.
+
+A bug (4): `StructureDumpCleanup.clean!` reads the file as UTF-8 but
+writes it in the process's default encoding. Under a US-ASCII default
+(a process with no UTF-8 locale) a file with a character outside ASCII
+raises on the write. Each mutation of the read's `encoding:` fails on
+the read instead, so they are not killed by any example the code can
+pass today. The failing example is on its own commit.
+
+Loops that never end (10), all in `SolidQueueCheck.verify_recurring_run!`:
+the count of waits left without `ceil` (2.5 never reaches zero), the
+count not lowered, lowered by 0 or by 167, the `if waits_left.zero?`
+check dropped or never true, and its `raise` dropped or turned into a
+string. Each example that reaches the loop hangs.
+
+Changes no caller can see (54):
+
+- `instance_of?` for `is_a?` (8): `BrowserReport#text` and
+  `PushToken.read` on a query param, `PasswordReset.resident_for` on a
+  token, `AttendanceVersionParam.from_params` on a JSON Integer or
+  String (2), `AttendanceVersionCheck#attendance_write` on
+  `from_params`'s answer (the REFUSAL String, an Integer or nil),
+  `SuperuserAdapter#token_authorized?` (ActiveAdmin::Page has no
+  subclass), and `UnknownRouteLog.call` (nothing subclasses
+  ActionController::RoutingError).
+- `Integer(x, 0)` or `Integer(x)` for `Integer(x, 10)` (6): on a
+  migration version, in `pending_versions` and `recorded_versions`, a
+  timestamp that never starts with 0; and in `from_params`, whose
+  pattern refuses a leading 0 except in "0" itself.
+- `!eql?`, `!equal?` for `!=` (3): two Integers in `attendance_write`,
+  and two Strings in `from_another_site?`, where `eql?` is `==`.
+- `fetch` for `[]` (7): the five context keys in `BrowserReportJob#alert`,
+  which `perform` always fills, and `:resident_id`, which the route
+  always has (2).
+- `BrowserReportsController#create` (4): `head(:no_content)` dropped,
+  or a symbol or nil in its place (3). An API action that renders
+  nothing answers 204 No Content. `#{e}` for `#{e.message}` (1).
+- `BrowserCount.add_one!` (3): count 2 or 167 on the record built only
+  to validate (any count above 0 passes; the INSERT writes 1), and
+  `squish` dropped on the SQL.
+- `BrowserCount.by_month` (1): `Arel.sql` dropped on the order. Rails
+  takes the plain string, since each part is a column name with a
+  direction or NULLS LAST.
+- `SolidQueueCheck.enqueue_like_the_scheduler` (3): the notification
+  name dropped or nil, so every event is seen. The enqueue event holds
+  every other event inside it and finishes last, so the payload kept
+  is still its own. `key?(:skipped)` for `[:skipped]`: Solid Queue sets
+  the key only to true.
+- `SolidQueueCheck.verify_processes!` (2): `to_s` dropped or `to_str` on
+  `kind`, a NOT NULL string column.
+- `SquashedMigrationsCheck` (7): in `recorded_versions`, `.+?` for `.*?`
+  (Rails writes the INSERT only when there is a version) and the whole
+  match for the group (2; the line above the list has no quoted
+  digits); `lstrip` or `rstrip` for `strip` in `squashed_version` (2;
+  a line of spaces is empty after any of the three); `unless` with no
+  `else` in `problem`, the same as the `if` with a nil branch; and
+  `database.last` for `max` in `verify!`, since Rails reads the versions
+  in order and every version has 14 digits.
+- `SchemaBootCheck.pending_versions` (1): `.at` for `[]`. ActiveSupport's
+  `String#at` is `[]`.
+- `RecurringCatchUp#enqueue` (3): `#{job_class}` for
+  `#{job_class.name}` (a class's `to_s` is its name), and `false`
+  dropped twice: the method then answers the report's nil, and
+  `RecurringCatchUp#call` reads only whether it is true.
+- `MealsController#set_meal_resident` (2): the 404 when no row is found
+  dropped. `attendance_write` gets the nil row and the action answers
+  the same 404 itself.
+- `MealsController#meal_resident` (2): `raise` or `super` for its body.
+  Nothing calls it.
+- `AttendanceVersion.of` (1): the meal for `meal.id` in a `where` hash.
+  Rails reads the id.
+- `LiveUpdate.meal` (1): the `false` dropped from `MealNote.new`. The
+  Struct fills nil, and `untokened` is read only by `unless`.

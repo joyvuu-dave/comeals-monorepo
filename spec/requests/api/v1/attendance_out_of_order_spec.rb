@@ -188,6 +188,15 @@ RSpec.describe 'Attendance writes that reach the server out of order' do
     expect(response.parsed_body['message']).to eq('Change not permitted. Meal has already been reconciled.')
   end
 
+  # A resident id that is not a number names nobody: 404, as for any
+  # other id with no sign-up, not an error.
+  it 'answers 404 for a take-off with a version and a resident id that is not a number' do
+    delete "/api/v1/meals/#{meal.id}/residents/nobody", params: { token: token, attendance_version: 0 }, as: :json
+
+    expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body).to eq('message' => ApiController::NOT_FOUND)
+  end
+
   it 'answers 404 for a take-off or a change with the right version and no sign-up' do
     take_off(0)
     expect(response).to have_http_status(:not_found)
