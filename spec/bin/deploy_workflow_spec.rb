@@ -83,34 +83,78 @@ RSpec.describe 'the Deploy workflow scripts', bash_coverage: BashCoverage.new('s
   end
 
   describe 'bin/lib/deploy/green-gate' do
-    def gate(runs)
-      sandbox.rule('gh', "api repos/{owner}/{repo}/commits/#{candidate}/check-runs --paginate --jq *",
-                   out: runs.map { "#{it}\n" }.join)
+    # The two questions bin/lib/ci-checks asks GitHub: the newest CI run
+    # on a push of the candidate, then that run's jobs.
+    let(:runs_call) do
+      "api repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=#{candidate}&event=push&per_page=1 --jq *"
+    end
+    let(:jobs_call) { 'api repos/{owner}/{repo}/actions/runs/42/jobs?filter=latest&per_page=100 --paginate --jq *' }
+
+    before { sandbox.link('bin/lib/ci-checks') }
+
+    # run: GitHub's answer about the run ("42|completed|success"), or nil
+    # when CI has not run. jobs: one "name|status|conclusion" per job.
+    def gate(run, jobs = [])
+      sandbox.rule('gh', runs_call, out: run ? "#{run}\n" : '')
+      sandbox.rule('gh', jobs_call, out: jobs.map { "#{it}\n" }.join)
       sandbox.run_script('bin/lib/deploy/green-gate', env: { 'CANDIDATE' => candidate })
     end
 
-    it 'passes when every check succeeded, was neutral or was skipped' do
-      result = gate(%w[ruby-test|completed|success node-lint|completed|neutral mutant|completed|skipped])
+    it 'passes when the CI run and every job in it succeeded, were neutral or were skipped' do
+      result = gate('42|completed|success', %w[ruby-test|completed|success node-lint|completed|neutral
+                                               storm|completed|skipped])
 
       expect(result.exitstatus).to eq(0)
       expect(result.out).to eq("All CI checks green.\n")
-      expect(sandbox.calls_to('gh').map(&:args).first.last).to include('select(.name != "daily-deploy")')
     end
 
-    it 'refuses when no check ran' do
-      result = gate([])
+    # Other workflows run on the same commit. A Mutant run started by hand
+    # fails whenever a mutation survives, and this Deploy run's own job is
+    # still running while it asks. Neither says anything about the code.
+    # On 2026-10-27 a Mutant run on main stopped a deploy, because the gate
+    # read every check run on the commit.
+    it 'asks only about the CI workflow, on a push of the candidate, and its newest jobs' do
+      gate('42|completed|success', %w[ruby-test|completed|success])
+
+      expect(sandbox.call_lines('gh')).to eq(
+        ["gh api repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=#{candidate}&event=push&per_page=1 " \
+         '--jq .workflow_runs[0] // empty | "\\(.id)|\\(.status)|\\(.conclusion // "pending")"',
+         'gh api repos/{owner}/{repo}/actions/runs/42/jobs?filter=latest&per_page=100 --paginate ' \
+         '--jq .jobs[] | "\\(.name)|\\(.status)|\\(.conclusion // "pending")"']
+      )
+    end
+
+    it 'refuses when CI has not run on a push of the candidate' do
+      result = gate(nil)
 
       expect(result.exitstatus).to eq(1)
       expect(result.out).to include("No CI runs found for #{candidate}")
+      expect(sandbox.call_lines('gh').size).to eq(1)
     end
 
-    it 'refuses and names every check that is still running or did not pass' do
-      result = gate(%w[ruby-test|in_progress|pending node-lint|completed|failure e2e|completed|cancelled
-                       ruby-lint|completed|success])
+    it 'refuses when GitHub cannot be read' do
+      sandbox.rule('gh', runs_call, exit: 1, err: "HTTP 502\n")
+
+      result = sandbox.run_script('bin/lib/deploy/green-gate', env: { 'CANDIDATE' => candidate })
 
       expect(result.exitstatus).to eq(1)
-      expect(result.out).to eq("still running: ruby-test\nfailure: node-lint\ncancelled: e2e\n" \
-                               "CI is not green for #{candidate}.\n")
+      expect(result.out).to eq("Could not read the CI run for #{candidate} from GitHub.\n")
+    end
+
+    it 'refuses and names the run and every job that is still running or did not pass' do
+      result = gate('42|in_progress|pending', %w[ruby-test|in_progress|pending node-lint|completed|failure
+                                                 e2e|completed|cancelled ruby-lint|completed|success])
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to eq("still running: CI\nstill running: ruby-test\nfailure: node-lint\n" \
+                               "cancelled: e2e\nCI is not green for #{candidate}.\n")
+    end
+
+    it 'refuses a failed run even when its newest jobs all passed' do
+      result = gate('42|completed|failure', %w[ruby-test|completed|success])
+
+      expect(result.exitstatus).to eq(1)
+      expect(result.out).to eq("failure: CI\nCI is not green for #{candidate}.\n")
     end
   end
 

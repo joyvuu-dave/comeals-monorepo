@@ -38,6 +38,7 @@ class BashCoverage
     'bin/smoke' => 'spec/bin/smoke_spec.rb',
     'bin/rollback-check' => 'spec/bin/rollback_check_spec.rb',
     'bin/lib/json.sh' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/ci-checks' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/compare' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/green-gate' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/hold-check' => 'spec/bin/deploy_workflow_spec.rb',

@@ -990,10 +990,15 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_nothing_changed_in_production
     end
 
-    it 'asks about the commit it would ship' do
+    # Only the CI workflow counts: a Mutant run started by hand on the same
+    # commit fails whenever a mutation survives, and on 2026-10-27 one
+    # stopped a deploy because the gate read every check run on the commit.
+    it 'asks only about the CI workflow, on a push of the commit it would ship' do
       deploy.run('--yes')
 
-      expect(deploy.calls_to('gh').first).to include("repos/{owner}/{repo}/commits/#{head}/check-runs")
+      expect(deploy.calls_to('gh').first)
+        .to include("repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=#{head}&event=push&per_page=1")
+      expect(deploy.calls_to('gh').second).to include('repos/{owner}/{repo}/actions/runs/7/jobs?filter=latest')
     end
 
     it 'refuses a commit with no CI runs' do

@@ -19,7 +19,7 @@
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
 #   smoke_env    the credentials the last bin/smoke call was given
-#   logs, check_runs, push_output, real_git
+#   logs, check_runs (the CI run's jobs), push_output, real_git
 set +x
 
 name=${0##*/}
@@ -263,9 +263,16 @@ git_default() {
 case "$name" in
   heroku) heroku_default "$@" ;;
   git) git_default "$@" ;;
+  # gh api: bin/lib/ci-checks asks for the newest CI run (run 7, which
+  # passed, unless check_runs is empty: then CI has not run), then for
+  # that run's jobs (check_runs).
   gh)
     [ "${1:-}" = api ] || unexpected "$@"
-    cat "$home/check_runs"
+    case "${2:-}" in
+      */actions/workflows/ci.yml/runs\?*) [ -s "$home/check_runs" ] && echo '7|completed|success' ;;
+      */actions/runs/7/jobs\?*) cat "$home/check_runs" ;;
+      *) unexpected "$@" ;;
+    esac
     ;;
   # curl -sL -o /dev/null -w "%{http_code}" URL: the site answers 200 only
   # while web runs and maintenance is off, like the real one.
