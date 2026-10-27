@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+# Prints how the CI workflow (.github/workflows/ci.yml) did on a push of
+# one commit, one line per check: name|status|conclusion. The first line
+# is the run as a whole, named CI; then one line per job, from the
+# newest attempt, so a job that was rerun reports its newest try. Prints
+# nothing when CI has not run on a push of the commit.
+#
+# bin/deploy and the Deploy workflow's green gate both use it. Only CI
+# counts: other workflows run on the same commit, and their results say
+# nothing about the code. A Mutant run started by hand fails whenever a
+# mutation survives, and the Deploy workflow's own job is still running
+# while it asks.
+#
+# Usage: bin/lib/ci-checks SHA
+set -euo pipefail
+
+sha="$1"
+run=$(gh api "repos/{owner}/{repo}/actions/workflows/ci.yml/runs?head_sha=${sha}&event=push&per_page=1" \
+  --jq '.workflow_runs[0] // empty | "\(.id)|\(.status)|\(.conclusion // "pending")"')
+[ -n "$run" ] || exit 0
+
+IFS='|' read -r id status conclusion <<< "$run"
+echo "CI|$status|$conclusion"
+gh api "repos/{owner}/{repo}/actions/runs/${id}/jobs?filter=latest&per_page=100" --paginate \
+  --jq '.jobs[] | "\(.name)|\(.status)|\(.conclusion // "pending")"'

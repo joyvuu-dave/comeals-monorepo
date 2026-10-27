@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # The Deploy workflow's "Green gate" step (.github/workflows/deploy.yml).
-# Every CI check on the candidate must have completed successfully. This
-# run's own job is left out: it is attached to the same sha and would
-# otherwise wait on itself.
+# The CI run on the candidate and every job in it must have completed
+# successfully (bin/lib/ci-checks). Other workflows on the same commit,
+# this run's own job included, do not count.
 #
 # Reads CANDIDATE.
 set -euo pipefail
@@ -20,8 +20,10 @@ report_runs() {
 }
 
 sha="$CANDIDATE"
-filter='.check_runs[] | select(.name != "daily-deploy") | "\(.name)|\(.status)|\(.conclusion // "pending")"'
-runs=$(gh api "repos/{owner}/{repo}/commits/${sha}/check-runs" --paginate --jq "$filter")
+runs=$("$(dirname "$0")/../ci-checks" "$sha") || {
+  echo "Could not read the CI run for $sha from GitHub."
+  exit 1
+}
 if [ -z "$runs" ]; then
   echo "No CI runs found for $sha — refusing to deploy untested code."
   exit 1

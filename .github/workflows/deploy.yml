@@ -27,7 +27,6 @@ concurrency:
 
 permissions:
   contents: write
-  checks: read
   actions: read
 
 env:
@@ -88,9 +87,9 @@ jobs:
         id: compare
         run: bin/lib/deploy/compare
 
-      # Every CI check on the candidate must have completed
-      # successfully. This run's own job is excluded — it is attached
-      # to the same sha and would otherwise wait on itself.
+      # The CI run on the candidate and every job in it must have
+      # completed successfully. Other workflows on the same sha, this
+      # run's own job included, do not count (bin/lib/ci-checks).
       - name: Green gate
         if: steps.compare.outputs.proceed == 'true'
         env:

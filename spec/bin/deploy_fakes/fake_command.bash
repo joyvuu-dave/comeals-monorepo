@@ -269,7 +269,7 @@ case "$name" in
   gh)
     [ "${1:-}" = api ] || unexpected "$@"
     case "${2:-}" in
-      */actions/workflows/ci.yml/runs\?*) [ -s "$home/check_runs" ] && echo '7|completed|success' ;;
+      */actions/workflows/ci.yml/runs\?*) if [ -s "$home/check_runs" ]; then echo '7|completed|success'; fi ;;
       */actions/runs/7/jobs\?*) cat "$home/check_runs" ;;
       *) unexpected "$@" ;;
     esac

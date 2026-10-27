@@ -191,9 +191,11 @@ emails when a Monday run never started at all.
 
 The weekly job:
 
-1. **Green gate.** Every CI check on the tip of main must have
-   completed successfully — the same rule bin/deploy's preflight_ci
-   enforces. Nothing to deploy (prod already runs this sha) also stops
+1. **Green gate.** The CI workflow's run on the tip of main, and every
+   job in it, must have completed successfully — the same rule
+   bin/deploy's preflight_ci enforces (bin/lib/ci-checks). Other
+   workflows on the same commit, such as a Mutant run started by hand,
+   do not count. Nothing to deploy (prod already runs this sha) also stops
    here, as a success: no alert is sent. The gate also refuses while
    the `DEPLOY_HOLD` repo variable is set (see rollbacks below) — a
    hold means a person decided production should not follow main

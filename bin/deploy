@@ -415,11 +415,11 @@ Every break-glass use gets reviewed. Answer in this issue: what was broken, why 
   local sha
   sha=$(git rev-parse HEAD)
 
-  # One line per check run: name|status|conclusion. The API returns
-  # the latest run per check, so retried jobs report their newest try.
+  # One line per check: name|status|conclusion, for the CI workflow's
+  # run on a push of this commit and each of its jobs. Other workflows on
+  # the same commit (a Mutant run started by hand) do not count.
   local runs
-  if ! runs=$(gh api "repos/{owner}/{repo}/commits/${sha}/check-runs" --paginate \
-    --jq '.check_runs[] | "\(.name)|\(.status)|\(.conclusion // "pending")"'); then
+  if ! runs=$("$(dirname "$0")/lib/ci-checks" "$sha"); then
     fail "Could not read check runs from GitHub (DEPLOY_WITHOUT_CI=1 overrides)"
     exit 1
   fi
