@@ -123,10 +123,12 @@ RSpec.describe Settlement do
 
     # The browser that asked for the settlement may have its own copies of
     # these meal pages, so it is told too: the push names no socket to
-    # leave out, although the request has one.
+    # leave out, although the request has one, and no push token, which
+    # only a write from a meal page's sign-up list may name.
     it "pushes each settled meal's page to every browser, the one that asked included" do
       meal = settleable_meal(latest)
       Current.socket_id = '123.456'
+      Current.push_token = 'a-push-token'
       RSpec::Mocks.space.proxy_for(Pusher).reset
       allow(Pusher).to receive(:trigger)
 

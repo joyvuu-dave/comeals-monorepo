@@ -60,6 +60,14 @@ RSpec.describe BrowserCount do
 
       expect(described_class.sole).to have_attributes(major: nil, count: 2)
     end
+
+    # The model's rules run before the write, so a bad value is refused
+    # with the model's message, not the database's.
+    it 'refuses a value the model does not take, and writes nothing' do
+      expect { described_class.add_one!(**key, device: 'watch') }
+        .to raise_error(ActiveRecord::RecordInvalid, /Device is not included in the list/)
+      expect(described_class.count).to eq(0)
+    end
   end
 
   describe 'validations' do

@@ -93,9 +93,13 @@ RSpec.describe BrowserReportJob do
     end
 
     # The same page load already sent its check's result, and that one
-    # was counted.
-    it 'does not count the page load again' do
+    # was counted. A load_failed row is not a row browser_counts takes, so
+    # the job must not try to write one: the write would fail, the job
+    # would be tried again, and in the end the owner would get a second
+    # alert for a write that was never needed.
+    it 'does not count the page load again, and is not tried again' do
       expect(BrowserCount.count).to eq(0)
+      expect(enqueued_jobs).to be_empty
     end
   end
 

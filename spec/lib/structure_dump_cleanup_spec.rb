@@ -26,6 +26,14 @@ RSpec.describe StructureDumpCleanup do
         .to eq(extension + table_comment)
     end
 
+    # pg_dump writes one for each extension, and the app has several.
+    it 'removes every one, not only the first' do
+      second = comment.gsub('pgcrypto', 'btree_gist').sub('cryptographic functions', 'GiST support')
+
+      expect(described_class.without_extension_comments(extension + comment + second + table_comment))
+        .to eq(extension + table_comment)
+    end
+
     it 'keeps comments on tables, columns and everything else' do
       expect(described_class.without_extension_comments(table_comment)).to eq(table_comment)
     end

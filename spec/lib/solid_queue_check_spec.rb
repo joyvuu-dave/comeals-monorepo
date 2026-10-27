@@ -106,6 +106,21 @@ RSpec.describe SolidQueueCheck do
       expect(SolidQueue::RecurringExecution.sole.task_key).to eq(task_key)
     end
 
+    # The worker runs on another dyno, and its clock can be a little
+    # behind this one's. Then the job finishes, by its own time stamp,
+    # before it was queued. The check says 0 s, not a time below zero.
+    it 'says 0 s when the worker\'s clock is behind and the job finished before it was queued' do
+      save_task
+      worker_with_a_slow_clock = lambda do |*|
+        run_worker
+        SolidQueue::Job.update_all(finished_at: 3.seconds.ago)
+      end
+
+      result = described_class.verify_recurring_run!(sleeper: worker_with_a_slow_clock)
+
+      expect(result).to eq("the worker ran #{task_key} 0 s after it was queued")
+    end
+
     it 'fails when the scheduler has not saved its tasks' do
       expect { described_class.verify_recurring_run!(sleeper: method(:run_worker)) }
         .to raise_error(RuntimeError, /no recurring task #{task_key}.*the scheduler has not saved its tasks/o)

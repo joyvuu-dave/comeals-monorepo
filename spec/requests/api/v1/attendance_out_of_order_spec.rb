@@ -62,6 +62,27 @@ RSpec.describe 'Attendance writes that reach the server out of order' do
     expect(form_version).to eq(1)
   end
 
+  # The form reads the versions before the attendance rows, so a write
+  # that commits between the two reads shows the new row with the old
+  # version, never the old row with the new version
+  # (AttendanceVersionCheck#read_attendance_versions says why). Here the
+  # sign-up commits just after the versions are read: the form must show
+  # Alice signed up with version 0. Read the other way round, it shows
+  # her not signed up with version 1, and her next tap on is refused.
+  it 'reads the versions before the rows, so a sign-up in between shows with the old version' do
+    form_version
+    allow(AttendanceVersion).to receive(:by_resident_id).and_wrap_original do |original, *args|
+      versions = original.call(*args)
+      create(:meal_resident, meal: meal, resident: alice, community: community)
+      versions
+    end
+
+    get "/api/v1/meals/#{meal.id}/cooks", params: { token: token }
+
+    row = response.parsed_body['residents'].find { |resident| resident['id'] == alice.id }
+    expect(row.slice('attending', 'attendance_version')).to eq('attending' => true, 'attendance_version' => 0)
+  end
+
   # Case C. The sign-up is held on the network. The page stops waiting,
   # loads the meal again (not signed up), and the person signs up and
   # then takes themselves off. Then the held sign-up arrives. It expects
@@ -170,9 +191,11 @@ RSpec.describe 'Attendance writes that reach the server out of order' do
   it 'answers 404 for a take-off or a change with the right version and no sign-up' do
     take_off(0)
     expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body).to eq('message' => ApiController::NOT_FOUND)
 
     set_late(true, 0)
     expect(response).to have_http_status(:not_found)
+    expect(response.parsed_body).to eq('message' => ApiController::NOT_FOUND)
   end
 
   # A page loaded before this release sends no version. It must keep

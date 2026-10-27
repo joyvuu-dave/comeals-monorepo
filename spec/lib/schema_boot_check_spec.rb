@@ -70,6 +70,22 @@ RSpec.describe SchemaBootCheck do
       )
     end
 
+    # Rails takes more than one migrations folder (config.paths['db/migrate']).
+    it 'reads the files of every migrations folder' do
+      other = Dir.mktmpdir('more_migrations')
+      File.write(File.join(other, "#{PRODUCTION_SCHEMA_VERSION + 2}_in_another_folder.rb"),
+                 "class InAnotherFolder < ActiveRecord::Migration[8.1]; end\n")
+      context = ActiveRecord::MigrationContext.new([dir, other], pool.schema_migration, pool.internal_metadata)
+      allow(pool).to receive(:migration_context).and_return(context)
+
+      versions = "#{PRODUCTION_SCHEMA_VERSION + 1}, #{PRODUCTION_SCHEMA_VERSION + 2}"
+      expect { described_class.verify!('The web process') }.to raise_error(
+        described_class::DatabaseBehind, %r{has not run 2 migrations that are in db/migrate/: #{versions}\.}
+      )
+    ensure
+      FileUtils.remove_entry(other)
+    end
+
     # The integration and admin browser suites start web with the clock
     # stopped at a day in the past (config/initializers/integration_fake_time.rb).
     # Rails refuses to read a migration file dated after "now", so reading
