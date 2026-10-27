@@ -386,6 +386,21 @@ MUTANT_SPEC_ROWS = {
   'spec/models/application_record_ransackable_attributes_spec.rb' => %w[ApplicationRecord],
   'spec/db/settled_meal_triggers_spec.rb' => %w[ReconciledMealImmutability],
   'spec/db/seeds_spec.rb' => %w[Community],
+  # The browser check's report. The request spec is the only spec of
+  # BrowserReport and BrowserDescription: no file describes either one.
+  'spec/requests/api/v1/browser_reports_spec.rb' =>
+    %w[Api::V1::BrowserReportsController BrowserReport BrowserDescription],
+  # The only spec where a count is written while another write holds its
+  # row, so the only one that fails when the job's RetryOnConflict is taken
+  # away. BrowserCount.add_one! by name: browser_count_spec.rb has a
+  # '.add_one!' group, and a class entry would never reach that method.
+  'spec/db/browser_counts_spec.rb' => %w[BrowserCount.add_one! BrowserReportJob],
+  # BrowserCount.by_month by name, for the same reason as the row above.
+  'spec/requests/admin/browsers_page_spec.rb' => %w[BrowserCount.by_month],
+  # The only spec that reads the versions the database trigger writes.
+  'spec/db/attendance_versions_spec.rb' => %w[AttendanceVersion],
+  # The deploy tasks, which raise through these two checks.
+  'spec/tasks/deploy_verify_spec.rb' => %w[SolidQueueCheck SquashedMigrationsCheck],
   'spec/lib/solid_cache/store_spec.rb' => [],
 
   # Slow or timing-dependent by design: a storm, random sequences, a
