@@ -291,15 +291,22 @@ RSpec.describe 'random action sequences against one meal, through the API' do
   end
 
   # From step 22 the sequence is steered to the settled half: new bills
-  # whenever there are none, or a cost is blank on a meal someone ate,
-  # then the settlement from step 24 on.
+  # whenever there are none, or a cost is blank on a meal someone ate;
+  # a guest (reopening first if the meal is full) when a receipt has money
+  # and nobody can be charged for it; then the settlement from step 24 on.
+  # Without the guest, such a meal was refused at every step to the end,
+  # so the sequence never settled (seeds 46, 80, 90 and others above 40,
+  # found 2026-10-26 by running 200 seeds).
   def pick_action(rng, model, step)
-    if step >= 22 && !model[:settled]
-      return :set_bills if model[:bills].empty? || (someone_to_charge?(model) && !settleable?(model))
-      return :settle if step >= 24
-    end
+    steered = steer_to_settle(model, step) if step >= 22 && !model[:settled]
+    steered || action_weights.flat_map { |name, weight| [name] * weight }.sample(random: rng)
+  end
 
-    action_weights.flat_map { |name, weight| [name] * weight }.sample(random: rng)
+  def steer_to_settle(model, step)
+    return :set_bills if model[:bills].empty? || (someone_to_charge?(model) && !settleable?(model))
+    return spots_left?(model) ? :add_guest : :reopen unless someone_to_charge?(model) || settleable?(model)
+
+    :settle if step >= 24
   end
 
   # --- the checks after every step -----------------------------------------
