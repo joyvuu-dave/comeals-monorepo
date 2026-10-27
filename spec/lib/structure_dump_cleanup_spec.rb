@@ -62,6 +62,28 @@ RSpec.describe StructureDumpCleanup do
       end
     end
 
+    # The file is UTF-8 whatever the process's default encoding is. A
+    # process started with no UTF-8 locale has US-ASCII as its default.
+    # clean! reads the file as UTF-8, but writes it in the default, so a
+    # character outside ASCII stops the write.
+    it 'writes the file as UTF-8 when the default encoding is not' do
+      Dir.mktmpdir('structure') do |dir|
+        path = File.join(dir, 'structure.sql')
+        accented = table_comment.sub('one dinner', 'one dinner, café included')
+        File.write(path, extension + comment + accented)
+        default = Encoding.default_external
+
+        begin
+          Encoding.default_external = Encoding::US_ASCII
+          described_class.clean!(path)
+        ensure
+          Encoding.default_external = default
+        end
+
+        expect(File.read(path, encoding: 'UTF-8')).to eq(extension + accented)
+      end
+    end
+
     it 'rewrites the file without them' do
       Dir.mktmpdir('structure') do |dir|
         path = File.join(dir, 'structure.sql')
