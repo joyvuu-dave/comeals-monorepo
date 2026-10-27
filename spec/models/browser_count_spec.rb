@@ -68,6 +68,11 @@ RSpec.describe BrowserCount do
         .to raise_error(ActiveRecord::RecordInvalid, /Device is not included in the list/)
       expect(described_class.count).to eq(0)
     end
+
+    it 'refuses a version of zero with the model\'s message' do
+      expect { described_class.add_one!(**key, major: 0) }
+        .to raise_error(ActiveRecord::RecordInvalid, /Major must be greater than 0/)
+    end
   end
 
   describe 'validations' do

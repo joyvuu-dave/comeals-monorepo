@@ -119,6 +119,23 @@ RSpec.describe 'POST /api/v1/browser-reports' do
       expect(queued_browser).to eq('browser' => 'Safari', 'major' => 18, 'os' => 'macOS', 'device' => 'desktop')
     end
 
+    # The touch test reads an iPad only from a Mac string: an iPhone with
+    # a touch screen is still a phone.
+    it 'reads an iPhone with a touch screen as a phone' do
+      send_report('result=passed&touch=1')
+
+      expect(queued_browser).to eq('browser' => 'Safari', 'major' => 18, 'os' => 'iOS', 'device' => 'phone')
+    end
+
+    # The gem reads "Chrome/.5" as version "", not a number.
+    it 'keeps no version when the version in the string is not a number' do
+      send_report('result=passed&touch=0',
+                  user_agent: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/.5')
+
+      expect(response).to have_http_status(:no_content)
+      expect(queued_browser).to include('browser' => 'Chrome', 'major' => nil)
+    end
+
     it 'counts a browser it does not know as unknown' do
       send_report('result=passed&touch=0', user_agent: 'SomethingNew/3')
 
@@ -156,29 +173,41 @@ RSpec.describe 'POST /api/v1/browser-reports' do
   end
 
   describe 'refusing what the check never sends' do
+    # Each refusal says what was wrong, so a mistake in the check is found
+    # from the answer alone.
+    results = 'passed, failed, error, load_failed'
     [
-      ['no result', 'touch=0'],
-      ['an unknown result', 'result=maybe&touch=0'],
-      ['a failed report with no tests', 'result=failed&touch=0'],
-      ['a failed report with an empty test list', 'result=failed&tests=&touch=0'],
-      ['an unknown test', 'result=failed&tests=lookbehind,flying&touch=0'],
-      ['the same test twice', 'result=failed&tests=cookies,cookies&touch=0'],
-      ['tests on a passing report', 'result=passed&tests=cookies&touch=0'],
-      ['an error on a passing report', 'result=passed&error=boom&touch=0'],
-      ['an error report with no error', 'result=error&touch=0'],
-      ['an error longer than the check sends', "result=error&error=#{'x' * 201}&touch=0"],
-      ['a load_failed report with no error', 'result=load_failed&touch=0'],
-      ['a load_failed report with tests', 'result=load_failed&tests=cookies&error=x&touch=0'],
-      ['a load_failed error longer than the check sends', "result=load_failed&error=#{'x' * 201}&touch=0"],
-      ['no touch', 'result=passed'],
-      ['a touch that is not 0 or 1', 'result=passed&touch=2'],
-      ['a list where one value is expected', 'result[]=passed&touch=0']
-    ].each do |name, query|
-      it "refuses #{name}, and queues nothing" do
+      ['no result', 'touch=0', "result must be one of #{results}"],
+      ['an unknown result', 'result=maybe&touch=0', "result must be one of #{results}"],
+      ['a failed report with no tests', 'result=failed&touch=0', 'a failed report names at least one test'],
+      ['a failed report with an empty test list', 'result=failed&tests=&touch=0',
+       'a failed report names at least one test'],
+      ['an unknown test', 'result=failed&tests=lookbehind,flying&touch=0', 'unknown test in lookbehind,flying'],
+      ['the same test twice', 'result=failed&tests=cookies,cookies&touch=0',
+       'a test is named twice in cookies,cookies'],
+      ['tests on a passing report', 'result=passed&tests=cookies&touch=0',
+       'tests are sent only with result=failed, not passed'],
+      ['an error on a passing report', 'result=passed&error=boom&touch=0',
+       'an error is sent only with result=error, not passed'],
+      ['an error report with no error', 'result=error&touch=0', 'an error report says what the error was'],
+      ['an error longer than the check sends', "result=error&error=#{'x' * 201}&touch=0",
+       'an error is at most 200 characters'],
+      ['a load_failed report with no error', 'result=load_failed&touch=0', 'an error report says what the error was'],
+      ['a load_failed report with tests', 'result=load_failed&tests=cookies&error=x&touch=0',
+       'tests are sent only with result=failed, not load_failed'],
+      ['a load_failed error longer than the check sends', "result=load_failed&error=#{'x' * 201}&touch=0",
+       'an error is at most 200 characters'],
+      ['no touch', 'result=passed', 'touch must be one of 0, 1'],
+      ['a touch that is not 0 or 1', 'result=passed&touch=2', 'touch must be one of 0, 1'],
+      ['a list where one value is expected', 'result[]=passed&touch=0', 'result must be one value'],
+      ['a list of tests', 'result=failed&tests[]=cookies&touch=0', 'tests must be one value'],
+      ['an error sent as a list', 'result=error&error[]=boom&touch=0', 'error must be one value']
+    ].each do |name, query, reason|
+      it "refuses #{name}, says why, and queues nothing" do
         send_report(query)
 
         expect(response).to have_http_status(:bad_request)
-        expect(response.parsed_body['message']).to be_present
+        expect(response.parsed_body).to eq('message' => "This is not a browser check report: #{reason}.")
         expect(enqueued_reports).to be_empty
       end
     end
@@ -201,6 +230,19 @@ RSpec.describe 'POST /api/v1/browser-reports' do
       expect(enqueued_reports).to be_empty
     end
 
+    # The limit is kept by how much is read, not by what Content-Length
+    # says: a body of any size costs at most one byte over the limit.
+    it 'reads at most one byte over the limit of a large body' do
+      body = StringIO.new('x' * 1.megabyte)
+      allow(body).to receive(:read).and_call_original
+
+      send_report('result=passed&touch=0', env: { 'rack.input' => body, 'CONTENT_TYPE' => 'text/plain' })
+
+      expect(response).to have_http_status(:content_too_large)
+      expect(body).to have_received(:read).with(Api::V1::BrowserReportsController::MAX_BODY + 1).once
+      expect(body.pos).to eq(Api::V1::BrowserReportsController::MAX_BODY + 1)
+    end
+
     # A browser says where a request came from. The check's report always
     # comes from the app's own page.
     it 'refuses a report sent from another site' do
@@ -216,10 +258,21 @@ RSpec.describe 'POST /api/v1/browser-reports' do
       expect(response).to have_http_status(:no_content)
     end
 
-    it 'takes a report the browser says came from the same page' do
-      send_report('result=passed&touch=0', headers: { 'Sec-Fetch-Site' => 'same-origin' })
+    it 'takes a report with an empty Sec-Fetch-Site, as from a browser that does not say' do
+      send_report('result=passed&touch=0', headers: { 'Sec-Fetch-Site' => '' })
 
       expect(response).to have_http_status(:no_content)
+      expect(enqueued_reports.size).to eq(1)
+    end
+
+    # A header read from the network is a new string each time, so the
+    # value is built here, not written as a literal the spec could share
+    # with the code.
+    it 'takes a report the browser says came from the same page' do
+      send_report('result=passed&touch=0', headers: { 'Sec-Fetch-Site' => %w[same origin].join('-') })
+
+      expect(response).to have_http_status(:no_content)
+      expect(enqueued_reports.size).to eq(1)
     end
   end
 
@@ -234,6 +287,6 @@ RSpec.describe 'POST /api/v1/browser-reports' do
 
     expect(response).to have_http_status(:no_content)
     expect(Rails.error).to have_received(:report).with(an_instance_of(ActiveRecord::ConnectionNotEstablished),
-                                                       hash_including(handled: true))
+                                                       handled: true, context: { browser_report: 'passed' })
   end
 end

@@ -124,6 +124,31 @@ RSpec.describe BrowserReportJob do
       expect(BrowserCount.sole.attributes.values.map(&:to_s)).not_to include(report[:user_agent], 'TypeError: boom')
     end
 
+    # Two page loads of the same browser at the same moment write the
+    # same row, and at SERIALIZABLE the second is refused. A job is a
+    # batch: nobody waits for it, so it tries more often than a request
+    # does (5 times, not 3) and waits longer between tries.
+    describe 'a write refused as a conflict' do
+      include_context 'with no test transaction'
+
+      it 'is tried up to five times, a quarter second apart at first' do
+        refusals = 4
+        allow(BrowserCount).to receive(:add_one!).and_wrap_original do |original, **args|
+          if refusals.positive?
+            refusals -= 1
+            raise ActiveRecord::SerializationFailure, 'could not serialize access'
+          end
+          original.call(**args)
+        end
+        allow(RetryOnConflict).to receive(:sleep)
+
+        described_class.perform_now(**report)
+
+        expect(BrowserCount.sole.count).to eq(1)
+        expect(RetryOnConflict).to have_received(:sleep).with(a_value_between(0.25, 0.5)).once
+      end
+    end
+
     # A count that cannot be written is tried again a few seconds later,
     # and in the end reported, never raised. The alert goes once, not once
     # per try.
