@@ -2,7 +2,7 @@
 
 require 'rails_helper'
 
-# The money hunt's property spec (.agents/skills/bug-hunt/SKILL.md): 100
+# The money hunt's property spec (.agents/skills/bug-hunt/SKILL.md):
 # random ledgers (spec/support/random_ledger.rb) through MealLedger and
 # described_class.allocate_to_cents, in memory, no database. What must hold for every one of them:
 #
@@ -13,16 +13,15 @@ require 'rails_helper'
 #      the exact amount;
 #   4. the same ledger rounds the same way every time.
 #
-# Each ledger is built from a seed, printed on failure so the case can be
-# rerun alone (MONEY_PROPERTY_SEED=n).
+# Each ledger is built from a seed. A failure prints its seed and the
+# command that reruns it alone. 100 seeds by default; MONEY_PROPERTY_SEEDS
+# and MONEY_PROPERTY_SEED change that (spec/support/property_seeds.rb).
 RSpec.describe Settlement, '.allocate_to_cents, on random ledgers' do
   def residents = RandomLedger::RESIDENTS
   def cent = BigDecimal('0.01')
 
-  seeds = ENV['MONEY_PROPERTY_SEED'] ? [Integer(ENV.fetch('MONEY_PROPERTY_SEED'))] : (1..100).to_a
-
-  seeds.each do |seed|
-    it "holds for ledger #{seed}" do
+  PropertySeeds.seeds(default: 100).each do |seed|
+    it "holds for ledger #{seed}", property_seed: seed do
       ledger = MealLedger.new(RandomLedger.meals(seed))
 
       # 1. every meal's lines cancel out

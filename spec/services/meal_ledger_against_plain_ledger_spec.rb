@@ -42,14 +42,14 @@ RSpec.describe MealLedger do
       expect(rounded).to eq(PlainLedger.round_to_cents(raw)), "#{label}: rounding to cents disagrees"
     end
 
-    seeds = ENV['MONEY_PROPERTY_SEED'] ? [Integer(ENV.fetch('MONEY_PROPERTY_SEED'))] : (1..200).to_a
-
-    seeds.each do |seed|
-      it "agrees on ledger #{seed}" do
+    # 200 seeds by default; MONEY_PROPERTY_SEEDS and MONEY_PROPERTY_SEED
+    # change that (spec/support/property_seeds.rb).
+    PropertySeeds.seeds(default: 200).each do |seed|
+      it "agrees on ledger #{seed}", property_seed: seed do
         expect_agreement(RandomLedger.meals(seed), "seed #{seed}")
       end
 
-      it "agrees on ledger #{seed} with small receipts" do
+      it "agrees on ledger #{seed} with small receipts", property_seed: seed do
         expect_agreement(RandomLedger.meals(seed, cents_max: 500), "seed #{seed} small")
       end
     end

@@ -340,10 +340,10 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     expect_close(MealCharge.where(meal_id: meal.id).group(:resident_id).sum(:amount), net, 'stored charges and rows')
   end
 
-  seeds = ENV['MONEY_PROPERTY_SEED'] ? [Integer(ENV.fetch('MONEY_PROPERTY_SEED'))] : (1..40).to_a
-
-  seeds.each do |seed|
-    it "holds for sequence #{seed}" do
+  # 40 seeds by default; MONEY_PROPERTY_SEEDS and MONEY_PROPERTY_SEED
+  # change that (spec/support/property_seeds.rb).
+  PropertySeeds.seeds(default: 40).each do |seed|
+    it "holds for sequence #{seed}", property_seed: seed do
       rng = Random.new(seed)
       model = fresh_model
       residents

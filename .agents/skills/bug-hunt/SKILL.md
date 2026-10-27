@@ -119,9 +119,10 @@ For `MealLedger`, `Settlement`, `allocate_to_cents`, and
   meal set (a property spec with 100 random ledgers);
 - check every `Float` in the money path: `grep -rn "to_f\|Float" app`;
 - run the oracle comparison
-  (`spec/services/meal_ledger_against_plain_ledger_spec.rb`) with a fresh
-  range of seeds, `MONEY_PROPERTY_SEED` one at a time or by widening the
-  range in the file. The plain ledger it compares against was written
+  (`spec/services/meal_ledger_against_plain_ledger_spec.rb`) with more
+  seeds than bin/check runs: `MONEY_PROPERTY_SEEDS=10000` runs seeds 1 to
+  10000 in each money property spec (`spec/support/property_seeds.rb`),
+  and `MONEY_PROPERTY_SEED=n` reruns one. The plain ledger it compares against was written
   from the rules, not the code (MODELS.md, "The plain ledger is the
   stronger oracle"); a disagreement is a bug on one side or a rule the
   documents state badly.

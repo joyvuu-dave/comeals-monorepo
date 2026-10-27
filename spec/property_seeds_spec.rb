@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'rails_helper'
+require 'rspec/core/sandbox'
 
 # spec/support/property_seeds.rb picks the seeds the money property specs
 # run, and adds the command that reruns a failed seed to its failure.
