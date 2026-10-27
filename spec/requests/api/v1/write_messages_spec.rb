@@ -220,6 +220,10 @@ RSpec.describe 'API write responses' do
       first_unit = create(:unit, community: community, name: 'A1')
       late = create(:resident, community: community, unit: last_unit, multiplier: 2, name: 'Zed Young')
       early = create(:resident, community: community, unit: first_unit, multiplier: 2, name: 'Abe Old')
+      # An update writes a new copy of the row, so the table no longer
+      # holds the rows in the order they were made. Only the ORDER BY puts
+      # them in unit order.
+      [first_unit, early].each(&:touch)
 
       get "/api/v1/communities/#{community.id}/hosts", params: { token: token }
 

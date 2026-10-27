@@ -399,8 +399,13 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/admin/browsers_page_spec.rb' => %w[BrowserCount.by_month],
   # The only spec that reads the versions the database trigger writes.
   'spec/db/attendance_versions_spec.rb' => %w[AttendanceVersion],
-  # The deploy tasks, which raise through these two checks.
-  'spec/tasks/deploy_verify_spec.rb' => %w[SolidQueueCheck SquashedMigrationsCheck],
+  # The deploy tasks, which raise through these two checks. The three
+  # methods the tasks call are named too: each has a group in its lib
+  # spec, and for a method with a group mutant runs only the examples
+  # tagged with that method.
+  'spec/tasks/deploy_verify_spec.rb' =>
+    %w[SolidQueueCheck SquashedMigrationsCheck SolidQueueCheck.verify_processes!
+       SolidQueueCheck.verify_recurring_run! SquashedMigrationsCheck.verify!],
   'spec/lib/solid_cache/store_spec.rb' => [],
 
   # Slow or timing-dependent by design: a storm, random sequences, a

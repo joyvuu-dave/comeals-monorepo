@@ -70,17 +70,25 @@ RSpec.describe SchemaBootCheck do
       )
     end
 
-    # Rails takes more than one migrations folder (config.paths['db/migrate']).
-    it 'reads the files of every migrations folder' do
+    # Rails takes more than one migrations folder (config.paths['db/migrate']),
+    # and reads the files in their subfolders too. The versions are named
+    # in order, whatever folder each is in, and a version the database has
+    # run is not named.
+    it 'reads every migrations folder and its subfolders, and names the versions in order' do
       other = Dir.mktmpdir('more_migrations')
       File.write(File.join(other, "#{PRODUCTION_SCHEMA_VERSION + 2}_in_another_folder.rb"),
                  "class InAnotherFolder < ActiveRecord::Migration[8.1]; end\n")
+      FileUtils.mkdir(File.join(dir, 'later'))
+      File.write(File.join(dir, 'later', "#{PRODUCTION_SCHEMA_VERSION + 3}_in_a_subfolder.rb"),
+                 "class InASubfolder < ActiveRecord::Migration[8.1]; end\n")
+      File.write(File.join(dir, "#{PRODUCTION_SCHEMA_VERSION}_already_run.rb"),
+                 "class AlreadyRun < ActiveRecord::Migration[8.1]; end\n")
       context = ActiveRecord::MigrationContext.new([dir, other], pool.schema_migration, pool.internal_metadata)
       allow(pool).to receive(:migration_context).and_return(context)
 
-      versions = "#{PRODUCTION_SCHEMA_VERSION + 1}, #{PRODUCTION_SCHEMA_VERSION + 2}"
+      versions = (1..3).map { PRODUCTION_SCHEMA_VERSION + it }.join(', ')
       expect { described_class.verify!('The web process') }.to raise_error(
-        described_class::DatabaseBehind, %r{has not run 2 migrations that are in db/migrate/: #{versions}\.}
+        described_class::DatabaseBehind, %r{has not run 3 migrations that are in db/migrate/: #{versions}\.}
       )
     ensure
       FileUtils.remove_entry(other)

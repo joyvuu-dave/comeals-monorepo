@@ -72,6 +72,18 @@ RSpec.describe 'the attendance_versions table' do
     expect([version, version(of: bob), version(on: other_meal)]).to eq([1, 1, 1])
   end
 
+  # One person, two meals, a different count on each: each read takes
+  # only the meal it names.
+  it 'reads one meal\'s versions, not another meal\'s' do
+    other_meal = create(:meal, community: community, date: meal.date + 1)
+    create(:meal_resident, meal: meal, resident: alice, community: community).update!(late: true)
+    create(:meal_resident, meal: other_meal, resident: alice, community: community)
+
+    expect([version, version(on: other_meal)]).to eq([2, 1])
+    expect([AttendanceVersion.by_resident_id(meal.id), AttendanceVersion.by_resident_id(other_meal.id)])
+      .to eq([{ alice.id => 2 }, { alice.id => 1 }])
+  end
+
   it 'goes with its meal when an open meal is deleted' do
     create(:meal_resident, meal: meal, resident: alice, community: community)
     meal.destroy!

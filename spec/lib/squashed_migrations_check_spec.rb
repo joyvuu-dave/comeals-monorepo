@@ -80,6 +80,16 @@ RSpec.describe SquashedMigrationsCheck do
       expect(problem(recorded)).to be_nil
     end
 
+    # The newest version is the largest one, whatever order the list is in.
+    it 'reads the newest version from a list in any order' do
+      expect(problem(recorded.reverse)).to be_nil
+    end
+
+    # The file's own version is one of the deleted migrations too.
+    it 'refuses a database that ran a newer migration but not the one the file names' do
+      expect(problem(recorded - [squashed] + [20_261_030_000_000])).to match(/has not run 1 of .*: #{squashed}\./o)
+    end
+
     it 'is satisfied when the database is ahead of the file' do
       expect(problem(recorded + [20_261_030_000_000])).to be_nil
     end

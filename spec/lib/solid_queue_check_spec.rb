@@ -84,7 +84,7 @@ RSpec.describe SolidQueueCheck do
     # The task as the scheduler saves it when it starts.
     def save_task
       config = Rails.application.config_for(:recurring).fetch(task_key.to_sym)
-      SolidQueue::RecurringTask.from_configuration(task_key, **config).save!
+      SolidQueue::RecurringTask.from_configuration(task_key, **config).tap(&:save!)
     end
 
     # The worker on the dyno, in the spec: it runs every ready job, then stops.
@@ -121,6 +121,29 @@ RSpec.describe SolidQueueCheck do
       expect(result).to eq("the worker ran #{task_key} 0 s after it was queued")
     end
 
+    it 'says how many seconds after the queueing the worker ran it' do
+      save_task
+      slow_worker = lambda do |*|
+        run_worker
+        SolidQueue::Job.update_all(finished_at: 3.seconds.from_now)
+      end
+
+      result = described_class.verify_recurring_run!(sleeper: slow_worker)
+
+      expect(result).to eq("the worker ran #{task_key} 3 s after it was queued")
+    end
+
+    # bin/deploy runs the task, which gives no sleeper: the check then
+    # sleeps between looks.
+    it 'sleeps between looks when it is given no sleeper' do
+      save_task
+      allow(described_class).to receive(:sleep)
+
+      expect { described_class.verify_recurring_run!(within: 3.seconds) }
+        .to raise_error(RuntimeError, /did not run #{task_key} within 3 seconds/o)
+      expect(described_class).to have_received(:sleep).with(SolidQueueCheck::POLL_EVERY).twice
+    end
+
     it 'fails when the scheduler has not saved its tasks' do
       expect { described_class.verify_recurring_run!(sleeper: method(:run_worker)) }
         .to raise_error(RuntimeError, /no recurring task #{task_key}.*the scheduler has not saved its tasks/o)
@@ -146,13 +169,42 @@ RSpec.describe SolidQueueCheck do
         .to raise_error(RuntimeError, /#{task_key} failed on the worker: RuntimeError: cleanup broke/o)
     end
 
+    # Looks every POLL_EVERY (2) seconds: within 5 seconds that is three
+    # waits, the last one rounded up.
     it 'fails when the worker has not run it in time' do
       save_task
       waits = []
 
-      expect { described_class.verify_recurring_run!(within: 3.seconds, sleeper: ->(seconds) { waits << seconds }) }
-        .to raise_error(RuntimeError, /the worker did not run #{task_key} within 3 seconds; it is ready/o)
-      expect(waits).to eq([SolidQueueCheck::POLL_EVERY, SolidQueueCheck::POLL_EVERY])
+      expect { described_class.verify_recurring_run!(within: 5.seconds, sleeper: ->(seconds) { waits << seconds }) }
+        .to raise_error(RuntimeError, /the worker did not run #{task_key} within 5 seconds; it is ready/o)
+      expect(waits).to eq([SolidQueueCheck::POLL_EVERY] * 3)
+    end
+
+    # A job with no execution row has no status in Solid Queue.
+    it 'says the job is waiting when Solid Queue gives it no status' do
+      save_task
+      no_execution = ->(*) { SolidQueue::ReadyExecution.delete_all }
+
+      expect { described_class.verify_recurring_run!(within: 2.seconds, sleeper: no_execution) }
+        .to raise_error(RuntimeError, /the worker did not run #{task_key} within 2 seconds; it is waiting\z/o)
+    end
+
+    # The scheduler on the worker may have queued this same run already.
+    it 'fails and says so when a run at that time is already recorded' do
+      save_task
+      allow(SolidQueue::RecurringExecution).to receive(:record).and_raise(SolidQueue::RecurringExecution::AlreadyRecorded)
+
+      expect { described_class.verify_recurring_run!(sleeper: method(:run_worker)) }
+        .to raise_error(RuntimeError, "could not queue #{task_key}: a run at that time is already recorded")
+    end
+
+    it 'fails and says Solid Queue gave no reason when the queueing answers false with none' do
+      task = save_task
+      allow(SolidQueue::RecurringTask).to receive(:find_by).with(key: task_key).and_return(task)
+      allow(task).to receive(:enqueue).and_return(false)
+
+      expect { described_class.verify_recurring_run!(sleeper: method(:run_worker)) }
+        .to raise_error(RuntimeError, "could not queue #{task_key}: Solid Queue gave no reason")
     end
   end
 end
