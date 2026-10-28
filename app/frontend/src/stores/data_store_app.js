@@ -6,6 +6,7 @@ import axios from "axios";
 import Cookie from "js-cookie";
 
 import { pusherClient, startPusher } from "../helpers/pusher_client";
+import { pageSetting } from "../helpers/page_settings";
 import {
   communityNow,
   getCommunityTimezone,
@@ -63,7 +64,7 @@ export function appVolatile() {
 // is ever confirmed (the staging app), so nothing waits.
 function confirmationPending(channel) {
   return (
-    Boolean(import.meta.env.VITE_PUSHER_KEY) &&
+    Boolean(pageSetting("comeals-pusher-key")) &&
     channel !== null &&
     channel.confirmed !== true
   );

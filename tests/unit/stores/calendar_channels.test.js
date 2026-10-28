@@ -17,6 +17,7 @@ vi.mock("js-cookie", () => import("../mocks/js_cookie.js"));
 vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import { stubRandomUUID } from "../mocks/uuid.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 stubRandomUUID();
 
 const COMMUNITY = "test-community-id";
@@ -163,7 +164,7 @@ describe("calendar channels through the real Pusher client", () => {
 
   beforeEach(async () => {
     vi.clearAllMocks();
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+    setPageSetting("comeals-pusher-key", "test-key");
     window.Pusher = FakePusher;
     vi.resetModules();
     ({ DataStore } =
@@ -505,7 +506,7 @@ describe("calendar channels through the real Pusher client", () => {
 
     // Without a Pusher key nothing ever confirms (the staging app).
     it("do not hold back the neighbours when Pusher has no key", async () => {
-      vi.stubEnv("VITE_PUSHER_KEY", "");
+      setPageSetting("comeals-pusher-key", "");
       await julyMounted();
 
       expect(fetchesOf(2024, 6)).toBe(1);

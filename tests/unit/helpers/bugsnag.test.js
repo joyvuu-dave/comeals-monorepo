@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import Bugsnag from "@bugsnag/js";
+import { setPageSetting } from "./page_settings_for_tests.js";
 
 // The module reads import.meta.env at load time, so each case has to
 // re-import it with the environment already stubbed.
@@ -22,7 +23,7 @@ describe("bugsnag helper", () => {
   // The important case. A test run and `vite dev` must never report, and
   // the local checkout has no key at all, so both guards are load-bearing.
   it("does not start without an API key", async () => {
-    vi.stubEnv("VITE_BUGSNAG_API_KEY", "");
+    setPageSetting("comeals-bugsnag-api-key", "");
     vi.stubEnv("PROD", true);
 
     const { startBugsnag } = await loadHelper();
@@ -32,7 +33,7 @@ describe("bugsnag helper", () => {
   });
 
   it("does not start outside a production build, even with a key", async () => {
-    vi.stubEnv("VITE_BUGSNAG_API_KEY", "abc123");
+    setPageSetting("comeals-bugsnag-api-key", "abc123");
     vi.stubEnv("PROD", false);
 
     const { startBugsnag } = await loadHelper();
@@ -42,7 +43,7 @@ describe("bugsnag helper", () => {
   });
 
   it("starts once when the key is present in a production build", async () => {
-    vi.stubEnv("VITE_BUGSNAG_API_KEY", "abc123");
+    setPageSetting("comeals-bugsnag-api-key", "abc123");
     vi.stubEnv("PROD", true);
 
     const { startBugsnag } = await loadHelper();
@@ -63,7 +64,7 @@ describe("bugsnag helper", () => {
     // has started, notify only logs a console warning and drops the error,
     // so the guard keeps that noise out of a normal dev session.
     it("does nothing before start", async () => {
-      vi.stubEnv("VITE_BUGSNAG_API_KEY", "");
+      setPageSetting("comeals-bugsnag-api-key", "");
       const { notifyError } = await loadHelper();
 
       expect(notifyError(new Error("boom"))).toBe(false);
@@ -71,7 +72,7 @@ describe("bugsnag helper", () => {
     });
 
     it("reports after start, with the React component stack", async () => {
-      vi.stubEnv("VITE_BUGSNAG_API_KEY", "abc123");
+      setPageSetting("comeals-bugsnag-api-key", "abc123");
       vi.stubEnv("PROD", true);
       const { startBugsnag, notifyError } = await loadHelper();
       startBugsnag();
@@ -90,7 +91,7 @@ describe("bugsnag helper", () => {
     });
 
     it("reports without metadata when the caller has none", async () => {
-      vi.stubEnv("VITE_BUGSNAG_API_KEY", "abc123");
+      setPageSetting("comeals-bugsnag-api-key", "abc123");
       vi.stubEnv("PROD", true);
       const { startBugsnag, notifyError } = await loadHelper();
       startBugsnag();

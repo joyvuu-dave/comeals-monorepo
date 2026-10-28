@@ -14,6 +14,7 @@ import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, billsServer } from "../helpers/bills_server.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // The dinner on screen is cancelled from somewhere else (another tab,
 // the admin's Cancel button, the settlement preview's button) while this
@@ -35,7 +36,7 @@ let serverMeal;
 let channels;
 
 beforeEach(() => {
-  vi.stubEnv("VITE_PUSHER_KEY", "k");
+  setPageSetting("comeals-pusher-key", "k");
   vi.useFakeTimers();
   vi.clearAllMocks();
   toastStore.clearAll();

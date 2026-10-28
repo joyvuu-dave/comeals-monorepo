@@ -7,6 +7,7 @@ import { cleanup, configure } from "@testing-library/react";
 import { afterEach, beforeAll, beforeEach, vi } from "vitest";
 import Cookie, { cookies } from "../mocks/js_cookie.js";
 import { WAIT_LIMIT_MS } from "./wait_for.js";
+import { clearPageSettings } from "./page_settings_for_tests.js";
 
 // How long findBy* and waitFor wait before they fail. Testing Library's
 // default is 1 second. With six full Vitest runs at once, waits that
@@ -76,6 +77,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup();
+  clearPageSettings();
   // A test may have replaced console.error itself (the bugsnag and
   // error-boundary tests do). Only restore when our spy is still the
   // one installed.

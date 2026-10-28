@@ -1,6 +1,8 @@
 import { describe, it, expect } from "vitest";
 import {
   adminBaseFor,
+  pageKeysOlderRelease,
+  pageKeysProblem,
   redact,
   signInResident,
   checkAdmin,
@@ -344,5 +346,56 @@ describe("refusedReport", () => {
         "This is not a pass. Check the SMOKE_* credentials. If they are " +
         "right, sign in by hand: if that fails too, the site is broken.",
     ]);
+  });
+});
+
+describe("pageKeysProblem", () => {
+  const tags = (pusherKey) => [
+    { name: "comeals-pusher-key", content: pusherKey },
+    { name: "comeals-pusher-cluster", content: "us2" },
+    { name: "comeals-bugsnag-api-key", content: "" },
+  ];
+
+  it("passes the real site's page with a Pusher key", () => {
+    expect(pageKeysProblem("https://comeals.com", tags("key"))).toBeNull();
+  });
+
+  // What production would send if it ran a build made on staging (#257).
+  it("fails the real site's page with no Pusher key", () => {
+    expect(pageKeysProblem("https://comeals.com", tags(""))).toBe(
+      "the page has no Pusher key, so screens will not update by themselves",
+    );
+  });
+
+  it("passes staging's page and a local page with no Pusher key", () => {
+    expect(
+      pageKeysProblem("https://comeals-staging.herokuapp.com", tags("")),
+    ).toBeNull();
+    expect(pageKeysProblem("http://localhost:3000", tags(""))).toBeNull();
+    expect(pageKeysProblem("http://127.0.0.1:3000", tags(""))).toBeNull();
+  });
+
+  it("fails a page with a tag missing or twice, on any site", () => {
+    expect(pageKeysProblem("http://localhost:3000", tags("key").slice(1))).toBe(
+      "the page has 0 comeals-pusher-key tag(s), not 1",
+    );
+    expect(
+      pageKeysProblem("https://comeals.com", [
+        ...tags("key"),
+        { name: "comeals-bugsnag-api-key", content: "" },
+      ]),
+    ).toBe("the page has 2 comeals-bugsnag-api-key tag(s), not 1");
+  });
+});
+
+// Production before this change, and after a rollback to such a release:
+// the keys are built into the JavaScript and the page has no tags.
+describe("a page from before #257", () => {
+  it("is not a problem, and is named as an older release", () => {
+    expect(pageKeysProblem("https://comeals.com", [])).toBeNull();
+    expect(pageKeysOlderRelease([])).toBe(true);
+    expect(
+      pageKeysOlderRelease([{ name: "comeals-pusher-key", content: "k" }]),
+    ).toBe(false);
   });
 });

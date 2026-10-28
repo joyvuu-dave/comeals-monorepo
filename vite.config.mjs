@@ -8,6 +8,7 @@ import istanbulSource from "./tests/helpers/vite_istanbul.mjs";
 import { BUILD_TARGET } from "./app/frontend/browser_target.mjs";
 import stripOldJsxPropsPlugin from "./app/frontend/strip_old_jsx_props.mjs";
 import preloadCalendarPlugin from "./app/frontend/preload_calendar.mjs";
+import pageSettingsPlugin from "./app/frontend/page_settings.mjs";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -102,6 +103,7 @@ export default defineConfig(({ command }) => ({
     browserCheckPlugin(),
     perfLogPlugin(),
     preloadCalendarPlugin(),
+    pageSettingsPlugin(),
     ...(visualCoverage
       ? [istanbulSource({ include: "app/frontend/src" })]
       : []),

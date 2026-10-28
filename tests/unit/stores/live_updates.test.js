@@ -43,6 +43,7 @@ import * as idbKeyval from "idb-keyval";
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import * as monthCache from "../../../app/frontend/src/stores/month_cache.js";
 import { prefetchMonth } from "../../../app/frontend/src/stores/month_fetch.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 const COMMUNITY = "test-community-id";
 
@@ -212,7 +213,7 @@ describe("live updates in the store", () => {
     // key (confirmationPending in data_store_app.js), and four tests
     // here are about that wait. Without this they passed only where
     // .env sets the key.
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+    setPageSetting("comeals-pusher-key", "test-key");
     channels.clear();
     confirmed.clear();
     idbKeyval._disk.clear();

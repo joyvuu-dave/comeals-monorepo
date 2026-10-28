@@ -15,6 +15,7 @@ import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
 import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // A bills save sends edits: one per cook it changes, each with the bill
 // the page saw for that cook (#135, docs/adr/0009-bills-saves-send-edits.md).
@@ -27,7 +28,7 @@ import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_sto
 let server;
 
 beforeEach(() => {
-  vi.stubEnv("VITE_PUSHER_KEY", "k");
+  setPageSetting("comeals-pusher-key", "k");
   vi.useFakeTimers();
   vi.clearAllMocks();
   toastStore.clearAll();

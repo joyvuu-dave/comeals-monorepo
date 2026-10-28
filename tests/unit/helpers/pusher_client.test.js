@@ -1,13 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { vitestWaitFor } from "./wait_for.js";
 import { fakeLocation } from "./fake_location.js";
+import { setPageSetting } from "./page_settings_for_tests.js";
 
 // The Pusher transport. Each test gets a fresh module (the client keeps
 // `started` and the real instance at module level) and its own env.
 async function freshClient(env) {
   vi.resetModules();
-  vi.stubEnv("VITE_PUSHER_KEY", env.key);
-  vi.stubEnv("VITE_PUSHER_CLUSTER", "us3");
+  setPageSetting("comeals-pusher-key", env.key);
+  setPageSetting("comeals-pusher-cluster", "us3");
   return import("../../../app/frontend/src/helpers/pusher_client.js");
 }
 

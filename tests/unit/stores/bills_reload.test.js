@@ -13,6 +13,7 @@ import * as idbKeyval from "idb-keyval";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, mealIdOf } from "../helpers/bills_server.js";
 import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // The page does not build a meal's rows again from the server while it
 // has a bills edit for that meal the server may not have yet: typed and
@@ -64,7 +65,7 @@ function payload() {
 
 describe("a live update of the meal while a cost is typed but not sent", () => {
   beforeEach(() => {
-    vi.stubEnv("VITE_PUSHER_KEY", "k");
+    setPageSetting("comeals-pusher-key", "k");
     vi.useFakeTimers();
   });
   afterEach(() => vi.useRealTimers());
@@ -106,7 +107,7 @@ describe("the meal is not loaded again while a bills edit for it is pending", ()
   let stored;
 
   beforeEach(() => {
-    vi.stubEnv("VITE_PUSHER_KEY", "k");
+    setPageSetting("comeals-pusher-key", "k");
     vi.useFakeTimers();
     server = billsServer(axios);
     server.install();

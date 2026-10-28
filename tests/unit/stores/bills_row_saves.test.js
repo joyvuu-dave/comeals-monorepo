@@ -14,6 +14,7 @@ import { autorun } from "mobx";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // Each cook row saves on its own (#150). A row's save names only that
 // row's cooks, and saves for different rows go at the same time. While a
@@ -24,7 +25,7 @@ import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
 let server;
 
 beforeEach(() => {
-  vi.stubEnv("VITE_PUSHER_KEY", "k");
+  setPageSetting("comeals-pusher-key", "k");
   vi.useFakeTimers();
   vi.clearAllMocks();
   toastStore.clearAll();

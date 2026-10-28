@@ -7,6 +7,7 @@ vi.mock("idb-keyval", () => import("../mocks/idb_keyval.js"));
 
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { useDeviceZone } from "../helpers/device_zone.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // The community is in Los Angeles (the cookie fixture) and the device
 // is somewhere else: a resident on a trip, or a tablet whose zone was
@@ -43,8 +44,8 @@ describe.each([
 
   beforeEach(() => {
     vi.clearAllMocks();
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
-    vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
+    setPageSetting("comeals-pusher-key", "test-key");
+    setPageSetting("comeals-pusher-cluster", "us2");
     vi.useFakeTimers();
   });
 

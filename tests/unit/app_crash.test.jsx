@@ -11,6 +11,7 @@ vi.mock("../../app/frontend/src/helpers/bugsnag", () => ({
 }));
 
 import { fakeLocation } from "./helpers/fake_location.js";
+import { setPageSetting } from "./helpers/page_settings_for_tests.js";
 
 // A crash in a part of the page outside ErrorBoundary, which is around
 // the routes only. Before OuterErrorBoundary, such a crash took the
@@ -72,7 +73,7 @@ const EMPTY_ROOT = '<div id="root"></div>';
 // boot.test.jsx had). No test here is about Pusher, so the file runs
 // with no key, the way CI does (CI has no .env), and nothing is loaded.
 beforeEach(() => {
-  vi.stubEnv("VITE_PUSHER_KEY", "");
+  setPageSetting("comeals-pusher-key", "");
 });
 
 afterEach(() => {

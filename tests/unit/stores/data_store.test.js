@@ -84,6 +84,7 @@ import mealFixture from "../../fixtures/meal.json";
 // The exact words of server answers the meal page compares, among other
 // things (docs/adr/0001-typescript-at-the-api-boundary.md).
 import contract from "../../fixtures/api_contract.json";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // Replace the Pusher client's subscribe and unsubscribe for one test, so
 // it can see the channel names. pusherClient is module state that lives
@@ -105,8 +106,8 @@ describe("DataStore", () => {
     // untracked .env provides it; CI has no .env, so without this stub
     // the mock Pusher never connects there and every test that reaches
     // into the mock instance fails.
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
-    vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
+    setPageSetting("comeals-pusher-key", "test-key");
+    setPageSetting("comeals-pusher-cluster", "us2");
     // Set up window/navigator stubs for afterCreate
     Object.defineProperty(globalThis, "navigator", {
       value: { onLine: true },

@@ -23,6 +23,7 @@ import {
 } from "../../../app/frontend/src/stores/month_fetch.js";
 import { pusherClient } from "../../../app/frontend/src/helpers/pusher_client.js";
 import { createDataStore } from "../helpers/create_data_store.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // The community's time zone reaches the SPA once, as a cookie written at
 // login, and every time on screen and "today" are computed from it. When
@@ -49,8 +50,8 @@ describe("DataStore: the community time zone", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     monthCache.clear();
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
-    vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
+    setPageSetting("comeals-pusher-key", "test-key");
+    setPageSetting("comeals-pusher-cluster", "us2");
     Object.defineProperty(globalThis, "navigator", {
       value: { onLine: true },
       writable: true,
@@ -304,7 +305,7 @@ describe("DataStore: the community time zone", () => {
       // The prefetch of the months next to the one on screen waits for
       // Pusher's confirmation of the residents channel, which this test
       // does not need. Without a key nothing waits for Pusher.
-      vi.stubEnv("VITE_PUSHER_KEY", "");
+      setPageSetting("comeals-pusher-key", "");
       idbKeyval.get.mockImplementation((key) =>
         Promise.resolve(
           key === JULY
@@ -347,7 +348,7 @@ describe("DataStore: the community time zone", () => {
       // The prefetch of the months next to the one on screen waits for
       // Pusher's confirmation of the residents channel, which this test
       // does not need. Without a key nothing waits for Pusher.
-      vi.stubEnv("VITE_PUSHER_KEY", "");
+      setPageSetting("comeals-pusher-key", "");
       monthCache.set(
         JULY,
         monthPayload({ timezone: "America/Los_Angeles", meals: [JULY_MEAL] }),

@@ -56,8 +56,8 @@
 //    channel's, which would drop them (data_store_app.js appViews).
 //    A channel Pusher refuses ("pusher:subscription_error") counts as
 //    confirmed, so nothing waits for it.
-// 8. With no VITE_PUSHER_KEY the client never connects and the app runs
-//    without live updates; nothing else changes.
+// 8. With no Pusher key in the page the client never connects and the
+//    app runs without live updates; nothing else changes.
 //
 // This file is only the transport. It loads pusher-js outside the main
 // bundle, so first paint does not wait for it (#44 item 1), and only
@@ -72,6 +72,7 @@
 
 import { lazyRetry } from "./lazy_retry";
 import { notifyError } from "./bugsnag";
+import { pageSetting } from "./page_settings";
 
 let real = null;
 const queue = [];
@@ -133,13 +134,15 @@ export const pusherClient = {
 let started = false;
 
 function connect(Pusher) {
-  // Pusher public key + cluster from env vars (VITE_PUSHER_KEY,
-  // VITE_PUSHER_CLUSTER). Local dev: the untracked .env file. CI has
-  // no .env, so anything there that needs a key must set one itself.
+  // Pusher public key + cluster from the page, which carries the keys
+  // of the app that sent it (page_settings.ts). Rails writes them from
+  // PUSHER_KEY and PUSHER_CLUSTER; under vite dev and vite preview, Vite
+  // writes them from VITE_PUSHER_KEY and VITE_PUSHER_CLUSTER (the
+  // untracked .env locally; CI sets its own).
   // No TLS option: pusher-js 8 always uses TLS unless forceTLS is
   // false. (It has no `encrypted` option; this call used to pass one.)
-  real = new Pusher(import.meta.env.VITE_PUSHER_KEY, {
-    cluster: import.meta.env.VITE_PUSHER_CLUSTER,
+  real = new Pusher(pageSetting("comeals-pusher-key"), {
+    cluster: pageSetting("comeals-pusher-cluster"),
   });
   const pending = queue.splice(0);
   pending.forEach(function (fn) {
@@ -154,12 +157,12 @@ function connect(Pusher) {
 export function startPusher(beforeReload) {
   if (started) return;
   started = true;
-  // No key, no connection. The staging app builds with a blank
-  // VITE_PUSHER_KEY on purpose — it must not connect anywhere real,
-  // and a placeholder key would spray console errors that fail the
-  // smoke tests. Queued calls simply never replay; the app works
+  // No key, no connection. The staging app sends its page with no
+  // Pusher key on purpose (app/services/page_settings.rb) — it must not
+  // connect anywhere real, and its placeholder key would fill the
+  // console with errors that fail the smoke tests. Queued calls simply never replay; the app works
   // without live updates. Same graceful-absence pattern as bugsnag.js.
-  if (!import.meta.env.VITE_PUSHER_KEY) return;
+  if (!pageSetting("comeals-pusher-key")) return;
   // The tests stub window.Pusher (tests/helpers/setup.js) so no test
   // ever opens a real connection. The stub predates the lazy import
   // below; loading the real library anyway would bypass it, and did —

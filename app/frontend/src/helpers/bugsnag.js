@@ -1,21 +1,24 @@
 import Bugsnag from "@bugsnag/js";
+import { pageSetting } from "./page_settings";
 
 // Browser-side error tracking, reporting to the same Bugsnag project as
 // Rails. One project, both halves of the app.
 //
 // Two conditions must both hold before anything starts:
 //
-//   the key is present   VITE_BUGSNAG_API_KEY is set on Heroku and nowhere
-//                        else, so a local checkout has no key and does
-//                        nothing.
+//   the key is present   the page carries one only when Rails sends it in
+//                        production (app/services/page_settings.rb), so a
+//                        local checkout has no key and does nothing.
 //   the build is prod    import.meta.env.PROD is false under `vite dev`
 //                        and under vitest, so neither reports. This is the
 //                        check that stops reports if the key ever does end
 //                        up in a local .env.
 //
-// The key is baked into the JavaScript bundle at build time and is public.
-// That is how every browser error tracker works — the key identifies the
-// project to send to, it does not grant access to read anything.
+// The key is in the page, so anyone can read it, and that is fine. That is
+// how every browser error tracker works — the key identifies the project
+// to send to, it does not grant access to read anything. It is read from
+// the page, not built into the JavaScript, because the Deploy workflow
+// builds on staging, which has no key (#257).
 //
 // Bugsnag.start() installs handlers for window.onerror and
 // unhandledrejection by itself, which covers most of what breaks. The
@@ -25,12 +28,11 @@ import Bugsnag from "@bugsnag/js";
 // components/app/outer_error_boundary.tsx (around the whole app) report
 // them through notifyError.
 
-const apiKey = import.meta.env.VITE_BUGSNAG_API_KEY;
-
 let started = false;
 
 export function startBugsnag() {
   if (started) return false;
+  const apiKey = pageSetting("comeals-bugsnag-api-key");
   if (!apiKey) return false;
   if (!import.meta.env.PROD) return false;
 

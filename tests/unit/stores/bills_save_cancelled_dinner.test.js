@@ -14,6 +14,7 @@ import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_store_bills";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, billsServer } from "../helpers/bills_server.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // A cost typed on a meal can reach the server after someone else has
 // cancelled the dinner (ADR 0011 rule 11): another tab, the admin's
@@ -28,7 +29,7 @@ const CANCELLED_REFUSAL =
 let server;
 
 beforeEach(() => {
-  vi.stubEnv("VITE_PUSHER_KEY", "k");
+  setPageSetting("comeals-pusher-key", "k");
   vi.useFakeTimers();
   vi.clearAllMocks();
   toastStore.clearAll();

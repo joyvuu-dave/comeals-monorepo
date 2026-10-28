@@ -23,6 +23,7 @@ import {
   stage,
   stubAction,
 } from "../helpers/create_data_store.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 const COMMUNITY = "test-community-id";
 
@@ -68,8 +69,8 @@ describe("app plumbing", () => {
     // startPusher does nothing without a key. The other store tests stub
     // these too; this file relied on .env, which CI does not have, and was
     // the one red job on main from 2026-09-08 to 2026-09-10.
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
-    vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
+    setPageSetting("comeals-pusher-key", "test-key");
+    setPageSetting("comeals-pusher-cluster", "us2");
   });
 
   afterEach(() => {

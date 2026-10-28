@@ -21,6 +21,7 @@ import MainCalendar from "../../../app/frontend/src/components/calendar/show.jsx
 import { createDataStore } from "../helpers/create_data_store.js";
 import { useDeviceZone } from "../helpers/device_zone.js";
 import { chipDay, chipLine, todayCell } from "../helpers/month_grid.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // The calendar shows every time in the community's zone, on every
 // device (#129). The community here is Los Angeles (the cookie fixture)
@@ -104,8 +105,8 @@ function drawCalendar(day, data) {
 
 beforeEach(() => {
   vi.clearAllMocks();
-  vi.stubEnv("VITE_PUSHER_KEY", "test-key");
-  vi.stubEnv("VITE_PUSHER_CLUSTER", "us2");
+  setPageSetting("comeals-pusher-key", "test-key");
+  setPageSetting("comeals-pusher-cluster", "us2");
 });
 
 afterEach(() => {

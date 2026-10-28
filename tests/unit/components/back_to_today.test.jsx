@@ -26,6 +26,7 @@ import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { useDeviceZone } from "../helpers/device_zone.js";
 import { fakeLocation } from "../helpers/fake_location.js";
+import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // BackToToday brings the shared screen back to today's calendar: five
 // minutes after the last touch, mouse, key or scroll, and after the page
@@ -559,7 +560,7 @@ describe("BackToToday", () => {
       let store;
 
       beforeEach(() => {
-        vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+        setPageSetting("comeals-pusher-key", "test-key");
         vi.spyOn(console, "error").mockImplementation(() => {});
         // No crash before this one, so the wait is five minutes
         // (helpers/crash_reload_wait.ts).
@@ -691,7 +692,7 @@ describe.each([
   let store;
 
   beforeEach(() => {
-    vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+    setPageSetting("comeals-pusher-key", "test-key");
     vi.useFakeTimers();
   });
 

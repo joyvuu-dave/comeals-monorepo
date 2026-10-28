@@ -12,6 +12,7 @@ vi.mock("../../app/frontend/src/helpers/bugsnag", () => ({
 }));
 
 import { fakeLocation } from "./helpers/fake_location.js";
+import { setPageSetting } from "./helpers/page_settings_for_tests.js";
 
 // Each test here loads the whole app fresh (vi.resetModules, then
 // index.jsx). With six Vitest runs at once the first one took up to 15
@@ -201,7 +202,7 @@ beforeEach(() => {
   vi.stubGlobal("__BUILD_ID__", "test-build");
   // Without a key the store does not load Pusher (pusher_client.js),
   // and finishBoot waits for it.
-  vi.stubEnv("VITE_PUSHER_KEY", "test-key");
+  setPageSetting("comeals-pusher-key", "test-key");
   localStorage.setItem("cacheVersion", "test-build");
   sessionStorage.clear();
   vi.spyOn(console, "warn").mockImplementation(() => {});
