@@ -215,20 +215,22 @@ RSpec.describe 'API write responses' do
   end
 
   describe 'the community' do
+    # Without an ORDER BY, Postgres returns rows in the order they sit in
+    # the table, and that depends on what earlier examples wrote to the
+    # same database and rolled back. So two rows made in the wrong order
+    # can still come back sorted. Five rows made in an order that is
+    # neither sorted nor reversed come back sorted only by the ORDER BY.
     it 'lists hosts by unit name, with the unit name beside each' do
-      last_unit = create(:unit, community: community, name: 'Z9')
-      first_unit = create(:unit, community: community, name: 'A1')
-      late = create(:resident, community: community, unit: last_unit, multiplier: 2, name: 'Zed Young')
-      early = create(:resident, community: community, unit: first_unit, multiplier: 2, name: 'Abe Old')
-      # An update writes a new copy of the row, so the table no longer
-      # holds the rows in the order they were made. Only the ORDER BY puts
-      # them in unit order.
-      [first_unit, early].each(&:touch)
+      hosts = %w[C3 A1 E5 B2 D4].map do |unit_name|
+        host_unit = create(:unit, community: community, name: unit_name)
+        create(:resident, community: community, unit: host_unit, multiplier: 2, name: "Host #{unit_name}")
+      end
+      resident # in "Unit <n>", after E5
 
       get "/api/v1/communities/#{community.id}/hosts", params: { token: token }
 
-      expect(response.parsed_body.first).to eq([early.id, 'Abe Old', 'A1'])
-      expect(response.parsed_body.last).to eq([late.id, 'Zed Young', 'Z9'])
+      expected = hosts.sort_by { |host| host.unit.name }.map { |host| [host.id, host.name, host.unit.name] }
+      expect(response.parsed_body).to eq(expected + [[resident.id, resident.name, unit.name]])
     end
 
     it 'takes the birthdays of the month two weeks after the start of the six-week grid' do

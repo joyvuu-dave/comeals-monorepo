@@ -4643,3 +4643,21 @@ Changes no caller can see (52):
   Rails reads the id.
 - `LiveUpdate.meal` (1): the `false` dropped from `MealNote.new`. The
   Struct fills nil, and `untokened` is read only by `unless`.
+
+### 2026-10-28, full run
+
+The full run 40629462445 on GitHub (on e5f61a20): 38,666 mutations,
+38,026 killed, 640 alive, 1 timeout, 98.34%. The run of 2026-10-27 had
+1,286 alive. Compared with that run, no subject has more survivors,
+except the one below.
+
+A test that passed by chance (1): `CommunitiesController#hosts`. Two
+mutations put `order(nil)` and `order("")` in place of
+`order("units.name")` and lived, while a third, with no `order` at all,
+was killed in the same run. All three send the same SQL. Without an
+ORDER BY, Postgres returns rows in the order they sit in the table, and
+that depends on what earlier examples wrote and rolled back in the same
+database. The example made two hosts in the wrong order, so the rows
+could come back sorted without the ORDER BY. It now makes five hosts in
+an order that is neither sorted nor reversed. Run here, mutant kills all
+38 mutations of the method.
