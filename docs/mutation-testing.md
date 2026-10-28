@@ -4511,9 +4511,16 @@ The 46 subjects were then run here, six workers, in two groups.
 One of the last run's 55 was a neutral failure: a race example in
 `bills_idempotency_key_race_spec.rb` timed out under the load of the
 other workers. `MealsController#show_cooks` run alone killed all 18.
-So 69 are left: 15 and 54. One of the 54, `Integer` for `to_i` in
-`AttendanceVersionCheck#attendance_version_now`, has an example now
-(below), so 68.
+So 69 were left: 15 and 54. Since then, `Integer` for `to_i` in
+`AttendanceVersionCheck#attendance_version_now` has an example, and the
+10 loops that never end and the 4 of the bug are killed (both below).
+So 54 are left: 52 changes no caller can see, and the 2 of
+`MealsController#meal_resident`, which nothing calls.
+
+| Run                                         | Mutations | Killed | Alive | Timeouts |
+| ------------------------------------------- | --------- | ------ | ----- | -------- |
+| `SolidQueueCheck.verify_recurring_run!`     | 120       | 120    | 0     | 0        |
+| `StructureDumpCleanup.clean!`, with the fix | 41        | 41     | 0     | 0        |
 
 Missing examples, each with one now. Each mutation, made by hand,
 fails its example. The browser report's examples killed 61 of its 76,
@@ -4568,11 +4575,17 @@ nothing: the code failed either way. The write now names UTF-8 too, and
 an example cleans a file with an accented letter under a US-ASCII
 default. With the fix, a mutation of the read fails that example.
 
-Loops that never end (10), all in `SolidQueueCheck.verify_recurring_run!`:
-the count of waits left without `ceil` (2.5 never reaches zero), the
-count not lowered, lowered by 0 or by 167, the `if waits_left.zero?`
-check dropped or never true, and its `raise` dropped or turned into a
-string. Each example that reaches the loop hangs.
+Loops that never end (10), all in `SolidQueueCheck.verify_recurring_run!`,
+killed now: the count of waits left without `ceil` (2.5 never reaches
+zero), the count not lowered, lowered by 0 or by 167, the
+`if waits_left.zero?` check dropped or never true, and its `raise`
+dropped or turned into a string. Each example that reached the loop
+hung, and a hang is not a kill. A new example gives a sleeper that
+raises on the fourth wait, when 5 seconds allow three. Each of these
+mutations makes that fourth wait, so the example fails at once. It is
+the first example of its group: mutant runs the examples in file
+order and stops at the first that fails, and the group's other
+examples with a sleeper that never ends the wait would hang first.
 
 Changes no caller can see (54):
 

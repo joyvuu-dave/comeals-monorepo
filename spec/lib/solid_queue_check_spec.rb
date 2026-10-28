@@ -94,6 +94,25 @@ RSpec.describe SolidQueueCheck do
       worker.start
     end
 
+    # The count of waits left must reach zero. If it does not, the check
+    # waits for ever, so this sleeper stops it with an error after one
+    # wait too many, and the example fails at once instead of hanging.
+    # It is the first example of the group: mutant runs the examples in
+    # file order and stops at the first that fails, so it must come
+    # before any example that would wait for ever.
+    it 'stops after the waits that fit in the time, never waiting once more' do
+      save_task
+      waits = 0
+      sleeper = lambda do |_seconds|
+        waits += 1
+        raise 'waited once more than 5 seconds allow' if waits > 3
+      end
+
+      expect { described_class.verify_recurring_run!(within: 5.seconds, sleeper: sleeper) }
+        .to raise_error(RuntimeError, /\Athe worker did not run #{task_key} within 5 seconds; it is ready\z/o)
+      expect(waits).to eq(3)
+    end
+
     it 'queues the task the way the scheduler does, waits for the worker to run it, and says how long it took' do
       save_task
       allow(GuestAddKey).to receive(:delete_expired).and_call_original
