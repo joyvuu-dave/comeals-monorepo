@@ -4661,3 +4661,13 @@ database. The example made two hosts in the wrong order, so the rows
 could come back sorted without the ORDER BY. It now makes five hosts in
 an order that is neither sorted nor reversed. Run here, mutant kills all
 38 mutations of the method.
+
+### 2026-10-28, the page's keys (#257)
+
+`PageSettings`, `SpaPageRedirect` and `FallbackController#index`, run
+here: 274 mutations, 273 killed. The one left puts `ENV.to_hash` for
+`ENV.to_h` in `FallbackController#index`; both return the same Hash.
+`SpaPageRedirect#initialize` needs a unit spec of its own
+(`spec/lib/spa_page_redirect_spec.rb`): Rails builds the app's copy of a
+middleware once, at boot, so no request spec ever calls a mutated
+`initialize`.

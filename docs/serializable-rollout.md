@@ -41,11 +41,12 @@ something on the money path does not add up.
 
    Confirmed 2026-07-29: both `BUGSNAG_API_KEY` and `VITE_BUGSNAG_API_KEY` are
    set on Heroku, and the browser half is live — the key and the SDK are both
-   in the deployed bundle. That last part is the one that is easy to get
-   wrong, because Vite writes `VITE_*` vars into the bundle at build time:
-   setting the var after a deploy does nothing until the next build. To
-   re-check it later,
-   fetch the script named in `https://comeals.com/` and grep it for the key.
+   in the deployed bundle. Since #257, the browser does not read the key
+   from the bundle: Rails writes `BUGSNAG_API_KEY` into the page as it sends
+   it, in a `<meta name="comeals-bugsnag-api-key">` tag
+   (`app/services/page_settings.rb`), so a change to the var reaches the
+   next page load with no build. To re-check it later, fetch
+   `https://comeals.com/` and look for that tag with a value in it.
 
    The Rails half is confirmed too, by `rake bugsnag:verify` on 2026-07-29.
    Both events arrived, so `BugsnagErrorSubscriber` is subscribed and the
