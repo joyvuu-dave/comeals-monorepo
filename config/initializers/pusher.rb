@@ -28,9 +28,15 @@ module PusherSetup
   # Pusher credentials and must never broadcast (Pusher.trigger raises on
   # bad credentials, and it runs unrescued after every meal write).
   def self.silence_outside_production(pusher, vars:)
-    return unless vars['INTEGRATION_SERVER'].present? || vars['COMEALS_STAGING'].present?
+    return unless silenced?(vars)
 
     pusher.define_singleton_method(:trigger) { |*_args| true }
+  end
+
+  # Also read by PageSettings: a page sent where the server sends nothing
+  # gets no Pusher key, so it never connects.
+  def self.silenced?(vars)
+    vars['INTEGRATION_SERVER'].present? || vars['COMEALS_STAGING'].present?
   end
 end
 

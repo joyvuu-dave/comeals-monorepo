@@ -40,6 +40,17 @@ RSpec.describe SpaPage do
     expect(page.read).to eq('built page')
   end
 
+  # The stand-in before #257 had no head, so PageSettings could not put
+  # the keys in it.
+  it 'replaces the old stand-in page, which had no head' do
+    page.write(SpaPage::OLD_STAND_IN)
+
+    described_class.write_unless_present
+
+    expect(page.read).to eq(SpaPage::STAND_IN)
+    expect(format('%o', page.stat.mode & 0o777)).to eq('644')
+  end
+
   it 'leaves the page alone when another process writes one between the check and the link' do
     allow(page).to receive(:exist?) do
       page.write('page from another process')

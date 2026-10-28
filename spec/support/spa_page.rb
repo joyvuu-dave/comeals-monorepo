@@ -15,12 +15,20 @@
 # written whole to a file of its own first and then linked in under the
 # real name. The link fails if a file has that name by then, so no request
 # reads a half-written page, and a real build is never replaced.
+#
+# The stand-in has a head, because PageSettings puts the page's keys at
+# the end of it (#257). The stand-in before that had none, and it is
+# still on the disk of a checkout that has not built since. That one,
+# and only that one, is replaced: a rename puts the new file in its place
+# in one step, so no request reads a half-written page there either.
 module SpaPage
   PATH = Rails.public_path.join('index.html')
-  STAND_IN = '<!doctype html><title>Comeals</title><div id="root"></div>'
+  STAND_IN = '<!doctype html><html><head><title>Comeals</title></head><body><div id="root"></div></body></html>'
+  OLD_STAND_IN = '<!doctype html><title>Comeals</title><div id="root"></div>'
 
   def self.write_unless_present
-    return if PATH.exist?
+    old = PATH.exist? && PATH.read == OLD_STAND_IN
+    return if PATH.exist? && !old
 
     # The draft must be on the same disk as public/ for the link to work,
     # so it goes in the app's tmp/, not the system's.
@@ -32,7 +40,7 @@ module SpaPage
       # build writes into this file and keeps its mode.
       draft.chmod(0o644)
       draft.close
-      File.link(draft.path, PATH)
+      old ? File.rename(draft.path, PATH) : File.link(draft.path, PATH)
     rescue Errno::EEXIST
       nil # Another process linked its own page in first. That page is whole too.
     end
