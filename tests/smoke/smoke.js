@@ -7,6 +7,8 @@ const { launchBrowser } = require("./browser");
 const {
   EXIT,
   adminBaseFor,
+  pageKeysOlderRelease,
+  pageKeysProblem,
   redact,
   signInResident,
   checkAdmin,
@@ -108,19 +110,31 @@ async function main() {
   await page.waitForSelector('input[aria-label="email"]', { timeout: 15000 });
   pass("login page renders");
 
+  // 3. The page carries this site's keys, not the build's.
+  const tags = await page.$$eval('meta[name^="comeals-"]', (metas) =>
+    metas.map((meta) => ({ name: meta.name, content: meta.content })),
+  );
+  const keysProblem = pageKeysProblem(BASE, tags);
+  if (keysProblem) throw new Error(keysProblem);
+  pass(
+    pageKeysOlderRelease(tags)
+      ? "page keys: a release from before #257, with its keys built in"
+      : "page carries this site's keys",
+  );
+
   let residentRefused = false;
   if (EMAIL && PASSWORD) {
     await unlessRefused(refusals, async () => {
-      // 3. Log in for real.
+      // 4. Log in for real.
       await signInResident(page, EMAIL, PASSWORD);
       await page.waitForSelector(".rbc-calendar", { timeout: 15000 });
       pass("login works, calendar renders");
 
-      // 4. Both DST months render with the 1st under its true weekday.
+      // 5. Both DST months render with the 1st under its true weekday.
       pass(await checkMonthGrid(page, BASE, 10, "November"));
       pass(await checkMonthGrid(page, BASE, 2, "March"));
 
-      // 5. The next meal's page renders.
+      // 6. The next meal's page renders.
       await page.getByRole("button", { name: "Next Meal" }).click();
       await page.waitForSelector('[aria-label="Enter meal description"]', {
         timeout: 15000,
@@ -135,7 +149,7 @@ async function main() {
     );
   }
 
-  // 6. The admin site: sign in, the dashboard, the reconciliations list.
+  // 7. The admin site: sign in, the dashboard, the reconciliations list.
   const adminBase = adminBaseFor(BASE);
   if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
     say(

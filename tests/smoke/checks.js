@@ -73,6 +73,46 @@ function adminBaseFor(base) {
   return url.origin;
 }
 
+// What is wrong with the keys in the page, or null. Rails writes them as
+// it sends the page (app/services/page_settings.rb), one <meta> tag each,
+// so a page with a tag missing or twice did not come from Rails. The
+// real site must carry a Pusher key, or open screens never update by
+// themselves (#257). Staging (herokuapp.com) sends no Pusher key on
+// purpose, and a server on this machine may have none, so only the tags
+// are checked there. `tags` is each tag's name and content.
+//
+// A page with no tags at all is from a release before #257, which built
+// its keys into the JavaScript: production before this change, and
+// production after a rollback to such a release. That is not a problem
+// here, so pageKeysOlderRelease says so and the check passes.
+const PAGE_KEYS = [
+  "comeals-pusher-key",
+  "comeals-pusher-cluster",
+  "comeals-bugsnag-api-key",
+];
+
+function pageKeysOlderRelease(tags) {
+  return tags.length === 0;
+}
+
+function pageKeysProblem(base, tags) {
+  if (pageKeysOlderRelease(tags)) return null;
+  for (const name of PAGE_KEYS) {
+    const count = tags.filter((tag) => tag.name === name).length;
+    if (count !== 1) return `the page has ${count} ${name} tag(s), not 1`;
+  }
+  const { hostname } = new URL(base);
+  const realSite =
+    hostname !== "localhost" &&
+    hostname !== "127.0.0.1" &&
+    !hostname.endsWith(".herokuapp.com");
+  const pusherKey = tags.find((tag) => tag.name === "comeals-pusher-key");
+  if (realSite && !pusherKey.content) {
+    return "the page has no Pusher key, so screens will not update by themselves";
+  }
+  return null;
+}
+
 // `text` with every secret that is set replaced by [hidden]. Everything
 // the smoke test prints goes through this, so a password can never reach
 // a terminal, a deploy log or a GitHub Actions log, even inside an error
@@ -223,6 +263,8 @@ module.exports = {
   RESIDENT_UNKNOWN_EMAIL,
   ADMIN_REFUSED,
   adminBaseFor,
+  pageKeysOlderRelease,
+  pageKeysProblem,
   redact,
   signInResident,
   checkAdmin,
