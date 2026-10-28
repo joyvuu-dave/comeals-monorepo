@@ -48,13 +48,13 @@ RSpec.describe 'FallbackController' do
       get '/index.html'
 
       expect(response).to have_http_status(:moved_permanently)
-      expect(response.headers['Location']).to eq('http://www.example.com/')
+      expect(response.headers['Location']).to eq('/')
     end
 
     it 'keeps the query string' do
       get '/index.html?from=home-screen'
 
-      expect(response.headers['Location']).to eq('http://www.example.com/?from=home-screen')
+      expect(response.headers['Location']).to eq('/?from=home-screen')
     end
   end
 

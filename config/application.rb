@@ -67,6 +67,11 @@ module Comeals
     require_relative '../lib/asset_cache_control'
     config.middleware.insert_before Rack::Sendfile, AssetCacheControl
 
+    # /index.html goes to /, so the static file server never sends the
+    # page without the app's keys (see the class comment).
+    require_relative '../lib/spa_page_redirect'
+    config.middleware.insert_before Rack::Sendfile, SpaPageRedirect
+
     # Dump the schema as SQL. The database is the last line of defense
     # (AGENTS.md): reconciled-meal immutability lives in triggers, and
     # schema.rb cannot represent triggers, so a schema.rb-built database
