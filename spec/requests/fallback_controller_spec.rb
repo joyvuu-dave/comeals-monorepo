@@ -28,6 +28,19 @@ RSpec.describe 'FallbackController' do
     end
   end
 
+  # The page carries the keys of the app that sends it, not of the app
+  # that built it (#257). PageSettings has the rules.
+  describe 'the keys in the page' do
+    it "carries this app's Pusher key" do
+      stub_const('ENV', ENV.to_h.merge('PUSHER_KEY' => 'this-apps-key').except('INTEGRATION_SERVER', 'COMEALS_STAGING'))
+
+      get '/calendar/meals/2026-04-14'
+
+      tags = response.parsed_body.css('meta[name="comeals-pusher-key"]')
+      expect(tags.pluck('content')).to eq(['this-apps-key'])
+    end
+  end
+
   # What the catch-all must not answer (an /api/ path, anything on the
   # admin host) is checked in routing_spec.rb.
 end
