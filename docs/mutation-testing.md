@@ -4560,12 +4560,13 @@ and the rest killed 44 of the other 99 and the one below:
   are made now, so they are stored out of unit order, and the example
   fails without the ORDER BY.
 
-A bug (4): `StructureDumpCleanup.clean!` reads the file as UTF-8 but
-writes it in the process's default encoding. Under a US-ASCII default
+A bug (4), fixed: `StructureDumpCleanup.clean!` read the file as UTF-8
+but wrote it in the process's default encoding. Under a US-ASCII default
 (a process with no UTF-8 locale) a file with a character outside ASCII
-raises on the write. Each mutation of the read's `encoding:` fails on
-the read instead, so they are not killed by any example the code can
-pass today. The failing example is on its own commit.
+raised on the write. So each mutation of the read's `encoding:` changed
+nothing: the code failed either way. The write now names UTF-8 too, and
+an example cleans a file with an accented letter under a US-ASCII
+default. With the fix, a mutation of the read fails that example.
 
 Loops that never end (10), all in `SolidQueueCheck.verify_recurring_run!`:
 the count of waits left without `ceil` (2.5 never reaches zero), the

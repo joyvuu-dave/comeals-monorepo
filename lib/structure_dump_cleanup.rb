@@ -35,7 +35,7 @@ module StructureDumpCleanup
   def self.clean!(path)
     text = File.read(path, encoding: 'UTF-8')
     cleaned = without_extension_comments(text)
-    File.write(path, cleaned) unless cleaned == text
+    File.write(path, cleaned, encoding: 'UTF-8') unless cleaned == text
   end
 
   # Prepended to ActiveRecord::Tasks::PostgreSQLDatabaseTasks, which every
