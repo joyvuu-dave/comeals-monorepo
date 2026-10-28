@@ -99,7 +99,7 @@ RSpec.describe PageSettings do
 
     it 'refuses a page with no head' do
       expect { described_class.fill('<div id="root"></div>', values) }
-        .to raise_error(PageSettings::NoHead)
+        .to raise_error(PageSettings::NoHead, 'The page has no </head>, so it has nowhere to put its keys.')
     end
   end
 end

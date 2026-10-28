@@ -39,13 +39,14 @@ module PageSettings
   end
 
   # The page with every tag a build wrote taken out, and one tag for each
-  # value put in at the end of the head.
+  # value put in at the end of the head. The names are the ones .values
+  # gives, so only the values need escaping.
   sig { params(html: String, values: T::Hash[String, String]).returns(String) }
   def self.fill(html, values)
     raise NoHead, 'The page has no </head>, so it has nowhere to put its keys.' unless html.include?('</head>')
 
     tags = values.map do |name, value|
-      %(    <meta name="#{ERB::Util.html_escape(name)}" content="#{ERB::Util.html_escape(value)}" />\n)
+      %(    <meta name="#{name}" content="#{ERB::Util.html_escape(value)}" />\n)
     end
     html.gsub(TAG, '').sub('</head>', "#{tags.join}  </head>")
   end

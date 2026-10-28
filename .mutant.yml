@@ -81,6 +81,7 @@ matcher:
     - ThirdCookWarning*
     - TrueOrFalse*
     - AttendanceVersionParam*
+    - PageSettings*
     - PushToken*
     - YearMonthDay*
     - ZoneChange*
@@ -111,6 +112,7 @@ matcher:
     - LedgerCheckFindingsTable*
     - AdminOrderClause*
     - AssetCacheControl*
+    - SpaPageRedirect*
     - SecretFileProbe*
     - UnknownRouteLog*
     - DatabasePoolCheck*

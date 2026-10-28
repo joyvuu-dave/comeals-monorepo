@@ -223,7 +223,8 @@ MUTANT_SPEC_ROWS = {
   # A rotation's chip on a month whose six weeks do not hold the meal
   # that changed it: the version must see that meal (#144).
   'spec/requests/api/v1/calendar_rotation_chip_spec.rb' => %w[Community#calendar_cache_version CalendarSerializer],
-  'spec/requests/fallback_controller_spec.rb' => %w[FallbackController],
+  'spec/requests/fallback_controller_spec.rb' => %w[FallbackController PageSettings SpaPageRedirect],
+  'spec/lib/spa_page_redirect_spec.rb' => %w[SpaPageRedirect],
   'spec/requests/routing_spec.rb' => %w[FallbackController],
   'spec/requests/admin/money_field_rendering_spec.rb' => %w[MoneyFieldHelper],
   'spec/requests/admin/schedule_grid_labels_spec.rb' => %w[ScheduleWeekLabelHelper],
