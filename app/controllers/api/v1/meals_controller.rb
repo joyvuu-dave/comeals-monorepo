@@ -598,9 +598,6 @@ module Api
 
       sig { returns(Guest) }
       def guest = T.must(@guest)
-
-      sig { returns(MealResident) }
-      def meal_resident = T.must(@meal_resident)
     end
   end
 end

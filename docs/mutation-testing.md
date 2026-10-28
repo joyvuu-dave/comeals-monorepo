@@ -4512,10 +4512,10 @@ One of the last run's 55 was a neutral failure: a race example in
 `bills_idempotency_key_race_spec.rb` timed out under the load of the
 other workers. `MealsController#show_cooks` run alone killed all 18.
 So 69 were left: 15 and 54. Since then, `Integer` for `to_i` in
-`AttendanceVersionCheck#attendance_version_now` has an example, and the
-10 loops that never end and the 4 of the bug are killed (both below).
-So 54 are left: 52 changes no caller can see, and the 2 of
-`MealsController#meal_resident`, which nothing calls.
+`AttendanceVersionCheck#attendance_version_now` has an example, the 10
+loops that never end and the 4 of the bug are killed (both below), and
+`MealsController#meal_resident`, with its 2, is removed: nothing called
+it. So 52 are left, and each is a change no caller can see.
 
 | Run                                         | Mutations | Killed | Alive | Timeouts |
 | ------------------------------------------- | --------- | ------ | ----- | -------- |
@@ -4587,7 +4587,7 @@ the first example of its group: mutant runs the examples in file
 order and stops at the first that fails, and the group's other
 examples with a sleeper that never ends the wait would hang first.
 
-Changes no caller can see (54):
+Changes no caller can see (52):
 
 - `instance_of?` for `is_a?` (8): `BrowserReport#text` and
   `PushToken.read` on a query param, `PasswordReset.resident_for` on a
@@ -4639,8 +4639,6 @@ Changes no caller can see (54):
 - `MealsController#set_meal_resident` (2): the 404 when no row is found
   dropped. `attendance_write` gets the nil row and the action answers
   the same 404 itself.
-- `MealsController#meal_resident` (2): `raise` or `super` for its body.
-  Nothing calls it.
 - `AttendanceVersion.of` (1): the meal for `meal.id` in a `where` hash.
   Rails reads the id.
 - `LiveUpdate.meal` (1): the `false` dropped from `MealNote.new`. The
