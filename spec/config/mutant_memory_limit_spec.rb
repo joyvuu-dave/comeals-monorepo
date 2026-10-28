@@ -39,7 +39,13 @@ RSpec.describe MutantMemoryLimit do
       # 1 KB a turn. Stop at 400 MB, so a limit that does not work cannot
       # use up this machine's memory.
       400_000.times { list << ('x' * 1024) }
-      sleep 3 # time for the watch thread's next check
+      # Wait for the watch thread's next check. It checks once a second,
+      # but on a busy machine (a full bin/check) it can wait several
+      # seconds for the CPU: a fixed 3 seconds failed there once (#258).
+      # So wait in short steps until it ends this process, and give up
+      # only after a minute, which no check on a working limit takes.
+      deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + 60
+      sleep 0.1 while Process.clock_gettime(Process::CLOCK_MONOTONIC) < deadline
       exit!(#{ran_on_after_the_limit})
     RUBY
 
