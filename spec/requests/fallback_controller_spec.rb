@@ -41,6 +41,23 @@ RSpec.describe 'FallbackController' do
     end
   end
 
+  # The static file server would send the build's file as it is on disk,
+  # without this app's keys. The page lives at /.
+  describe 'GET /index.html' do
+    it 'sends the browser to /' do
+      get '/index.html'
+
+      expect(response).to have_http_status(:moved_permanently)
+      expect(response.headers['Location']).to eq('http://www.example.com/')
+    end
+
+    it 'keeps the query string' do
+      get '/index.html?from=home-screen'
+
+      expect(response.headers['Location']).to eq('http://www.example.com/?from=home-screen')
+    end
+  end
+
   # What the catch-all must not answer (an /api/ path, anything on the
   # admin host) is checked in routing_spec.rb.
 end
