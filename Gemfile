@@ -93,6 +93,10 @@ group :development, :test do
   # Mutation testing for the money path. Not part of bin/check: one run
   # takes many minutes. See .mutant.yml and docs/mutation-testing.md.
   gem 'mutant-rspec', require: false
+  # config/mutant/memory_limit.rb reads a process's memory footprint on
+  # macOS through proc_pid_rusage. Ruby 4.0 ships Fiddle as a bundled
+  # gem, so a bundle sees it only when it is listed here.
+  gem 'fiddle', require: false
   # Finds N+1 queries by the SQL shape that repeats and the Ruby lines
   # that ran it. It raises in specs (spec/support/prosopite.rb). Bullet
   # stays in the development group for its page footer; it cannot see

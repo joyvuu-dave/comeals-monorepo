@@ -28,6 +28,13 @@
 # allocates in one second (about 1 GB in the spec's loop), which is still
 # far less than five minutes of it.
 #
+# The size it checks on macOS is the memory footprint (phys_footprint,
+# what Activity Monitor shows as "Memory"), not the resident size. When
+# the machine is short of memory, as during a full bin/check, macOS
+# compresses or swaps pages, and those pages leave the resident size. A
+# process that grew by 400 MB could then show less than the limit, and
+# go on growing (#250). The footprint counts them.
+#
 # 2 GiB is about seven times what a worker uses after it has loaded every
 # spec file (290 MB, measured 2026-10-16), and four workers at the limit
 # still fit in the 16 GB of a GitHub machine.
@@ -36,6 +43,13 @@ module MutantMemoryLimit
 
   # The exit status of a process the watch thread ended.
   WATCH_EXIT_STATUS = 98
+
+  # For proc_pid_rusage on macOS: struct rusage_info_v0 in
+  # <sys/resource.h> is a 16-byte uuid, then eleven 64-bit counts, and
+  # phys_footprint is the eighth of them.
+  RUSAGE_INFO_V0 = 0
+  RUSAGE_INFO_V0_SIZE = 16 + (11 * 8)
+  PHYS_FOOTPRINT_OFFSET = 16 + (7 * 8)
 
   class << self
     def apply(bytes = BYTES)
@@ -47,17 +61,30 @@ module MutantMemoryLimit
     end
 
     # What the limit is compared with: the data size on Linux (what
-    # RLIMIT_DATA counts), the resident size elsewhere (what the watch
+    # RLIMIT_DATA counts), the memory footprint on macOS (what the watch
     # thread reads).
     def current_bytes
       if linux?
         Integer(File.read('/proc/self/status')[/^VmData:\s+(\d+) kB$/, 1]) * 1024
       else
-        Integer(IO.popen(['ps', '-o', 'rss=', '-p', Process.pid.to_s], &:read).strip) * 1024
+        footprint_bytes
       end
     end
 
     private
+
+    def footprint_bytes
+      require 'fiddle'
+      rusage = Fiddle::Function.new(
+        Fiddle::Handle::DEFAULT['proc_pid_rusage'],
+        [Fiddle::TYPE_INT, Fiddle::TYPE_INT, Fiddle::TYPE_VOIDP],
+        Fiddle::TYPE_INT
+      )
+      info = Fiddle::Pointer.malloc(RUSAGE_INFO_V0_SIZE, Fiddle::RUBY_FREE)
+      raise "proc_pid_rusage failed: #{Fiddle.last_error}" unless rusage.call(Process.pid, RUSAGE_INFO_V0, info).zero?
+
+      info[PHYS_FOOTPRINT_OFFSET, 8].unpack1('Q')
+    end
 
     def linux?
       RUBY_PLATFORM.include?('linux')
