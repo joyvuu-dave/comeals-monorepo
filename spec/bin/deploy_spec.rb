@@ -1214,18 +1214,34 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(deploy.calls_to('sleep')).to eq(['sleep 5'] * 36)
     end
 
-    # The script stops with Python's error and no line of its own. The code
-    # is pushed; the release may have worked. Next step: heroku releases.
-    it 'stops with no message of its own when Heroku cannot list the releases after the push' do
+    # The code is pushed; the release may have worked. State left: no
+    # maintenance, web at 1. Next step: heroku releases (#256).
+    it 'says the code is pushed when Heroku cannot list the releases after the push' do
       deploy.rule('heroku', '^releases -a', times: 1, stdout: %([{"version":700,"status":"succeeded"}]\n))
       deploy.rule('heroku', '^releases -a', exit: 1, stderr: "releases failed\n")
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
-      expect(result.output).to include('releases failed', 'JSONDecodeError')
-      expect(result.output).not_to include('release phase did not succeed', recovery_banner)
+      expect(result.output).to include(
+        'releases failed',
+        'Could not read the releases of comeals-monorepo from Heroku after the push. ' \
+        'The code is pushed, and the release may have run.',
+        'Check it by hand: heroku releases -a comeals-monorepo'
+      )
+      expect(result.output).not_to include('Traceback', 'release phase did not succeed', recovery_banner)
       expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    it 'says the code is pushed when Heroku answers the releases read after the push with no JSON' do
+      deploy.rule('heroku', '^releases -a', times: 1, stdout: %([{"version":700,"status":"succeeded"}]\n))
+      deploy.rule('heroku', '^releases -a', stdout: '')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('Could not read the releases of comeals-monorepo from Heroku after the push.')
+      expect(result.output).not_to include('Traceback')
     end
 
     # Another push of the same commit got there first, or Heroku's git
@@ -1258,13 +1274,32 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.output).not_to include('Cache flushed')
     end
 
+    # On 2026-10-27 the laptop lost DNS here, and the deploy ended with a
+    # Python traceback (#256).
     it 'stops before the backup when Heroku cannot list the releases before the push' do
       deploy.rule('heroku', '^releases -a', exit: 1, stderr: "releases failed\n")
 
       result = deploy.run('--yes')
 
       expect(result.status).to eq(1)
-      expect(result.output).to include('releases failed')
+      expect(result.output).to include(
+        'releases failed',
+        'Could not read the releases of comeals-monorepo from Heroku. ' \
+        'Nothing was changed, so it is safe to run bin/deploy again.'
+      )
+      expect(result.output).not_to include('Traceback')
+      expect_nothing_changed_in_production
+    end
+
+    it 'stops before the backup when Heroku answers the releases read before the push with no JSON' do
+      deploy.rule('heroku', '^releases -a', stdout: '')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('Could not read the releases of comeals-monorepo from Heroku. ' \
+                                       'Nothing was changed')
+      expect(result.output).not_to include('Traceback')
       expect_nothing_changed_in_production
     end
 
