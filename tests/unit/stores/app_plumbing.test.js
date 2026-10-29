@@ -144,6 +144,9 @@ describe("app plumbing", () => {
       });
       const refetch = stubAction(store, "refetchHostsSilently");
       stubAction(store, "loadMonthAsync");
+      // The store starts on a meal page, so a reconnect fetches the meal
+      // too. This test is about the hosts list only.
+      stubAction(store, "loadDataAsync");
 
       store.handleReconnect();
 
@@ -157,6 +160,9 @@ describe("app plumbing", () => {
       store.setHostsInFlight(new Promise(() => {}));
       const refetch = stubAction(store, "refetchHostsSilently");
       stubAction(store, "loadMonthAsync");
+      // The store starts on a meal page, so a reconnect fetches the meal
+      // too. This test is about the hosts list only.
+      stubAction(store, "loadDataAsync");
 
       store.handleReconnect();
 

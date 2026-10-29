@@ -4,6 +4,7 @@ import { render, screen, fireEvent, act } from "@testing-library/react";
 import useFormMessages from "../../../app/frontend/src/helpers/use_form_messages";
 import FormMessages from "../../../app/frontend/src/components/modal_form/form_messages";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
+import { expectConsole } from "../helpers/console_output.js";
 
 // A calendar form's own messages show inside the form, under its title,
 // and not in the stack of messages (#137). The stack is drawn under an
@@ -75,43 +76,52 @@ describe("a form's own messages", () => {
   });
 
   // The words and the kind of message are the stack's own
-  // (handle_axios_error.js).
+  // (handle_axios_error.js). The last item is what the helper logs, or
+  // null when it logs nothing: it logs an answer with no message.
   it.each([
-    ["a response with a message", REFUSED, "No.", "error"],
+    ["a response with a message", REFUSED, "No.", "error", null],
     [
       "an answer marked as a warning",
       { response: { data: { message: "Careful.", type: "warning" } } },
       "Careful.",
       "error",
+      null,
     ],
     [
       "a response with no message",
       { response: { status: 500, data: "<html>500</html>" } },
       "The server had a problem. Please try again.",
       "error",
+      /^Bad response from server/,
     ],
     [
       "a request that got no response",
       { request: {} },
       "Error: no response received from server.",
       "error",
+      null,
     ],
     [
       "a request that never went out",
       new Error("boom"),
       "Error: could not submit form.",
       "error",
+      null,
     ],
-  ])("says what the stack would say for %s", (_label, error, words, type) => {
-    render(<Form />);
+  ])(
+    "says what the stack would say for %s",
+    (_label, error, words, type, logged) => {
+      if (logged) expectConsole("error", logged);
+      render(<Form />);
 
-    fail(error);
+      fail(error);
 
-    expect(wordsInForm()).toEqual([words]);
-    expect(document.querySelector(".form-message")).toHaveClass(
-      `form-message--${type}`,
-    );
-  });
+      expect(wordsInForm()).toEqual([words]);
+      expect(document.querySelector(".form-message")).toHaveClass(
+        `form-message--${type}`,
+      );
+    },
+  );
 
   it("puts a newer message on top", () => {
     render(<Form />);

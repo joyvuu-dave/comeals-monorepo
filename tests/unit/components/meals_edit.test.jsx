@@ -31,6 +31,7 @@ import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
 import { MEAL_EDIT_PATH } from "../../../app/frontend/src/routes.js";
 import MealsEdit from "../../../app/frontend/src/components/meals/edit.jsx";
+import { expectConsole } from "../helpers/console_output.js";
 import mealFixture from "../../fixtures/meal.json";
 import FakeResizeObserver from "../helpers/fake_resize_observer.js";
 
@@ -120,6 +121,7 @@ describe("MealsEdit", () => {
   // set out to end (#110). The real page, with the real store: the
   // notice is LoadStatus's alert, and it offers the way back.
   it("a first load whose answer cannot be used shows a notice instead of loading forever", async () => {
+    expectConsole("error", /^Could not use the meal from the server:/);
     // A 200 the store cannot process: it has no id.
     axios.get.mockImplementation(() =>
       Promise.resolve({ status: 200, data: {} }),

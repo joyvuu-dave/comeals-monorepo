@@ -15,6 +15,7 @@ import { BILL_ROW_SAVE_WAIT_MS } from "../../../app/frontend/src/stores/data_sto
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, billsServer } from "../helpers/bills_server.js";
 import { setPageSetting } from "../helpers/page_settings_for_tests.js";
+import { expectConsole } from "../helpers/console_output.js";
 
 // A cost typed on a meal can reach the server after someone else has
 // cancelled the dinner (ADR 0011 rule 11): another tab, the admin's
@@ -82,6 +83,10 @@ describe("a cost save refused because the dinner was cancelled", () => {
   // boxes are off until someone restores it, and the server refuses every
   // cost until then.
   it("says the dinner was cancelled, and does not ask the person to enter the costs again", async () => {
+    expectConsole(
+      "error",
+      /^This dinner is cancelled\. Restore it before changing it\.$/,
+    );
     await leaveMeal1AndHaveTheSaveRefused();
 
     const messages = toastsOnScreen();

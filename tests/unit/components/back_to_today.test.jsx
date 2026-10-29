@@ -615,7 +615,9 @@ describe("BackToToday", () => {
 
     it("moves the calendar of the old day's month to the new day's month, in place of the old address", () => {
       const store = renderAt([MEAL, "/calendar/all/2026-10-15/"]);
-      store.communityToday = "2026-10-31";
+      runInAction(() => {
+        store.communityToday = "2026-10-31";
+      });
 
       newDay(store, "2026-11-01");
       expect(where()).toBe("/calendar/all/2026-11-01/");
@@ -668,7 +670,9 @@ describe("BackToToday", () => {
       const store = renderAt(
         "/calendar/all/2026-11-20/guest-room-reservations/new",
       );
-      store.communityToday = "2026-11-30";
+      runInAction(() => {
+        store.communityToday = "2026-11-30";
+      });
 
       newDay(store, "2026-12-01");
       expect(where()).toBe("/calendar/all/2026-12-01/");

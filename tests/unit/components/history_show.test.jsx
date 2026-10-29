@@ -12,6 +12,7 @@ import axios from "axios";
 import dayjs from "dayjs";
 import advancedFormat from "dayjs/plugin/advancedFormat";
 import MealHistoryShow from "../../../app/frontend/src/components/history/show.jsx";
+import { expectConsole } from "../helpers/console_output.js";
 
 // index.jsx registers this plugin at app startup; the "Do" ordinal in
 // the date header needs it.
@@ -102,6 +103,7 @@ describe("MealHistoryShow", () => {
   });
 
   it("says so when the history fails to load", async () => {
+    expectConsole("error", /^Bad response from server/);
     axios.get.mockRejectedValue({ response: { status: 500, data: {} } });
     render(<MealHistoryShow id="42" />);
 
@@ -129,6 +131,7 @@ describe("MealHistoryShow", () => {
   });
 
   it("drops a failure for an id it no longer shows", async () => {
+    expectConsole("error", /^Bad response from server/);
     const first = deferred();
     const second = deferred();
     axios.get
@@ -149,6 +152,7 @@ describe("MealHistoryShow", () => {
   // Only one answer is on screen at a time: the history for the id
   // shown now, or the failure to load it.
   it("a new id replaces an earlier failure, and a failure replaces an earlier history", async () => {
+    expectConsole("error", /^Bad response from server/);
     axios.get.mockRejectedValueOnce({ response: { status: 500, data: {} } });
     const { rerender } = render(<MealHistoryShow id="42" />);
     expect(await screen.findByText("Failed to load history.")).toBeVisible();

@@ -14,6 +14,7 @@
 // DataStore.afterCreate boots the (mocked) Pusher client and reads
 // navigator.onLine, so files using this helper must mock pusher-js,
 // axios, js-cookie, and idb-keyval (see tests/unit/mocks/).
+import { runInAction } from "mobx";
 import { protect, unprotect } from "mobx-state-tree";
 import { vi } from "vitest";
 import { DataStore } from "../../../app/frontend/src/stores/data_store.js";
@@ -38,11 +39,14 @@ export function createDataStore(opts = {}) {
 }
 
 // Write to the tree directly, as a test's scenario setup, then put the
-// protection back so the code under test runs under the app's rule.
+// protection back so the code under test runs under the app's rule. The
+// write runs as a MobX action: outside one, MobX warns on every change
+// to a value something observes, and the test would fail on that
+// console output (render_setup.js).
 export function stage(store, write) {
   unprotect(store);
   try {
-    write();
+    runInAction(write);
   } finally {
     protect(store);
   }

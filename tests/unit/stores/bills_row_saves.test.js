@@ -15,6 +15,7 @@ import toastStore from "../../../app/frontend/src/stores/toast_store";
 import { createDataStore, stubAction } from "../helpers/create_data_store.js";
 import { BOB, CAROL, billsServer, editsSent } from "../helpers/bills_server.js";
 import { setPageSetting } from "../helpers/page_settings_for_tests.js";
+import { expectConsole } from "../helpers/console_output.js";
 
 // Each cook row saves on its own (#150). A row's save names only that
 // row's cooks, and saves for different rows go at the same time. While a
@@ -723,6 +724,10 @@ describe("before the page reloads itself", () => {
   });
 
   it("says no when a save for a meal the person left was not saved", async () => {
+    expectConsole(
+      "error",
+      /^Nothing was saved, because this meal changed after you loaded it:/,
+    );
     const store = createStore();
     rowOf(store, BOB).setAmount("5");
     store.teardownMealPage();

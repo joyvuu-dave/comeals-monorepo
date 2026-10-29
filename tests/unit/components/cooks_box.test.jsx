@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { render, screen, fireEvent, within, act } from "@testing-library/react";
-import { observable } from "mobx";
+import { observable, runInAction } from "mobx";
 
 // The tests at the end use the real DataStore, which pulls these in
 // (same set as the data_store tests).
@@ -297,7 +297,11 @@ describe("CooksBox", () => {
     const bill = makeBill({
       setAmount: vi.fn((value) => {
         if (value === "12.345") return "12.34";
-        bill.amount = value;
+        // As the real Bill does, change the row in an action: MobX's
+        // strict mode warns about a change outside one.
+        runInAction(() => {
+          bill.amount = value;
+        });
         return value;
       }),
     });
@@ -352,7 +356,9 @@ describe("CooksBox", () => {
     expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 
     act(() => {
-      store.mealLoading = true;
+      runInAction(() => {
+        store.mealLoading = true;
+      });
     });
 
     expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
@@ -558,7 +564,9 @@ describe("CooksBox", () => {
       expect(screen.getByRole("alertdialog")).toBeInTheDocument();
 
       act(() => {
-        store.mealLoading = true;
+        runInAction(() => {
+          store.mealLoading = true;
+        });
       });
 
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();

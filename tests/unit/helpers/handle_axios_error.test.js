@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import handleAxiosError from "../../../app/frontend/src/helpers/handle_axios_error.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store";
+import { expectConsole } from "./console_output.js";
 
 // What every failed request turns into: a message the person sees, on
 // top of the ones on screen, or a console line when the caller passed
@@ -35,6 +36,7 @@ describe("handleAxiosError", () => {
     });
 
     it("logs instead of showing when silent", () => {
+      expectConsole("error", /^No\.$/);
       handleAxiosError(
         { response: { data: { message: "No." } } },
         { silent: true },
@@ -92,6 +94,12 @@ describe("handleAxiosError", () => {
   // router error gets Heroku's page, so the person who tapped would see
   // nothing unless the helper says something itself (#108).
   describe("a response with no message", () => {
+    // Every test here hands the helper an answer with no message, and
+    // the helper logs each one.
+    beforeEach(() => {
+      expectConsole("error", /^Bad response from server/);
+    });
+
     it.each([
       [
         "Rails' public 500 page",
@@ -184,6 +192,7 @@ describe("handleAxiosError", () => {
     });
 
     it("logs when silent", () => {
+      expectConsole("error", /^Error: no response received from server\.$/);
       handleAxiosError({ request: {} }, { silent: true });
 
       expect(toastStore.toasts).toHaveLength(0);
@@ -203,6 +212,7 @@ describe("handleAxiosError", () => {
     });
 
     it("logs when silent", () => {
+      expectConsole("error", /^Error: could not submit form\.$/);
       handleAxiosError(new Error("boom"), { silent: true });
 
       expect(toastStore.toasts).toHaveLength(0);
@@ -231,46 +241,55 @@ describe("handleAxiosError", () => {
   });
 
   it("hands back null when silent", () => {
+    expectConsole("error", /^Error: no response received from server\.$/);
     expect(handleAxiosError({ request: {} }, { silent: true })).toBeNull();
   });
 
   // A calendar form shows its own failures inside itself
   // (use_form_messages.ts), with the same words and kind, and the stack
-  // gets nothing.
+  // gets nothing. The last item is what the helper logs, or null when it
+  // logs nothing: it logs an answer with no message, as it does without
+  // `show`.
   it.each([
     [
       "a response with a message",
       { response: { data: { message: "No." } } },
       "No.",
       "error",
+      null,
     ],
     [
       "an answer marked as a warning",
       { response: { data: { message: "Careful.", type: "warning" } } },
       "Careful.",
       "error",
+      null,
     ],
     [
       "a response with no message",
       { response: { status: 500, data: "" } },
       "The server had a problem. Please try again.",
       "error",
+      /^Bad response from server/,
     ],
     [
       "a request that got no response",
       { request: {} },
       "Error: no response received from server.",
       "error",
+      null,
     ],
     [
       "a request that never went out",
       new Error("boom"),
       "Error: could not submit form.",
       "error",
+      null,
     ],
   ])(
     "shows %s where the caller says, and hands back what it hands back",
-    (_label, error, words, type) => {
+    (_label, error, words, type, logged) => {
+      if (logged) expectConsole("error", logged);
       const show = vi.fn(() => "shown");
 
       expect(handleAxiosError(error, { show })).toBe("shown");

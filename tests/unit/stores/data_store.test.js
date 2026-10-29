@@ -85,6 +85,24 @@ import mealFixture from "../../fixtures/meal.json";
 // things (docs/adr/0001-typescript-at-the-api-boundary.md).
 import contract from "../../fixtures/api_contract.json";
 import { setPageSetting } from "../helpers/page_settings_for_tests.js";
+import { expectConsole } from "../helpers/console_output.js";
+
+// A test says it expects the store to log a failed request with this.
+// The pattern is the line handleAxiosError (handle_axios_error.js)
+// logs for that error: the server's message, or one of its own lines.
+function expectLogged(error) {
+  const message = error.response?.data?.message;
+  if (message) {
+    const exact = message.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    expectConsole("error", new RegExp(`^${exact}$`));
+  } else if (error.response) {
+    expectConsole("error", /^Bad response from server/);
+  } else if (error.request) {
+    expectConsole("error", /^Error: no response received from server\.$/);
+  } else {
+    expectConsole("error", /^Error: could not submit form\.$/);
+  }
+}
 
 // Replace the Pusher client's subscribe and unsubscribe for one test, so
 // it can see the channel names. pusherClient is module state that lives
@@ -118,6 +136,18 @@ describe("DataStore", () => {
     // The month cache is module state: without this, a month one test
     // loaded would still be cached for the next one.
     monthCache.clear();
+    // The store fetches the meal on screen again after many actions: a
+    // settle, a reconnect, a meal switch. The shared axios mock answers
+    // every GET with an empty object, which the store cannot use, so it
+    // logs an error. Here a meal fetch gets a whole meal, with the id it
+    // asked for. A test that cares about the answer sets its own.
+    axios.get.mockImplementation((url) => {
+      const meal = /\/meals\/(\d+)\/cooks$/.exec(url);
+      return Promise.resolve({
+        status: 200,
+        data: meal ? mealPayload({ id: Number(meal[1]) }) : {},
+      });
+    });
   });
 
   // A test that replaces a shared mock's behavior (mockImplementation,
@@ -1389,6 +1419,7 @@ describe("DataStore", () => {
     it("a failed first load enters the retry state and retries with growing waits", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
 
       expect(store.mealLoading).toBe(true);
       store.loadDataAsync();
@@ -1409,6 +1440,7 @@ describe("DataStore", () => {
     it("the wait doubles and caps at 30 seconds, and never stops", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
@@ -1431,6 +1463,7 @@ describe("DataStore", () => {
       toastStore.clearAll();
 
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
 
@@ -1445,6 +1478,7 @@ describe("DataStore", () => {
     it("a 404 shows not-found and never retries", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ response: { status: 404, data: {} } });
+      expectLogged({ response: { status: 404, data: {} } });
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
@@ -1458,14 +1492,16 @@ describe("DataStore", () => {
     it("switching meals cancels the retry and clears the failure", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
       expect(store.mealLoadFailed).toBe(true);
 
-      axios.get.mockImplementation(() =>
-        Promise.resolve({ status: 200, data: {} }),
-      );
+      axios.get.mockResolvedValue({
+        status: 200,
+        data: mealPayload({ id: 2 }),
+      });
       const timersBefore = vi.getTimerCount();
       store.switchMeals(2);
       expect(store.mealLoadFailed).toBe(false);
@@ -1485,6 +1521,7 @@ describe("DataStore", () => {
     it("an old retry does not fire after going away and back to the meal", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
       expect(store.mealLoadFailed).toBe(true); // meal 1's retry is due at 2s
@@ -1510,6 +1547,7 @@ describe("DataStore", () => {
     it("teardownMealPage cancels the retry and clears the failure", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
@@ -1527,6 +1565,7 @@ describe("DataStore", () => {
     it("a load that lands clears the failure and resets the backoff", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
@@ -1549,6 +1588,7 @@ describe("DataStore", () => {
     it("retry-now fetches immediately and resets the backoff", async () => {
       const store = createDataStore();
       axios.get.mockRejectedValue({ request: {} });
+      expectLogged({ request: {} });
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
@@ -1570,6 +1610,7 @@ describe("DataStore", () => {
       // The fetch succeeds but the payload is garbage: processing
       // throws. That is a bug to fix, not a network state to retry.
       axios.get.mockResolvedValue({ status: 200, data: {} });
+      expectConsole("error", /^Could not use the meal from the server:/);
 
       store.loadDataAsync();
       await vi.advanceTimersByTimeAsync(0);
@@ -3022,6 +3063,8 @@ describe("DataStore", () => {
     it.each(SAVE_FAILURES)(
       "names the meal by its day when the save for a meal the person left fails: %s",
       async (_label, error, _wordsOnScreen, wordsAfterLeaving, tries) => {
+        // A failed save for a meal the person left is only logged.
+        expectLogged(error);
         const store = storeWithCookBill();
         answerMealFetches();
         const meal1Save = await leaveWithASaveInFlight(store, 1, "50", 2);
@@ -3042,6 +3085,7 @@ describe("DataStore", () => {
     // was: a save sent before the person left is named the same way
     // when it fails. Here the person is on the calendar.
     it("names the meal by its day when its save was sent before the person left the meal page, and then fails", async () => {
+      expectLogged(STALE);
       const store = storeWithCookBill();
       let rejectFirst;
       axios.mockImplementationOnce(
@@ -3065,6 +3109,7 @@ describe("DataStore", () => {
 
     // A save for a later meal fails the same way, named by its own day.
     it("names the later meal by its own day when its save fails", async () => {
+      expectLogged(SETTLED);
       const store = storeWithCookBill();
       answerMealFetches();
       store.switchMeals(2);
@@ -3087,6 +3132,8 @@ describe("DataStore", () => {
     // was not saved is in one place. It uses the general words even
     // though one meal was settled: they are true of both meals.
     it("names every meal the person left in one message when a second fails while the first message still shows", async () => {
+      expectLogged(STALE);
+      expectLogged(SETTLED);
       const store = storeWithCookBill();
       await leaveMeals1And2(store, STALE, SETTLED);
 
@@ -3096,6 +3143,7 @@ describe("DataStore", () => {
     // A meal that fails again while the message shows keeps its place
     // in it, so the meals stay in the order they first failed.
     it("keeps a meal's place in the message when it fails again", async () => {
+      expectLogged(STALE);
       const store = storeWithCookBill();
       await leaveMeals1And2(store, STALE, STALE);
 
@@ -3116,6 +3164,8 @@ describe("DataStore", () => {
     ])(
       "says a meal the person left was settled when it %s",
       async (_label, firstError, secondError) => {
+        expectLogged(firstError);
+        expectLogged(secondError);
         const store = storeWithCookBill();
         answerMealFetches();
         const firstSave = await leaveWithASaveInFlight(store, 1, "50", 2);
@@ -3166,6 +3216,7 @@ describe("DataStore", () => {
     // second try got no answer, so it may have been written, and its
     // words say so.
     it("still names a meal the person left when the save for the meal on screen fails right after it", async () => {
+      expectLogged(NO_NETWORK);
       const store = storeWithCookBill();
       answerMealFetches();
       const meal1Save = await leaveWithASaveInFlight(store, 1, "50", 2);
@@ -3192,6 +3243,7 @@ describe("DataStore", () => {
 
     // Only the person can close the message: it is an error (#137).
     it("names only the new meal when the person closed the message about the first meal", async () => {
+      expectLogged(STALE);
       const store = storeWithCookBill();
       const rejectMeal2 = await failMeal1ThenLeaveMeal2(store);
 
@@ -3210,6 +3262,8 @@ describe("DataStore", () => {
     // The message still names both meals, and when meal 3 then fails,
     // it names all three.
     it("does not change the message when the person opens a meal it names again and a save for that meal works", async () => {
+      expectLogged(STALE);
+      expectLogged(SETTLED);
       const store = storeWithCookBill();
       await leaveMeals1And2(store, STALE, SETTLED);
       expect(toastsOnScreen()).toEqual([["error", MEALS_1_AND_2_NOT_SAVED]]);
@@ -3260,6 +3314,7 @@ describe("DataStore", () => {
     // message shows as soon as Bob's save fails, and it stays when
     // Carol's save works.
     it("names the meal when a save for it fails after the person left, and keeps the message when another save for that meal works", async () => {
+      expectLogged(STALE);
       const store = storeWithTwoCooks();
       let rejectBob;
       axios.mockImplementationOnce(
@@ -3296,6 +3351,7 @@ describe("DataStore", () => {
     // Two saves for meal 1 fail after the person left it: Bob's and
     // Carol's. The message names meal 1 once.
     it("names a meal once when two of its saves fail", async () => {
+      expectLogged(STALE);
       const store = storeWithTwoCooks();
       axios.mockRejectedValueOnce(STALE);
       axios.mockRejectedValueOnce(STALE);
@@ -3318,6 +3374,7 @@ describe("DataStore", () => {
     // names only Carol, so it does not hold Bob's $5, and the message
     // about meal 1 stays.
     it("names the meal when the newer save that works for it holds only another cook's cost", async () => {
+      expectLogged(STALE);
       const store = storeWithTwoCooks();
       let rejectFirst;
       axios.mockImplementationOnce(
@@ -3357,6 +3414,7 @@ describe("DataStore", () => {
     // #135). The $10 save works, and the message about meal 1 still
     // shows (see billsNotSaved in data_store_bills.ts).
     it("keeps a cost in flight on its row when a push comes, and another row's save sends only its own cook", async () => {
+      expectLogged(STALE);
       const store = storeWithTwoCooks();
       let rejectFirst;
       axios.mockImplementationOnce(
@@ -3390,6 +3448,8 @@ describe("DataStore", () => {
     // that works, it does not take its meal off the message. The warning
     // shows on top of it.
     it("does not take a meal off the message when a later save for that meal is saved with a warning", async () => {
+      expectLogged(STALE);
+      expectLogged(SETTLED);
       const store = storeWithCookBill();
       await leaveMeals1And2(store, STALE, SETTLED);
 
@@ -3427,6 +3487,7 @@ describe("DataStore", () => {
     // A fetch rebuilds the rows from the server's answer, and that would
     // wipe a cost the person is still typing.
     it("does not fetch the meal on screen again when a save for a meal the person left fails, so a cost being typed there is kept", async () => {
+      expectLogged(STALE);
       const store = storeWithCookBill();
       answerMealFetches();
       const meal1Save = await leaveWithASaveInFlight(store, 1, "50", 2);
@@ -3470,6 +3531,9 @@ describe("DataStore", () => {
     it.each(SAVE_FAILURES)(
       "shows words with no meal day when a save for the meal on screen fails: %s",
       async (_label, error, wordsOnScreen, _wordsAfterLeaving, tries) => {
+        // A failure that may not be final is sent once more, and the
+        // first failure is only logged (decision 7 of #135).
+        if (tries > 1) expectLogged(error);
         const store = storeWithCookBill();
         answerMealFetches();
         toastStore.clearAll();
@@ -3494,6 +3558,13 @@ describe("DataStore", () => {
       // meal's lock (MealsController#conflict_rejection).
       const MEAL_CONFLICT =
         "Someone else was changing this meal at the same time. Nothing was saved. Try again.";
+
+      // Every test here starts with a save for meal 1 the server
+      // refuses after the person left it (meal1NotSaved or
+      // leaveMeals1And2), and that refusal is logged.
+      beforeEach(() => {
+        expectLogged(STALE);
+      });
 
       // The person left meal 1 while its $50 save was on its way, and is
       // on meal 2. The save is refused, so the message names meal 1.
@@ -3602,6 +3673,9 @@ describe("DataStore", () => {
       it.each(SAVE_FAILURES)(
         "shows a failed save of the meal on screen in its own message: %s",
         async (_label, error, wordsOnScreen, _wordsAfterLeaving, tries) => {
+          // A failure that may not be final is sent once more, and the
+          // first failure is only logged (decision 7 of #135).
+          if (tries > 1) expectLogged(error);
           const store = storeWithCookBill();
           await meal1NotSaved(store);
 
@@ -3635,9 +3709,11 @@ describe("DataStore", () => {
       // Both tries of a save got no answer.
       const NO_ANSWER = [NO_NETWORK, NO_NETWORK];
 
-      // The stack is one object for the whole app.
+      // The stack is one object for the whole app. Every test here has a
+      // try of a save get no answer, and that is logged.
       beforeEach(() => {
         toastStore.clearAll();
+        expectLogged(NO_NETWORK);
       });
 
       // Each try of a save on its way fails with the next of these
@@ -3711,6 +3787,7 @@ describe("DataStore", () => {
       ])(
         "keeps the two kinds in two messages when %s",
         async (_label, meal1Errors, meal2Errors, messages) => {
+          expectLogged(STALE);
           const store = storeWithCookBill();
           await leaveMeals1And2Failing(store, meal1Errors, meal2Errors);
 
@@ -3722,6 +3799,7 @@ describe("DataStore", () => {
       // not saved" asks for more: the person enters the costs again,
       // which takes in checking them.
       it("moves a meal to the were-not-saved message when a later save for it surely was not saved", async () => {
+        expectLogged(STALE);
         const store = storeWithCookBill();
         await leaveMeals1And2Failing(store, NO_ANSWER, NO_ANSWER);
 
@@ -3736,6 +3814,7 @@ describe("DataStore", () => {
       });
 
       it("takes the may-not-have-been-saved message away when its only meal moves", async () => {
+        expectLogged(STALE);
         const store = storeWithCookBill();
         await leaveMeals1And2Failing(store, NO_ANSWER, []);
         expect(toastsOnScreen()).toEqual([["error", MEAL_1_MAYBE]]);
@@ -3748,6 +3827,7 @@ describe("DataStore", () => {
       });
 
       it("keeps a meal in the were-not-saved message when a later save for it may have been written", async () => {
+        expectLogged(STALE);
         const store = storeWithCookBill();
         await leaveMeals1And2Failing(store, [STALE], []);
         expect(toastsOnScreen()).toEqual([["error", MEAL_1_NOT_SAVED]]);
@@ -3932,6 +4012,9 @@ describe("DataStore", () => {
       axios.mockRejectedValueOnce({
         response: { data: { message: "Server error." } },
       });
+      // The refetch stays on its way, so the value checked below is the
+      // one the store kept itself, not one a refetch wrote.
+      axios.get.mockReturnValueOnce(new Promise(() => {}));
 
       toastStore.clearAll();
       store.toggleClosed();
@@ -4810,6 +4893,11 @@ describe("DataStore", () => {
       // IndexedDB on a repeat visit).
       const key = monthCache.keyFor("test-community-id", "2030", "7");
       monthCache.set(key, monthPayload(2030, 7, "stale"));
+      // The server's answer to the fetch that checks the month again.
+      axios.get.mockResolvedValueOnce({
+        status: 200,
+        data: monthPayload(2030, 7, "fresh"),
+      });
 
       store.goToMonth("2030-07-15");
       expect(store.calendarEvents[0].title).toBe("stale");

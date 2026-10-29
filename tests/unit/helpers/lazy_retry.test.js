@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { lazyRetry } from "../../../app/frontend/src/helpers/lazy_retry";
 import { fakeLocation } from "../helpers/fake_location.js";
+import { expectConsole } from "./console_output.js";
 
 // A page's code is a separate file (a chunk). After a deploy, a page
 // loaded before it can ask for a chunk the server no longer has. The
@@ -188,6 +189,12 @@ describe("lazyRetry", () => {
   // chunk's own error goes on (to the error page, or for Pusher to
   // Bugsnag), and the storage error is never thrown.
   describe("when the browser refuses sessionStorage", () => {
+    // lazy_retry.ts warns once each time it cannot use sessionStorage,
+    // and every test here makes it fail.
+    beforeEach(() => {
+      expectConsole("warn", /^This browser refuses sessionStorage:/);
+    });
+
     afterEach(() => {
       vi.restoreAllMocks();
     });

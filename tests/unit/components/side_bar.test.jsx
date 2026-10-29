@@ -7,6 +7,7 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
+import { expectConsole } from "../helpers/console_output.js";
 import SideBar from "../../../app/frontend/src/components/calendar/side_bar.jsx";
 
 function LocationEcho() {
@@ -84,20 +85,25 @@ describe("SideBar", () => {
         },
       },
       message: "No meal is scheduled yet.",
+      logged: null,
     },
     {
       failure: "the server fails",
       error: { response: { status: 500, data: "<html>500</html>" } },
       message: "The server had a problem. Please try again.",
+      logged: /^Bad response from server/,
     },
     {
       failure: "the connection is lost",
       error: { request: {} },
       message: "Error: no response received from server.",
+      logged: null,
     },
   ])(
     "Next Meal says so and stays on the calendar when $failure",
-    async ({ error, message }) => {
+    async ({ error, message, logged }) => {
+      // handleAxiosError logs an answer that has no message.
+      if (logged) expectConsole("error", logged);
       axios.get.mockRejectedValue(error);
       renderBar();
 

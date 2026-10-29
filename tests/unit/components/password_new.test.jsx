@@ -14,6 +14,7 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
+import { expectConsole } from "../helpers/console_output.js";
 import ResidentsPasswordNew, {
   NO_TOKEN,
   RETIRED_LINK,
@@ -246,11 +247,13 @@ describe("ResidentsPasswordNew", () => {
       "Rails' own 500 page",
       { status: 500, data: "<html>500</html>" },
       "The server had a problem. Please try again.",
+      /^Bad response from server/,
     ],
     [
       "a Heroku router error",
       { status: 503, data: "<html>Application Error</html>" },
       "The server had a problem. Please try again.",
+      /^Bad response from server/,
     ],
     [
       "a conflict ApiController rescued",
@@ -259,6 +262,7 @@ describe("ResidentsPasswordNew", () => {
         data: { message: "Someone else saved at the same time." },
       },
       "Someone else saved at the same time.",
+      null,
     ],
     [
       "too many requests",
@@ -270,10 +274,14 @@ describe("ResidentsPasswordNew", () => {
         },
       },
       "Too many requests. Please wait 30 seconds before trying again.",
+      null,
     ],
   ])(
     "%s on the name lookup stays on the page and shows why",
-    async (_name, response, words) => {
+    async (_name, response, words, logged) => {
+      // The last item is what handleAxiosError logs, or null when it
+      // logs nothing: it logs an answer that has no message.
+      if (logged) expectConsole("error", logged);
       nameAnswer = () => Promise.reject({ response });
       renderForm();
       expect(await screen.findByText(words)).toBeVisible();
@@ -292,26 +300,40 @@ describe("ResidentsPasswordNew", () => {
   // page stays and says so, instead of "Loading..." forever.
   it.each([
     // What axios rejects with when no answer came back.
-    ["a network failure", { request: {}, message: "Network Error" }],
+    [
+      "a network failure",
+      { request: {}, message: "Network Error" },
+      /^Error: no response received from server\.$/,
+    ],
     // A throw before any request was sent.
-    ["an error before the request", new Error("boom")],
-  ])("%s on the name lookup says so and stays", async (_name, error) => {
-    nameAnswer = () => Promise.reject(error);
-    renderForm();
-    expect(
-      await screen.findByText(
-        "Could not load this page. Check your connection and try again.",
-      ),
-    ).toBeVisible();
-    expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
-    expect(
-      screen.queryByPlaceholderText("New Password"),
-    ).not.toBeInTheDocument();
-    expect(screen.getByTestId("location")).toHaveTextContent(
-      /^\/reset-password$/,
-    );
-    expect(toastStore.toasts).toHaveLength(0);
-  });
+    [
+      "an error before the request",
+      new Error("boom"),
+      /^Error: could not submit form\.$/,
+    ],
+  ])(
+    "%s on the name lookup says so and stays",
+    async (_name, error, logged) => {
+      // The page asks for the name with silent: true, so
+      // handleAxiosError logs the failure.
+      expectConsole("error", logged);
+      nameAnswer = () => Promise.reject(error);
+      renderForm();
+      expect(
+        await screen.findByText(
+          "Could not load this page. Check your connection and try again.",
+        ),
+      ).toBeVisible();
+      expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
+      expect(
+        screen.queryByPlaceholderText("New Password"),
+      ).not.toBeInTheDocument();
+      expect(screen.getByTestId("location")).toHaveTextContent(
+        /^\/reset-password$/,
+      );
+      expect(toastStore.toasts).toHaveLength(0);
+    },
+  );
 
   // React shows no sign when it drops a state update on a page that is
   // gone, so this only checks that a late name does not throw.

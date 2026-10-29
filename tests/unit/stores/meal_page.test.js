@@ -26,6 +26,7 @@ import {
   stage,
   stubAction,
 } from "../helpers/create_data_store.js";
+import { expectConsole } from "../helpers/console_output.js";
 
 // The server sends the meal's own id as next_id and prev_id when there
 // is no meal after or before it (MealFormSerializer), never null.
@@ -455,6 +456,10 @@ describe("meal page store", () => {
     });
 
     it("still fetches when the unreadable copy cannot be deleted either", async () => {
+      expectConsole(
+        "error",
+        /^Failed to load cached meal data, fetching from server:/,
+      );
       const store = createStore();
       idbKeyval.get.mockRejectedValueOnce(new Error("IndexedDB is closed"));
       idbKeyval.del.mockRejectedValueOnce(new Error("IndexedDB is closed"));
@@ -467,6 +472,10 @@ describe("meal page store", () => {
     });
 
     it("drops a cached copy it cannot read and fetches", async () => {
+      expectConsole(
+        "error",
+        /^Failed to load cached meal data, fetching from server:/,
+      );
       const store = createStore();
       idbKeyval.get.mockRejectedValueOnce(new Error("IndexedDB is closed"));
       const loadDataAsync = stubAction(store, "loadDataAsync");
@@ -550,6 +559,10 @@ describe("meal page store", () => {
   // fails (a tab open for weeks can lose it), the fetched meal must
   // still reach the screen, not leave it on "loading..." (#111).
   it("shows the fetched meal when the cache write fails, and logs the failure", async () => {
+    expectConsole(
+      "error",
+      /^IndexedDB failed; going on without the copy on disk:/,
+    );
     const store = createStore();
     axios.get.mockResolvedValueOnce({
       status: 200,
@@ -576,6 +589,12 @@ describe("meal page store", () => {
   describe("an answer the page cannot use", () => {
     // A 200 with no id: reading response.data.id throws.
     const unusable = { status: 200, data: {} };
+
+    // The store logs every answer it cannot use, and every test here
+    // gives it one.
+    beforeEach(() => {
+      expectConsole("error", /^Could not use the meal from the server:/);
+    });
 
     it("on the first load: marks the load broken, logs it, and reports it", async () => {
       const store = createStore();
@@ -750,6 +769,7 @@ describe("meal page store", () => {
       }
 
       it("is tried once more after a wait, and the answer is shown", async () => {
+        expectConsole("error", /^Bad response from server/);
         vi.useFakeTimers();
         const store = storeWithDataOnScreen();
         axios.get
@@ -773,6 +793,7 @@ describe("meal page store", () => {
       });
 
       it("is tried only once: when that try fails too, nothing fetches on its own", async () => {
+        expectConsole("error", /^Bad response from server/);
         vi.useFakeTimers();
         const store = storeWithDataOnScreen();
         axios.get.mockRejectedValue({ response: { status: 500 } });
@@ -789,6 +810,7 @@ describe("meal page store", () => {
       });
 
       it("is tried again after the next push, when that fetch fails too", async () => {
+        expectConsole("error", /^Bad response from server/);
         vi.useFakeTimers();
         const store = storeWithDataOnScreen();
         axios.get.mockRejectedValue({ response: { status: 500 } });

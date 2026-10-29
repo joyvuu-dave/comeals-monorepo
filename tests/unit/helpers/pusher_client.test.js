@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
 import { vitestWaitFor } from "./wait_for.js";
 import { fakeLocation } from "./fake_location.js";
 import { setPageSetting } from "./page_settings_for_tests.js";
+import { expectConsole } from "./console_output.js";
 
 // The Pusher transport. Each test gets a fresh module (the client keeps
 // `started` and the real instance at module level) and its own env.
@@ -289,6 +290,7 @@ describe("pusherClient", () => {
     // failure goes to Bugsnag once and the page runs with no live
     // updates.
     it("reports to Bugsnag, with no reload, when the browser refuses sessionStorage", async () => {
+      expectConsole("warn", /^This browser refuses sessionStorage:/);
       vi.spyOn(window, "sessionStorage", "get").mockImplementation(() => {
         throw new DOMException("The operation is insecure.", "SecurityError");
       });

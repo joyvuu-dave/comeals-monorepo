@@ -13,6 +13,7 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 import Cookie from "js-cookie";
 import axios from "axios";
 import WebcalLinks from "../../../app/frontend/src/components/calendar/webcal_links.jsx";
+import { expectConsole } from "../helpers/console_output.js";
 
 describe("WebcalLinks", () => {
   beforeEach(() => {
@@ -112,6 +113,7 @@ describe("WebcalLinks", () => {
   });
 
   it("shows only the community link when the id fetch fails", async () => {
+    expectConsole("error", /^Bad response from server/);
     cookies.current.token = "test-token";
     axios.get.mockRejectedValue({ response: { status: 500, data: {} } });
     render(<WebcalLinks />);

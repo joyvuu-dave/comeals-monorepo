@@ -5,6 +5,7 @@ vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
 import RotationsShow from "../../../app/frontend/src/components/rotations/show.jsx";
+import { expectConsole } from "../helpers/console_output.js";
 
 describe("RotationsShow", () => {
   beforeEach(() => {
@@ -76,6 +77,7 @@ describe("RotationsShow", () => {
   });
 
   it("says so when the rotation fails to load", async () => {
+    expectConsole("error", /^Error: could not submit form\.$/);
     axios.get.mockRejectedValue({ message: "boom" });
     render(<RotationsShow id="10" />);
 
@@ -169,6 +171,7 @@ describe("RotationsShow", () => {
     });
 
     it("shows the new id's rotation without the old id's failure", async () => {
+      expectConsole("error", /^Error: could not submit form\.$/);
       const pending = deferredGets();
       const { container, rerender } = render(<RotationsShow id="10" />);
       await act(async () => {
@@ -186,6 +189,7 @@ describe("RotationsShow", () => {
     });
 
     it("shows the new id's failure without the old id's rotation", async () => {
+      expectConsole("error", /^Error: could not submit form\.$/);
       const pending = deferredGets();
       const { container, rerender } = render(<RotationsShow id="10" />);
       await act(async () => {
@@ -238,6 +242,7 @@ describe("RotationsShow", () => {
     });
 
     it("drops the old id's failure when it arrives last", async () => {
+      expectConsole("error", /^Error: could not submit form\.$/);
       const pending = deferredGets();
       const { container, rerender } = render(<RotationsShow id="10" />);
       rerender(<RotationsShow id="11" />);

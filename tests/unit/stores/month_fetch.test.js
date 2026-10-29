@@ -24,6 +24,7 @@ import {
   refetch,
 } from "../../../app/frontend/src/stores/month_fetch.js";
 import { DEVICE_READ_LIMIT_MS } from "../../../app/frontend/src/helpers/device_copy";
+import { expectConsole } from "../helpers/console_output.js";
 
 const COMMUNITY = "test-community-id";
 
@@ -90,6 +91,13 @@ describe("month_fetch", () => {
   // disk only make a load faster, so every disk call that fails is
   // logged and the load goes on without the copy (#111).
   describe("when IndexedDB fails", () => {
+    beforeEach(() => {
+      expectConsole(
+        "error",
+        /^IndexedDB failed; going on without the copy on disk:/,
+      );
+    });
+
     it("invalidateMonth still drops the RAM copy and the version moves on", async () => {
       monthCache.set(keyFor(2026, 4), payload(2026, 4));
       const versionBefore = monthCache.versionFor(keyFor(2026, 4));
@@ -250,6 +258,7 @@ describe("month_fetch", () => {
     // A background fetch: the failure is logged (handle_axios_error's
     // own tests check the words), never shown as a toast.
     it("renders and caches nothing, and shows no toast, when the fetch gets no answer", async () => {
+      expectConsole("error", /^Error: no response received from server\.$/);
       axios.get.mockRejectedValueOnce(noAnswer());
       const render = vi.fn();
 

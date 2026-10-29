@@ -19,6 +19,7 @@ import {
   stubAction,
 } from "../helpers/create_data_store.js";
 import { deadConnection } from "../helpers/dead_connection.js";
+import { expectConsole } from "../helpers/console_output.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 
 // The server's refusal, with its own words.
@@ -294,6 +295,7 @@ describe("a failed sign-up, Late, Veg or guest request", () => {
 
   // An answer the page cannot read has no words to show.
   it("says the server had a problem when an answer from the app has no words", async () => {
+    expectConsole("error", /^Bad response from server/);
     const store = aliceStore({ attending: true });
     axios.mockRejectedValueOnce({ response: { status: 404, data: "" } });
 
