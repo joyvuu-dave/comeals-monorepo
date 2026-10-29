@@ -57,6 +57,18 @@ RSpec.describe MutantMemoryLimit do
     end
   end
 
+  # The memory footprint, not the resident size: when the machine is
+  # short of memory, macOS compresses pages, and they leave the resident
+  # size but not the footprint (#250). macOS's own footprint tool reads
+  # the same number.
+  it 'measures the memory footprint on macOS', if: RUBY_PLATFORM.include?('darwin') do
+    _grown = Array.new(50_000) { 'x' * 1024 }
+    measured = described_class.current_bytes
+    shown = IO.popen(['footprint', '-p', Process.pid.to_s], &:read)[/phys_footprint: +(\d+) MB/, 1]
+
+    expect(measured / (1024**2)).to be_within(5).of(Integer(shown))
+  end
+
   it 'leaves a process under the limit alone' do
     status = run_child(<<~RUBY)
       MutantMemoryLimit.apply
