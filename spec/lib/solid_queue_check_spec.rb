@@ -132,7 +132,8 @@ RSpec.describe SolidQueueCheck do
       save_task
       worker_with_a_slow_clock = lambda do |*|
         run_worker
-        SolidQueue::Job.update_all(finished_at: 3.seconds.ago)
+        queued_at = SolidQueue::RecurringExecution.sole.run_at
+        SolidQueue::Job.update_all(finished_at: queued_at - 3.seconds)
       end
 
       result = described_class.verify_recurring_run!(sleeper: worker_with_a_slow_clock)
@@ -140,11 +141,16 @@ RSpec.describe SolidQueueCheck do
       expect(result).to eq("the worker ran #{task_key} 0 s after it was queued")
     end
 
+    # The finish time is set from the time the check queued the job, which
+    # the recurring execution keeps as run_at, here and in the example
+    # above. Set from "now" instead, it would add the time run_worker
+    # took, and on a busy machine that is seconds (#259).
     it 'says how many seconds after the queueing the worker ran it' do
       save_task
       slow_worker = lambda do |*|
         run_worker
-        SolidQueue::Job.update_all(finished_at: 3.seconds.from_now)
+        queued_at = SolidQueue::RecurringExecution.sole.run_at
+        SolidQueue::Job.update_all(finished_at: queued_at + 3.seconds)
       end
 
       result = described_class.verify_recurring_run!(sleeper: slow_worker)
