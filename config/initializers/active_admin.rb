@@ -175,9 +175,7 @@ ActiveAdmin.setup do |config|
   # defaults. The rest hold a credential, or say when one was made:
   #
   #   residents    password_digest, reset_password_token_digest,
-  #                reset_password_sent_at, keys_valid_since, and
-  #                reset_password_token (ignored by the model since
-  #                2026-10-23; kept one release, then dropped)
+  #                reset_password_sent_at, keys_valid_since
   #   admin_users  reset_password_token, reset_password_sent_at
   #   keys         token (a legacy API session; no admin page today)
   #

@@ -26,7 +26,6 @@
 #
 #  index_residents_on_lower_email                  (lower((email)::text)) UNIQUE
 #  index_residents_on_lower_name                   (lower((name)::text)) UNIQUE
-#  index_residents_on_reset_password_token         (reset_password_token) UNIQUE
 #  index_residents_on_reset_password_token_digest  (reset_password_token_digest) UNIQUE
 #  index_residents_on_unit_id                      (unit_id)
 #

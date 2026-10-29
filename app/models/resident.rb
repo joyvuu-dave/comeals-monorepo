@@ -27,7 +27,6 @@
 #
 #  index_residents_on_lower_email                  (lower((email)::text)) UNIQUE
 #  index_residents_on_lower_name                   (lower((name)::text)) UNIQUE
-#  index_residents_on_reset_password_token         (reset_password_token) UNIQUE
 #  index_residents_on_reset_password_token_digest  (reset_password_token_digest) UNIQUE
 #  index_residents_on_unit_id                      (unit_id)
 #
@@ -43,12 +42,6 @@ class Resident < ApplicationRecord
   include BelongsToTheCommunity
 
   include HasPhoneNumber
-
-  # Until 2026-10-23 the reset token was stored here as it was mailed. Now
-  # only its digest is stored (reset_password_token_digest, PasswordReset),
-  # and the deploy of 2026-10-24 emptied this column. It stays one release
-  # so an undo to the code before can still read it; drop it after that.
-  self.ignored_columns += %w[reset_password_token]
 
   # The columns the admin index may be filtered and sorted by
   # (AdminOrderClause reads this list for ?order=). It deliberately leaves

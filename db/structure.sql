@@ -1637,7 +1637,6 @@ CREATE TABLE public.residents (
     name character varying NOT NULL,
     password_digest character varying NOT NULL,
     reset_password_sent_at timestamp(6) without time zone,
-    reset_password_token character varying,
     unit_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
     vegetarian boolean DEFAULT false NOT NULL,
@@ -3440,13 +3439,6 @@ CREATE UNIQUE INDEX index_residents_on_lower_name ON public.residents USING btre
 
 
 --
--- Name: index_residents_on_reset_password_token; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE UNIQUE INDEX index_residents_on_reset_password_token ON public.residents USING btree (reset_password_token);
-
-
---
 -- Name: index_residents_on_reset_password_token_digest; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4412,6 +4404,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261029120000'),
 ('20261023140000'),
 ('20261023130100'),
 ('20261023130000'),

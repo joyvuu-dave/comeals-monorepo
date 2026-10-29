@@ -223,9 +223,8 @@ Resident
 - `reset_password_token_digest` / `reset_password_sent_at` — password reset
   by email. The table keeps only the SHA-256 digest of the mailed token
   (`PasswordReset`); the token itself is only in the email. A CHECK allows
-  nothing but 64 hex digits. The old `reset_password_token` column held the
-  token as it was mailed; since 2026-10-23 it is empty and ignored, and it
-  is dropped one release later.
+  nothing but 64 hex digits. Until 2026-10-23 a `reset_password_token`
+  column held the token as it was mailed; it was dropped on 2026-10-29.
 - `password_digest`, `reset_password_token_digest`, `reset_password_sent_at` and
   `keys_valid_since` are never sent out. `Resident#serializable_hash` leaves
   them out of every JSON of a resident, the admin's JSON download included,
