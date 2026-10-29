@@ -12,3 +12,10 @@
 export function browserTurnedAway(): boolean {
   return window.comealsBrowserCheck?.result === "failed";
 }
+
+// Tells the browser check the app has started. Until then the check
+// shows a message for an error thrown while the page starts, which the
+// app's own error handling cannot catch (#253).
+export function markAppStarted(): void {
+  if (window.comealsBrowserCheck) window.comealsBrowserCheck.appStarted = true;
+}

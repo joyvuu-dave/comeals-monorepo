@@ -289,3 +289,57 @@ test.describe("when the app's code does not load", () => {
       ]);
   });
 });
+
+// A file the app's code imports downloads, but throws while it runs,
+// before index.jsx has started the app. The browser fires "load" on the
+// module script, not "error", so only the window sees the throw (#253).
+test.describe("when the app's code throws before it starts", () => {
+  const CRASH = "crash for the test";
+
+  test.use({ allowedPageErrors: new RegExp(CRASH) });
+
+  test.beforeEach(async ({ page }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+    await mockApi(page);
+  });
+
+  test("shows a message with a Reload button and reports once", async ({
+    page,
+  }) => {
+    const html = await (await page.request.get("/")).text();
+    const imported = html.match(
+      /<link rel="modulepreload" crossorigin href="([^"]+)"/,
+    )[1];
+    await page.route(
+      (url) => url.pathname === imported,
+      async (route) => {
+        const response = await route.fetch();
+        route.fulfill({
+          response,
+          body: `throw new Error("${CRASH}");\n${await response.text()}`,
+        });
+      },
+    );
+    const reports = await catchReport(page);
+
+    await page.goto("/");
+
+    await expect(
+      page.getByRole("heading", { name: "Comeals could not load." }),
+    ).toBeVisible();
+    await expect(
+      page.getByText("Something went wrong while the page was starting."),
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Reload" })).toBeVisible();
+    await expect(page.getByText("Loading...")).toHaveCount(0);
+    await expect.poll(() => reports).toHaveLength(2);
+    expect(reports[0]).toBe("?result=passed&touch=0");
+    const error = decodeURIComponent(reports[1].match(/error=([^&]*)/)[1]);
+    expect(error).toMatch(
+      new RegExp(
+        `^Crashed while starting: (Uncaught )?Error: ${CRASH} \\(${imported}:1\\)$`,
+      ),
+    );
+  });
+});

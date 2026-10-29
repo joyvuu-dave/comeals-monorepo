@@ -27,6 +27,8 @@ declare global {
     comealsBrowserCheck?: {
       result: "passed" | "failed" | "error";
       failed: string[];
+      // Set by index.jsx (markAppStarted) once it starts the app.
+      appStarted?: boolean;
     };
     Comeals: {
       pusher: PusherClient;

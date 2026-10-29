@@ -1,5 +1,5 @@
 import "./styles.css";
-import { browserTurnedAway } from "./helpers/browser_check";
+import { browserTurnedAway, markAppStarted } from "./helpers/browser_check";
 // Installs the window.onerror and unhandledrejection handlers. This runs
 // after every import in this file has been evaluated, because imports are
 // hoisted — so an error thrown while a module is still being evaluated is
@@ -161,6 +161,8 @@ function clearCachesForNewBuild() {
 document.addEventListener("DOMContentLoaded", () => {
   // The browser check's message is in the root. Leave it there.
   if (browserTurnedAway()) return;
+  // From here a crash shows the app's own crash page (showBootCrash).
+  markAppStarted();
   try {
     startApp();
   } catch (error) {

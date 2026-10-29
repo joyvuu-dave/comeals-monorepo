@@ -21,7 +21,9 @@
 // It also watches the app's module script. If that script, or a file it
 // imports, cannot load, the page would show "Loading..." forever, and
 // nothing would report it, because Bugsnag is part of the app's code.
-// watchTheApp says what happens then.
+// watchTheApp says what happens then. The same is true when one of those
+// files loads but throws before the app has started; watchTheStart says
+// what happens then.
 (function (window) {
   "use strict";
 
@@ -143,6 +145,19 @@
     ],
     reload: true,
   };
+
+  var CRASHED = {
+    title: "Comeals could not load.",
+    lines: [
+      "Something went wrong while the page was starting. Please try " +
+        "again in a few minutes.",
+    ],
+    reload: true,
+  };
+
+  // Only one of the two watchers below draws a message and sends a
+  // report, whichever sees a problem first.
+  var messageShown = false;
 
   function element(tag, style, text) {
     var node = document.createElement(tag);
@@ -294,8 +309,6 @@
   // and sends one report. Not in a browser the check turned away: its
   // message stays on the page.
   function watchTheApp() {
-    var handled = false;
-
     function appScript(event) {
       var target = event.target;
       if (!target || target.tagName !== "SCRIPT") return null;
@@ -316,8 +329,8 @@
       "error",
       function (event) {
         var file = appScript(event);
-        if (!file || handled || check.result === "failed") return;
-        handled = true;
+        if (!file || messageShown || check.result === "failed") return;
+        messageShown = true;
         if (firstFailureSaved(file)) {
           whenServerAnswers(function () {
             window.location.reload();
@@ -334,11 +347,54 @@
     );
   }
 
-  var check = { result: "passed", failed: [], tests: TESTS };
+  // A file the app imports runs its top-level code before index.jsx's
+  // own code, and outside index.jsx's try. If it throws, the script has
+  // still downloaded, so the browser fires "load" on it, not "error", and
+  // the error goes only to the window (#253). So until index.jsx says the
+  // app has started (check.appStarted, set by markAppStarted in
+  // src/helpers/browser_check.ts), an error thrown by one of this site's
+  // scripts shows a message and sends one report. After that the app's
+  // own error handling and Bugsnag take over.
+  //
+  // Only this site's scripts: a browser extension or another site's
+  // script can throw on the page too, and that says nothing about the
+  // app. Another site's error has no file ("Script error.").
+  function watchTheStart() {
+    window.addEventListener("error", function (event) {
+      if (messageShown || check.appStarted) return;
+      if (check.result === "failed") return;
+      var site = window.location.origin + "/";
+      var file = event.filename || "";
+      if (file.slice(0, site.length) !== site) return;
+      messageShown = true;
+      showMessage(CRASHED);
+      var where = "/" + file.slice(site.length) + ":" + event.lineno;
+      report(
+        "result=load_failed&error=" +
+          encodeURIComponent(
+            (
+              "Crashed while starting: " +
+              event.message +
+              " (" +
+              where +
+              ")"
+            ).slice(0, 200)
+          )
+      );
+    });
+  }
+
+  var check = {
+    result: "passed",
+    failed: [],
+    tests: TESTS,
+    appStarted: false,
+  };
   window.comealsBrowserCheck = check;
 
   try {
     watchTheApp();
+    watchTheStart();
     for (var i = 0; i < TESTS.length; i++) {
       if (!TESTS[i].run()) check.failed.push(TESTS[i].name);
     }

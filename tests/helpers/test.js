@@ -22,6 +22,11 @@
  * alternation (see combinePatterns below). Anything not matching still
  * fails the test. A failed preconnect is ignored in every test
  * (tests/helpers/console_errors.js).
+ *
+ * allowedPageErrors does the same for uncaught errors, for a test that
+ * makes the page throw on purpose:
+ *
+ *   test.use({ allowedPageErrors: /crash for the test/ });
  */
 const base = require("@playwright/test");
 const { saveCoverage } = require("./visual_coverage");
@@ -29,6 +34,7 @@ const { failsTheTest } = require("./console_errors");
 
 const test = base.test.extend({
   allowedConsoleErrors: [null, { option: true }],
+  allowedPageErrors: [null, { option: true }],
   // Every page load sends the browser check's report to
   // POST /api/v1/browser-reports (app/frontend/browser_check.js). The
   // mocked suite has no server to answer it, and the browser logs the
@@ -38,7 +44,7 @@ const test = base.test.extend({
   // real server answers it.
   browserReports: ["answer", { option: true }],
   page: async (
-    { page, allowedConsoleErrors, browserReports },
+    { page, allowedConsoleErrors, allowedPageErrors, browserReports },
     use,
     testInfo,
   ) => {
@@ -65,7 +71,12 @@ const test = base.test.extend({
         });
       });
     }
-    page.on("pageerror", (error) => pageErrors.push(String(error)));
+    page.on("pageerror", (error) => {
+      const text = String(error);
+      if (!allowedPageErrors || !allowedPageErrors.test(text)) {
+        pageErrors.push(text);
+      }
+    });
     page.on("console", (message) => {
       if (message.type() !== "error") return;
       const text = message.text();
