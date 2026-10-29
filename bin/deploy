@@ -697,9 +697,24 @@ save_release_output() {
   fi
 }
 
+# Heroku's list of releases, newest first, in RELEASES_JSON. Fails when
+# heroku fails (no network, an expired login) or answers with something
+# that is not a list of releases. The callers say what that means at
+# their point in the deploy, instead of a Python traceback (#256).
+read_releases() {
+  local out
+  out=$(heroku releases -a "$APP" --json) || return 1
+  printf '%s' "$out" | json "d[0]['version']" >/dev/null 2>&1 || return 1
+  RELEASES_JSON=$out
+}
+
 # The newest release's version, before the push.
 read_release_before() {
-  RELEASE_BEFORE=$(heroku releases -a "$APP" --json | json "d[0]['version']")
+  if ! read_releases; then
+    fail "Could not read the releases of $APP from Heroku. Nothing was changed, so it is safe to run bin/deploy again."
+    exit 1
+  fi
+  RELEASE_BEFORE=$(printf '%s' "$RELEASES_JSON" | json "d[0]['version']")
 }
 
 # git push exits 0 even when the release phase fails (bin/staging-rehearsal
@@ -713,7 +728,15 @@ read_release_before() {
 check_release_status() {
   local status="" version="" release tries=0
   while [ "$tries" -lt 36 ]; do
-    release=$(heroku releases -a "$APP" --json | json "'%s %s' % (d[0]['version'], d[0]['status'])")
+    if ! read_releases; then
+      fail "Could not read the releases of $APP from Heroku after the push. The code is pushed, and the release may have run."
+      info "Check it by hand: heroku releases -a $APP"
+      if [ "$MAINTENANCE_ENABLED" = true ]; then
+        info "Maintenance stays on and web and the worker stay at 0. Do not scale them up until you know which migrations ran: the old code may not work on the new schema."
+      fi
+      exit 1
+    fi
+    release=$(printf '%s' "$RELEASES_JSON" | json "'%s %s' % (d[0]['version'], d[0]['status'])")
     version=${release%% *}
     status=${release#* }
     if [ "$status" != "pending" ]; then

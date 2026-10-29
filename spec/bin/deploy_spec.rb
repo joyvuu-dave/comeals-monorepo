@@ -1396,6 +1396,25 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect_production(maintenance: true, web: 0, pushed: true, worker: 0)
     end
 
+    # State left: maintenance on, web at 0, new code pushed, migrations
+    # maybe run. Next step: heroku releases, do not scale up (#256).
+    it 'keeps maintenance on and web at 0 when Heroku cannot list the releases after the push' do
+      deploy.rule('heroku', '^releases -a', times: 1, stdout: %([{"version":700,"status":"succeeded"}]\n))
+      deploy.rule('heroku', '^releases -a', exit: 1, stderr: "releases failed\n")
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        'Could not read the releases of comeals-monorepo from Heroku after the push.',
+        'Maintenance stays on and web and the worker stay at 0. Do not scale them up until you know which ' \
+        'migrations ran: the old code may not work on the new schema.'
+      )
+      expect(result.output).not_to include('Traceback')
+      expect_recovery_banner(result)
+      expect_production(maintenance: true, web: 0, pushed: true, worker: 0)
+    end
+
     # State left: maintenance on, web and worker at 0, old code, no
     # migration ran. Next step: the commands the banner prints.
     it 'says the old code still runs when the push made no new release' do
