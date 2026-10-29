@@ -589,7 +589,7 @@ describe("the detached-node warning", () => {
 // before this file. When it turns the browser away, it has already
 // drawn its message in the root, and the app must not draw over it, or
 // send errors from a browser it knows cannot run the app.
-describe("a browser the browser check turned away", () => {
+describe("the browser check", () => {
   afterEach(() => {
     delete window.comealsBrowserCheck;
   });
@@ -605,6 +605,16 @@ describe("a browser the browser check turned away", () => {
     expect(document.getElementById("root")).toBeEmptyDOMElement();
     expect(bootedStore).toBeNull();
     expect(await startBugsnag()).not.toHaveBeenCalled();
+  });
+
+  // Until then the check shows a message for an error a file throws
+  // while the page starts. After, the app's own error handling and
+  // Bugsnag take over (#253).
+  it("tells the check when the app has started", async () => {
+    window.comealsBrowserCheck = { result: "passed", failed: [] };
+    await bootApp("/", { signedOut: true });
+    expect(await screen.findByLabelText("email")).toBeInTheDocument();
+    expect(window.comealsBrowserCheck.appStarted).toBe(true);
   });
 
   // "error" means the check itself broke. That says nothing about the

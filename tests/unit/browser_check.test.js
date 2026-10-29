@@ -23,7 +23,12 @@ const NO_COOKIES = "Comeals cannot keep you signed in.";
 // parts of it.
 function makeWindow(changes = {}) {
   const sendBeacon = vi.fn(() => true);
+  // The window's own events (an error a script threw), apart from the
+  // document's.
+  const events = new EventTarget();
   const win = {
+    addEventListener: events.addEventListener.bind(events),
+    dispatchEvent: events.dispatchEvent.bind(events),
     document,
     navigator: { sendBeacon, maxTouchPoints: 0 },
     RegExp,
@@ -386,6 +391,7 @@ describe("the build", () => {
 // has its own document, so the listeners one test adds never hear
 // another test's events.
 describe("when the app's code does not load", () => {
+  const ORIGIN = "https://comeals.com";
   const FILE = "/vite-assets/index-abc123.js";
   const COULD_NOT_LOAD = "Comeals could not load.";
 
@@ -451,7 +457,7 @@ describe("when the app's code does not load", () => {
     const win = makeWindow({
       document: doc,
       sessionStorage: makeStorage(blocked),
-      location: { reload: vi.fn() },
+      location: { origin: ORIGIN, reload: vi.fn() },
       setTimeout: vi.fn((fn) => fn()),
       XMLHttpRequest: makeVersionRequest(statuses),
       ...changes,
@@ -632,5 +638,107 @@ describe("when the app's code does not load", () => {
       reports(win)[1].match(/error=([^&]*)/)[1],
     );
     expect(sentError).toHaveLength(200);
+  });
+
+  // A file the app imports throws while it runs, before index.jsx's own
+  // code. The script has downloaded, so the browser fires "load" on it,
+  // not "error", and the throw goes only to the window. Without this the
+  // page stays on "Loading..." with no report (#253).
+  describe("when the app's code throws before it starts", () => {
+    const CRASHED = "Comeals could not load.";
+
+    function throwIn(win, file, message = "TypeError: x is not a function") {
+      win.dispatchEvent(
+        new ErrorEvent("error", { message, filename: file, lineno: 3 }),
+      );
+    }
+
+    it("shows a message with a Reload button and reports once", () => {
+      const { win, doc } = makePage();
+      runCheck(win);
+
+      throwIn(win, `${ORIGIN}/vite-assets/dayjs-abc.js`);
+      throwIn(win, `${ORIGIN}/vite-assets/dayjs-abc.js`);
+
+      expect(doc.querySelector("h2").textContent).toBe(CRASHED);
+      expect(doc.getElementById("root").textContent).toContain(
+        "Something went wrong while the page was starting.",
+      );
+      expect(doc.querySelector("button").textContent).toBe("Reload");
+      expect(win.location.reload).not.toHaveBeenCalled();
+      expect(reports(win)).toEqual([
+        "/api/v1/browser-reports?result=passed&touch=0",
+        `/api/v1/browser-reports?result=load_failed&error=${encodeURIComponent(
+          "Crashed while starting: TypeError: x is not a function " +
+            "(/vite-assets/dayjs-abc.js:3)",
+        )}&touch=0`,
+      ]);
+    });
+
+    // Once index.jsx has started the app, its own error handling and
+    // Bugsnag take over.
+    it("leaves errors alone once the app has started", () => {
+      const { win, doc } = makePage();
+      runCheck(win).appStarted = true;
+
+      throwIn(win, `${ORIGIN}/vite-assets/index-abc123.js`);
+
+      expect(doc.querySelector("h2")).toBeNull();
+      expect(reports(win)).toHaveLength(1);
+    });
+
+    // A browser extension or another site's script can throw on this
+    // page too. That says nothing about the app. Another site's error
+    // reaches the page as "Script error." with no file.
+    it("leaves errors from scripts that are not this site's alone", () => {
+      const { win, doc } = makePage();
+      runCheck(win);
+
+      throwIn(win, "chrome-extension://abc/content.js");
+      throwIn(win, "https://example.com/comeals.com/app.js");
+      throwIn(win, "", "Script error.");
+
+      expect(doc.querySelector("h2")).toBeNull();
+      expect(reports(win)).toHaveLength(1);
+    });
+
+    it("leaves the old-browser message alone", () => {
+      const { win, doc } = makePage({
+        changes: { RegExp: RegExpWithoutLookbehind },
+      });
+      runCheck(win);
+
+      throwIn(win, `${ORIGIN}/vite-assets/index-abc123.js`);
+
+      expect(doc.querySelector("h2").textContent).toBe(TOO_OLD);
+      expect(reports(win)).toHaveLength(1);
+    });
+
+    // One message and one report, whichever comes first.
+    it("adds nothing when the script also failed to load", () => {
+      const { win, doc, script } = makePage({ blocked: true });
+      runCheck(win);
+
+      fire(script, "error");
+      throwIn(win, `${ORIGIN}/vite-assets/index-abc123.js`);
+
+      expect(doc.querySelector("h2").textContent).toBe(COULD_NOT_LOAD);
+      expect(doc.getElementById("root").textContent).toContain(
+        "Part of the page did not download.",
+      );
+      expect(reports(win)).toHaveLength(2);
+    });
+
+    it("cuts a long error in the report to 200 characters", () => {
+      const { win } = makePage();
+      runCheck(win);
+
+      throwIn(win, `${ORIGIN}/vite-assets/a.js`, "x".repeat(300));
+
+      const sentError = decodeURIComponent(
+        reports(win)[1].match(/error=([^&]*)/)[1],
+      );
+      expect(sentError).toHaveLength(200);
+    });
   });
 });
