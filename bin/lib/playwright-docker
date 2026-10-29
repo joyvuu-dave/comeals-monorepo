@@ -1,0 +1,72 @@
+#!/usr/bin/env bash
+# Runs a command on a Linux CI runner with the browsers in Playwright's
+# Docker image instead of on the runner (#252):
+#
+#   bin/lib/playwright-docker npm run test:e2e
+#   bin/lib/playwright-docker bin/visual-coverage
+#   bin/lib/playwright-docker bin/test-integration
+#
+# A browser on the runner needs Ubuntu packages that only apt can
+# install, and apt reads them from a mirror that is often slow. On
+# 2026-10-26 that step ran out of time five times, and no test ran. The
+# image has the browsers and their packages already, so nothing comes
+# from apt.
+#
+# Only the browsers run in the container. The image has no Ruby, and
+# the suites need it: Rails serves the admin pages and the integration
+# suite, and tests/admin/actions.spec.js runs tests/admin/reseed.sh
+# between groups of tests. So the test runner, Vite and Rails stay on
+# the runner, and the container runs Playwright's browser server.
+# Playwright's test runner connects to it when PW_TEST_CONNECT_WS_ENDPOINT
+# is set (a setting of Playwright itself), and asks it for a Chromium or
+# a WebKit for each project.
+#
+# The container uses the runner's network (--network=host), so
+# "localhost" and "127.0.0.1" in the browser are the runner, the same
+# as when the browser runs on the runner. That works on Linux. Docker
+# Desktop on a Mac needs its host networking setting turned on for it,
+# and laptops run the suites without this script.
+#
+# The server is the one in the repository's node_modules, mounted into
+# the container, so it is the same Playwright version as the test
+# runner. The image tag is that version too, read from package-lock.json
+# the way bin/visual-linux reads it, so the browsers in the image are
+# the builds this version expects. --unsafe lets the test runner pass
+# browser arguments: the admin project maps *.lvh.me to 127.0.0.1 with
+# one. The server listens on 127.0.0.1 only.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+VERSION=$(node -p "require('${ROOT}/package-lock.json').packages['node_modules/@playwright/test'].version")
+IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
+PORT="${PLAYWRIGHT_SERVER_PORT:-3039}"
+
+echo "Starting Playwright's browser server in ${IMAGE} on port ${PORT}..."
+CONTAINER=$(docker run --detach --init --ipc=host --network=host \
+  --user pwuser \
+  -v "$ROOT":/work:ro \
+  -w /work \
+  "$IMAGE" \
+  node node_modules/@playwright/test/cli.js run-server --host 127.0.0.1 --port "$PORT" --unsafe)
+trap 'docker rm --force "$CONTAINER" >/dev/null 2>&1 || true' EXIT
+
+server_up() {
+  curl -s -o /dev/null "http://127.0.0.1:${PORT}/"
+}
+for _ in $(seq 1 60); do
+  server_up && break
+  if [ "$(docker inspect --format '{{.State.Running}}' "$CONTAINER")" != "true" ]; then
+    echo "The browser server stopped before it answered. Its output:" >&2
+    docker logs "$CONTAINER" >&2
+    exit 1
+  fi
+  sleep 1
+done
+if ! server_up; then
+  echo "The browser server did not answer on port ${PORT} within a minute. Its output:" >&2
+  docker logs "$CONTAINER" >&2
+  exit 1
+fi
+
+export PW_TEST_CONNECT_WS_ENDPOINT="ws://127.0.0.1:${PORT}/"
+"$@"

@@ -13,9 +13,10 @@ jobs:
   # Normal durations: each ruby-test part ~13 min, node-e2e ~14 min,
   # visual-tests ~8 min, integration-tests ~6 min, everything else under
   # two minutes.
-  # The two Playwright jobs get 25 instead of 2-3x: on a Playwright
-  # version bump they download browsers, and on 2026-08-19 a slow CDN
-  # stretched that download to 12 minutes.
+  # The two Playwright jobs get 25 instead of 2-3x, because a slow
+  # download can make them much longer: they pull the Playwright Docker
+  # image (bin/lib/playwright-docker), and on 2026-08-19 a slow CDN made
+  # a browser download take 12 minutes.
   #
   # Every workflow names ubuntu-24.04, not ubuntu-latest. GitHub moves
   # ubuntu-latest to Ubuntu 26 from 2026-10-19. A new image changes the
@@ -369,9 +370,9 @@ jobs:
       VITE_PUSHER_KEY: "test-key-for-ci"
       VITE_PUSHER_CLUSTER: "us2"
       ADMIN_E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_admin_e2e
-      # The visual suite runs in its own job (visual-tests) inside the
-      # Playwright container, because this runner renders text about a
-      # pixel differently than the container that records the goldens.
+      # The visual suite runs in its own job (visual-tests), with the
+      # test runner inside the Playwright container, the same way
+      # bin/update-linux-snapshots records the goldens (bin/visual-linux).
       PLAYWRIGHT_SKIP_VISUAL: "1"
     steps:
       - uses: actions/checkout@v6
@@ -383,31 +384,15 @@ jobs:
           node-version-file: package.json
           cache: npm
       - run: npm ci
-      # Cache the Playwright browsers, keyed on the Playwright version.
-      # The download normally takes about a minute, but on 2026-08-19 a
-      # slow CDN stretched it to 12 minutes in integration-tests and the
-      # job hit its timeout. With the cache, only a Playwright version
-      # bump downloads browsers. The apt packages (install-deps) are not
-      # cached; they come from the runner's mirror and usually take
-      # seconds. On 2026-10-22 install-deps waited on the mirror and used
-      # the job's whole 25 minutes, so bin/lib/playwright-install gives
-      # each try 8 minutes and tries twice (#240).
-      - name: Read Playwright version
-        id: playwright-version
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright-version.outputs.version }}-chromium-webkit
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bin/lib/playwright-install install --with-deps chromium webkit
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bin/lib/playwright-install install-deps chromium webkit
-      - run: npm run test:e2e
+      # The browsers run in Playwright's Docker image, not on the runner
+      # (bin/lib/playwright-docker, #252). On the runner they need Ubuntu
+      # packages from apt, and the apt mirror is often slow: on 2026-10-26
+      # that step ran out of time five times. The image has the packages
+      # already. The tests, Vite and Rails still run on the runner.
+      - run: bin/lib/playwright-docker npm run test:e2e
       # The screen-state measure compares counters, not pixels, so it
-      # runs on this plain runner even though the goldens cannot.
-      - run: bin/visual-coverage
+      # can run in this job, which leaves the pixel comparison out.
+      - run: bin/lib/playwright-docker bin/visual-coverage
       - uses: actions/upload-artifact@v7
         if: failure()
         with:
@@ -492,26 +477,13 @@ jobs:
           node-version-file: package.json
           cache: npm
       - run: npm ci
-      # Same browser cache as node-e2e-tests; the comment there explains
-      # why. The two jobs share cache entries because the key is the
-      # same.
-      - name: Read Playwright version
-        id: playwright-version
-        run: echo "version=$(node -p "require('@playwright/test/package.json').version")" >> "$GITHUB_OUTPUT"
-      - uses: actions/cache@v6
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ steps.playwright-version.outputs.version }}-chromium-webkit
-      - if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: bin/lib/playwright-install install --with-deps chromium webkit
-      - if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: bin/lib/playwright-install install-deps chromium webkit
       # Load the schema the same way ruby-test does. On a fresh empty
       # database, db:prepare inside bin/test-integration would instead
       # replay every migration from zero and re-dump structure.sql.
       - run: bin/rails db:schema:load
-      - run: bin/test-integration
+      # The browsers run in Playwright's Docker image; the comment in
+      # node-e2e-tests says why.
+      - run: bin/lib/playwright-docker bin/test-integration
       - uses: actions/upload-artifact@v7
         if: failure()
         with:

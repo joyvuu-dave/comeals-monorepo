@@ -47,6 +47,7 @@ class BashCoverage
     'bin/lib/smoke_secrets.sh' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/watch-production' => 'spec/bin/deploy_workflow_spec.rb',
     'bin/lib/deploy/write-release-note' => 'spec/bin/deploy_workflow_spec.rb',
+    'bin/lib/playwright-docker' => 'spec/bin/playwright_docker_spec.rb',
     'bin/lib/playwright-install' => 'spec/bin/playwright_install_spec.rb',
     'bin/lib/rollback/check-backup' => 'spec/bin/rollback_workflow_spec.rb',
     'bin/lib/rollback/check-migrations' => 'spec/bin/rollback_workflow_spec.rb',
