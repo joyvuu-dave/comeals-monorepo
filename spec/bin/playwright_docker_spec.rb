@@ -15,6 +15,7 @@ RSpec.describe 'bin/lib/playwright-docker', bash_coverage: BashCoverage.new('spe
     sandbox.fake('node', 'echo 1.58.2')
     sandbox.fake('curl')
     sandbox.fake('sleep')
+    sandbox.fake('timeout')
     docker(running: 'true')
     sandbox.fake('npm', notes: %w[PW_TEST_CONNECT_WS_ENDPOINT])
   end
@@ -24,6 +25,8 @@ RSpec.describe 'bin/lib/playwright-docker', bash_coverage: BashCoverage.new('spe
                                              'inspect *' => "echo #{running}",
                                              'logs *' => 'echo "the server log"' }))
   end
+
+  def pull(minutes = 5) = "timeout --kill-after=30s #{minutes}m docker pull --quiet #{image}"
 
   def run(*, env: {}) = sandbox.run_script('bin/lib/playwright-docker', *, env:)
 
@@ -40,6 +43,7 @@ RSpec.describe 'bin/lib/playwright-docker', bash_coverage: BashCoverage.new('spe
        'node node_modules/@playwright/test/cli.js run-server --host 127.0.0.1 --port 3039 --unsafe',
        'docker rm --force c0ffee']
     )
+    expect(sandbox.call_lines('timeout')).to eq([pull])
     npm = sandbox.calls_to('npm').sole
     expect(npm.args).to eq(%w[run test:e2e])
     expect(npm.env).to eq('PW_TEST_CONNECT_WS_ENDPOINT' => 'ws://127.0.0.1:3039/')
@@ -87,6 +91,35 @@ RSpec.describe 'bin/lib/playwright-docker', bash_coverage: BashCoverage.new('spe
       "The browser server did not answer on port 3039 within a minute. Its output:\nthe server log\n"
     )
     expect(sandbox.calls_to('sleep').size).to eq(60)
+    expect(sandbox.calls_to('npm')).to be_empty
+  end
+
+  # timeout exits 124 when it stopped the pull.
+  it 'tries the pull once more when the first try fails' do
+    counter = File.join(sandbox.dir, 'pulls')
+    sandbox.fake('timeout', "echo x >> #{counter}; [ \"$(wc -l < #{counter})\" -gt 1 ] || exit 124")
+
+    result = run('npm', 'test')
+
+    expect(result.exitstatus).to eq(0), result.out + result.err
+    expect(sandbox.call_lines('timeout')).to eq([pull, pull])
+    expect(result.err).to eq("docker pull #{image} failed or ran out of time (5m) on try 1 of 2.\n")
+    expect(sandbox.calls_to('npm').size).to eq(1)
+  end
+
+  it 'stops, naming the image, when both pulls fail' do
+    sandbox.fake('timeout', 'exit 124')
+
+    result = run('npm', 'test', env: { 'PLAYWRIGHT_PULL_MINUTES' => '2' })
+
+    expect(result.exitstatus).to eq(1)
+    expect(sandbox.call_lines('timeout')).to eq([pull(2), pull(2)])
+    expect(result.err).to eq(<<~ERR)
+      docker pull #{image} failed or ran out of time (2m) on try 1 of 2.
+      docker pull #{image} failed or ran out of time (2m) on try 2 of 2.
+      Could not pull #{image} after 2 tries.
+    ERR
+    expect(sandbox.calls_to('docker')).to be_empty
     expect(sandbox.calls_to('npm')).to be_empty
   end
 

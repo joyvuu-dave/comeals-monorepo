@@ -41,6 +41,25 @@ VERSION=$(node -p "require('${ROOT}/package-lock.json').packages['node_modules/@
 IMAGE="mcr.microsoft.com/playwright:v${VERSION}-noble"
 PORT="${PLAYWRIGHT_SERVER_PORT:-3039}"
 
+# Pull the image before starting it, with a time limit on each try and a
+# second try, the way bin/lib/playwright-install limits apt (#240). A
+# pull that stops getting data would otherwise wait until the whole job
+# runs out of time. The pull takes about 30 seconds on a GitHub runner.
+# --kill-after: if docker ignores the first signal, KILL follows.
+pull_minutes="${PLAYWRIGHT_PULL_MINUTES:-5}"
+pulled=""
+for try in 1 2; do
+  if timeout --kill-after=30s "${pull_minutes}m" docker pull --quiet "$IMAGE"; then
+    pulled=yes
+    break
+  fi
+  echo "docker pull ${IMAGE} failed or ran out of time (${pull_minutes}m) on try ${try} of 2." >&2
+done
+if [ -z "$pulled" ]; then
+  echo "Could not pull ${IMAGE} after 2 tries." >&2
+  exit 1
+fi
+
 echo "Starting Playwright's browser server in ${IMAGE} on port ${PORT}..."
 CONTAINER=$(docker run --detach --init --ipc=host --network=host \
   --user pwuser \
