@@ -27,7 +27,8 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       'exec debride *' => reply("These methods MIGHT not be called:\n"),
       'exec database_consistency' => reply("NullConstraintChecker ok Meal date\n"),
       'exec srb tc' => reply("No errors! Great job.\n"),
-      'exec bundle audit check --update' => reply("Updating ruby-advisory-db ...\nNo vulnerabilities found\n"),
+      'exec bundle audit update' => reply("Updating ruby-advisory-db ...\nupdated ruby-advisory-db\n"),
+      'exec bundle audit check' => reply("No vulnerabilities found\n"),
       'exec rspec' => reply("Randomized with seed 4242\n....\n\n4000 examples, 0 failures\n"),
       'exec rake test:generate_fixtures' => reply("Wrote 12 fixtures\n"),
       'exec annotaterb models' => reply("Model files unchanged.\n"),
@@ -482,8 +483,9 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
     end
 
     it 'warns, and does not fail, when only the advisory update failed' do
-      result = run_check(bundle: { 'exec bundle audit check --update' => reply(
-        "Updating ruby-advisory-db ...\nfailed to update: lock held\nNo vulnerabilities found\n", status: 1
+      result = run_check(bundle: { 'exec bundle audit update' => reply(
+        "Updating ruby-advisory-db ...\nfatal: unable to access 'https://github.com/rubysec/ruby-advisory-db/'\n" \
+        "failed to update\n", status: 1
       ) })
 
       expect(result).to be_success, result.output
@@ -493,10 +495,41 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
         .to eq('⚠  bundle audit         advisory db update failed, cached copy clean')
     end
 
+    # Two bin/check runs in two worktrees once updated the shared copy at
+    # the same moment, and git left it broken (#254). The update now runs
+    # under a lock on a file beside the copy, and the check itself never
+    # updates.
+    it 'updates the advisory database under a lock, then checks without updating' do
+      lock_held = File.join(sandbox.dir, 'lock-held')
+      lock_file = File.join(sandbox.dir, 'home', '.local', 'share', 'ruby-advisory-db.lock')
+      # The fake update tries to take the lock itself, without waiting.
+      take_lock = 'import fcntl, sys; fcntl.flock(open(sys.argv[1], "a"), fcntl.LOCK_EX | fcntl.LOCK_NB)'
+      update = "python3 -c #{take_lock.shellescape} #{lock_file.shellescape} 2>/dev/null || " \
+               "touch #{lock_held.shellescape}; exit 0"
+
+      result = run_check('bundle_audit', bundle: { 'exec bundle audit update' => update })
+
+      expect(result).to be_success, result.output
+      expect(sandbox.call_lines('bundle')).to eq(['bundle exec bundle audit update', 'bundle exec bundle audit check'])
+      expect(File).to exist(lock_held)
+    end
+
+    # The update stopped before the check, so no gem was checked (#254).
+    it 'says bundle audit could not run when the check names no advisory' do
+      result = run_check(bundle: { 'exec bundle audit check' => reply(
+        "fatal: Cannot rebase onto multiple branches.\nfailed to update\n", status: 1
+      ) })
+
+      expect(result).not_to be_success
+      expect(step_output(result.output, 'bundle audit'))
+        .to eq("==> bundle audit\n    ✗ bundle audit could not run, so no gem was checked\n" \
+               "fatal: Cannot rebase onto multiple branches.\nfailed to update\n\n")
+      expect(summary_line(result.output, 'bundle audit')).to eq('✗  bundle audit         could not run')
+    end
+
     it 'fails on a vulnerable gem or package' do
       result = run_check(
-        bundle: { 'exec bundle audit check --update' => reply("Updating ruby-advisory-db ...\n\nName: rack\n" \
-                                                              "Vulnerabilities found!\n", status: 1) },
+        bundle: { 'exec bundle audit check' => reply("\nName: rack\nVulnerabilities found!\n", status: 1) },
         npm: { 'audit' => reply("axios  <1.0\nSeverity: high\n1 high severity vulnerability\n", status: 1) }
       )
 
