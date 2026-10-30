@@ -87,7 +87,26 @@ check_node_version() {
 
   local current
   current=$(node -v | sed 's/^v//')
-  info "Installed: $current"
+  local wanted
+  wanted=$(python3 -c "import json; print(json.load(open('package.json'))['engines']['node'])")
+  # fnm reads .node-version to pick the Node for a shell in this folder.
+  # CI and Heroku read engines.node, so the two must name the same version.
+  local pinned=""
+  if [ -f .node-version ]; then
+    pinned=$(tr -d '[:space:]' < .node-version | sed 's/^v//')
+  fi
+
+  if [ "$pinned" != "$wanted" ]; then
+    fail ".node-version says ${pinned:-nothing}, but package.json's engines.node is $wanted"
+    record "Node version" "FAIL" ".node-version says ${pinned:-nothing}, package.json says $wanted"
+    return
+  fi
+  if [ "$current" != "$wanted" ]; then
+    fail "Running $current but package.json specifies $wanted"
+    record "Node version" "FAIL" "$current (package.json wants $wanted)"
+    return
+  fi
+  info "Installed: $current (matches package.json)"
 
   local major="${current%%.*}"
   local latest
