@@ -1,4 +1,5 @@
 const { randomUUID } = require("crypto");
+const { failsTheTest } = require("../helpers/console_errors");
 const {
   test,
   expect,
@@ -438,7 +439,8 @@ test.describe("Bill entry (real backend)", () => {
   // A second tab in the same browser, set up like the test's own page.
   // tests/helpers/test.js checks only the test's own page for errors, so
   // this one keeps its own list: uncaught errors, and console errors that
-  // `allowed` does not match.
+  // fail a test by the same rule (failsTheTest: `allowed`, and a failed
+  // preconnect, which WebKit logs when the machine is offline).
   async function openSecondPage(context, allowed = null) {
     const second = await context.newPage();
     await setupAuthenticatedPage(second, context);
@@ -446,8 +448,7 @@ test.describe("Bill entry (real backend)", () => {
     second.on("pageerror", (error) => errors.push(String(error)));
     second.on("console", (message) => {
       if (message.type() !== "error") return;
-      if (allowed && allowed.test(message.text())) return;
-      errors.push(message.text());
+      if (failsTheTest(message.text(), allowed)) errors.push(message.text());
     });
     return { page: second, errors };
   }
