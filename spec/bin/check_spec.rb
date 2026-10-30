@@ -60,6 +60,8 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
   before do
     sandbox.link('bin/lib/output.sh')
     sandbox.write('Gemfile', "source 'https://rubygems.org'\n\nruby '4.0.7'\n")
+    sandbox.write('package.json', %({\n  "name": "comeals",\n  "engines": { "node": "24.21.0", "npm": "11.6.0" }\n}\n))
+    sandbox.write('.node-version', "24.21.0\n")
     sandbox.write('.debride_whitelist', "# why\nperform\n")
     sandbox.write('docs/agents/frontend-js-files.txt', "# the list\napp/frontend/src/old.jsx\n")
     sandbox.write('app/frontend/src/old.jsx')
@@ -196,6 +198,48 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       expect(result.exitstatus).to eq(1)
       expect(summary_line(result.output, 'Ruby version')).to eq('✗  Ruby version         4.0.6 (Gemfile wants 4.0.7)')
       expect(sandbox.call_lines).not_to include('curl -sf https://endoflife.date/api/ruby/4.0.json')
+    end
+
+    it 'fails when the running Node is not the one package.json names' do
+      sandbox.fake('node', 'echo v24.20.0')
+
+      result = run_check
+
+      expect(result.exitstatus).to eq(1)
+      expect(summary_line(result.output, 'Node version'))
+        .to eq('✗  Node version         24.20.0 (package.json wants 24.21.0)')
+      expect(sandbox.call_lines).not_to include('curl -sf https://endoflife.date/api/nodejs/24.json')
+    end
+
+    # fnm reads .node-version to pick the Node for a shell in this folder;
+    # CI and Heroku read engines.node. They must name the same version.
+    it 'fails when .node-version names another version than package.json' do
+      sandbox.write('.node-version', "24.20.0\n")
+
+      result = run_check
+
+      expect(result.exitstatus).to eq(1)
+      expect(summary_line(result.output, 'Node version'))
+        .to eq('✗  Node version         .node-version says 24.20.0, package.json says 24.21.0')
+    end
+
+    it 'fails when there is no .node-version' do
+      File.delete(File.join(sandbox.root, '.node-version'))
+
+      result = run_check
+
+      expect(result.exitstatus).to eq(1)
+      expect(summary_line(result.output, 'Node version'))
+        .to eq('✗  Node version         .node-version says nothing, package.json says 24.21.0')
+    end
+
+    it 'accepts a .node-version written with a v, the way fnm also writes it' do
+      sandbox.write('.node-version', "v24.21.0\n")
+
+      result = run_check
+
+      expect(result).to be_success, result.output
+      expect(summary_line(result.output, 'Node version')).to eq('✓  Node version         24.21.0 (latest)')
     end
 
     it 'warns when a newer patch release is out' do
