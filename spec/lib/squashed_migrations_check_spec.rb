@@ -201,8 +201,13 @@ RSpec.describe SquashedMigrationsCheck do
   describe '.verify!' do
     let(:connection) { ActiveRecord::Base.connection }
 
+    # The newest version db/structure.sql lists, which the test database
+    # was built from. Not PRODUCTION_SCHEMA_VERSION: a branch that adds a
+    # migration lists a newer one (#261).
     it 'passes on a database that has run every migration, and returns its newest version' do
-      expect(described_class.verify!).to eq(PRODUCTION_SCHEMA_VERSION)
+      newest = described_class.recorded_versions(Rails.root.join('db/structure.sql').read).max
+
+      expect(described_class.verify!).to eq(newest)
     end
 
     it 'raises with the problem when the database is behind the file' do
