@@ -19,4 +19,4 @@
 # bin/deploy and the Rollback workflow refuse a database that has not run
 # every migration db/structure.sql lists up to this one: the missing
 # migrations have no files, so db:migrate would run nothing.
-20261023140000
+20261029120000
