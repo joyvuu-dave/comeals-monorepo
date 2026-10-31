@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import { comparer, reaction } from "mobx";
+import { compareStructural, reaction } from "mobx";
 import { useLocation, useNavigate } from "react-router";
 
 import { communityNow } from "../../helpers/helpers";
@@ -190,7 +190,7 @@ export default function BackToToday({ store }: { store: ScreenStore }) {
         function () {
           restart.current();
         },
-        { equals: comparer.structural },
+        { equals: compareStructural },
       );
     },
     [store],

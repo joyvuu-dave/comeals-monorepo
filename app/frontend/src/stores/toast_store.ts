@@ -1,4 +1,4 @@
-import { makeAutoObservable, observable } from "mobx";
+import { makeAutoObservable, observableShallow } from "mobx";
 
 export type ToastType = "success" | "info" | "error";
 
@@ -70,7 +70,7 @@ class ToastStore {
   constructor() {
     makeAutoObservable<ToastStore, "nextId" | "timers" | "dialogOpen">(this, {
       // Shallow: a message is never changed in place, only replaced.
-      toasts: observable.shallow,
+      toasts: observableShallow,
       nextId: false,
       timers: false,
       // Nothing on screen reads it. It only says whether timers run.

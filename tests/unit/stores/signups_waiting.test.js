@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
-import { comparer, reaction } from "mobx";
+import { compareStructural, reaction } from "mobx";
 
 // What the meal page counts, and which controls take taps, while a
 // request from the sign-up list waits for its answer (S4). Mock
@@ -207,7 +207,7 @@ function watchCounts(store) {
   const stop = reaction(
     () => [store.meal.extras, store.attendeesCount, store.meal.max],
     (counts) => seen.push(counts),
-    { equals: comparer.structural },
+    { equals: compareStructural },
   );
   return {
     seen,

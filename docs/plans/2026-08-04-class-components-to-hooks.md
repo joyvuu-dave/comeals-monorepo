@@ -3,7 +3,8 @@
 Written 2026-08-04. Status: done (2026-08-04). Every "Done when" check
 passes. One note: mobx-react-lite is pinned to the 4.x line, not 5.0 —
 5.0 requires mobx 7 and this app is on mobx 6. mobx-react 9 wrapped
-mobx-react-lite 4, so the running code is unchanged.
+mobx-react-lite 4, so the running code is unchanged. The app moved to
+mobx 7 and mobx-react-lite 5 later, as its own change.
 
 ## The issue
 
