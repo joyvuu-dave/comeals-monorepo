@@ -1,0 +1,85 @@
+#!/usr/bin/env node
+// Runs npm audit. An advisory fails the check unless
+// config/npm_audit_allowed_dev.txt names it and it reaches dev tools only.
+// npm audit has no allow list of its own, and one advisory that no version
+// of our lint tools has fixed would otherwise keep CI red and stop deploys.
+//
+// Exit 0 = nothing new, 1 = a problem to act on, 2 = npm audit could not
+// run, so no package was checked.
+
+const { spawnSync } = require("child_process");
+const fs = require("fs");
+const path = require("path");
+
+// NPM_AUDIT_ROOT is for its test (tests/bin/npm_audit.test.js). It is never
+// set otherwise.
+const root = process.env.NPM_AUDIT_ROOT || path.resolve(__dirname, "..");
+
+function audit(...args) {
+  const result = spawnSync("npm", ["audit", "--json", ...args], {
+    encoding: "utf8",
+  });
+  let report;
+  try {
+    report = JSON.parse(result.stdout);
+  } catch {
+    report = null;
+  }
+  if (!report?.vulnerabilities) {
+    console.log("npm audit could not run, so no package was checked.");
+    process.exit(2);
+  }
+  return report.vulnerabilities;
+}
+
+// Advisory id => what it is about. A `via` entry is either an advisory or
+// the name of another package that leads to one.
+function advisories(vulnerabilities) {
+  const found = new Map();
+  for (const [name, { via }] of Object.entries(vulnerabilities)) {
+    for (const entry of via) {
+      if (typeof entry === "string") continue;
+      found.set(
+        entry.url.split("/").pop(),
+        `${name}: ${entry.title} (${entry.severity})`,
+      );
+    }
+  }
+  return found;
+}
+
+const allowed = fs
+  .readFileSync(path.join(root, "config", "npm_audit_allowed_dev.txt"), "utf8")
+  .split("\n")
+  .filter((line) => line.trim() && !line.startsWith("#"))
+  .map((line) => line.split(/\s+/)[0]);
+
+const everything = advisories(audit());
+const production = advisories(audit("--omit=dev"));
+
+const problems = [];
+for (const [id, about] of everything) {
+  if (!allowed.includes(id)) problems.push(`${id}  ${about}`);
+}
+for (const [id, about] of production) {
+  if (allowed.includes(id)) {
+    problems.push(`${id}  ${about}: reaches a production package now`);
+  }
+}
+for (const id of allowed) {
+  if (!everything.has(id)) {
+    problems.push(
+      `${id}  npm audit no longer reports it: remove it from config/npm_audit_allowed_dev.txt`,
+    );
+  }
+}
+
+if (problems.length > 0) {
+  console.log(problems.join("\n"));
+  process.exit(1);
+}
+console.log(
+  allowed.length > 0
+    ? `no new vulnerabilities, ${allowed.length} allowed: ${allowed.join(", ")}`
+    : "no vulnerabilities",
+);

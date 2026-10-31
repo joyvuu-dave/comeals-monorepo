@@ -182,7 +182,7 @@ jobs:
         with:
           node-version-file: package.json
           cache: npm
-      - run: npm audit
+      - run: bin/npm-audit
 
   # The whole history, with this repository's rules (.gitleaks.toml).
   # GitHub's secret scanning runs too, but knows only the big providers'

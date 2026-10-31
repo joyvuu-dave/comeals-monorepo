@@ -134,3 +134,27 @@ test("says it could not run when npm's answer is not JSON", () => {
   assert.equal(status, 2);
   assert.match(out, /npm audit could not run, so no package was checked/);
 });
+
+test("reads the repo's own list when NPM_AUDIT_ROOT is not set", () => {
+  const fake = fs.mkdtempSync(path.join(os.tmpdir(), "npm-audit-"));
+  fs.writeFileSync(
+    path.join(fake, "npm"),
+    `#!/bin/sh\necho '${CLEAN}'\nexit 0\n`,
+    { mode: 0o755 },
+  );
+  const env = { ...process.env, PATH: `${fake}:${process.env.PATH}` };
+  delete env.NPM_AUDIT_ROOT;
+  const result = spawnSync(process.execPath, [script], {
+    env,
+    encoding: "utf8",
+  });
+  // Clean answers mean every entry in the repo's list is out of date, so
+  // each one is named. An empty list says there is nothing to report.
+  const listed = fs
+    .readFileSync(path.join(repo, "config/npm_audit_allowed_dev.txt"), "utf8")
+    .split("\n")
+    .filter((line) => line.startsWith("GHSA-"))
+    .map((line) => line.split(" ")[0]);
+  for (const id of listed) assert.match(result.stdout, new RegExp(id));
+  assert.equal(result.status, listed.length > 0 ? 1 : 0);
+});

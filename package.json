@@ -58,7 +58,7 @@
     "dev": "vite",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",
-    "test:bin": "node --test --experimental-test-coverage --test-coverage-include=bin/bundle-budget --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 'tests/bin/*.test.js'",
+    "test:bin": "node --test --experimental-test-coverage --test-coverage-include=bin/bundle-budget --test-coverage-include=bin/npm-audit --test-coverage-lines=100 --test-coverage-branches=100 --test-coverage-functions=100 'tests/bin/*.test.js'",
     "test:e2e": "npx playwright test",
     "test:e2e:update": "npx playwright test --update-snapshots=all",
     "test:integration": "bin/test-integration",

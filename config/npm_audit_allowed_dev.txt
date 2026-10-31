@@ -1,0 +1,6 @@
+# Advisories bin/npm-audit does not fail on: one id per line, then why.
+# Only for an advisory that reaches dev tools only and has no fix to take.
+# bin/npm-audit fails if one reaches a production package, and fails when
+# npm audit stops reporting one, so that this list stays short.
+
+GHSA-g3hv-75wg-m249  minimatch before 11.0.1: a crafted glob pattern can use a lot of CPU. Only eslint, eslint-plugin-react and typescript-eslint use it, on patterns from our own config, on our own machines. On 2026-10-30 no version of them uses a fixed minimatch. Listed 2026-10-30.
