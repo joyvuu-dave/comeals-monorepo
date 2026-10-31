@@ -127,7 +127,7 @@ module DeployWatch
 
     def database_facts(facts)
       {
-        heartbeats: values(facts, 'heartbeat').to_h { |value| heartbeat_fact(value) },
+        heartbeats: heartbeats(values(facts, 'heartbeat')),
         failed_new: values(facts, 'failed_new').first.to_i,
         failed_old: values(facts, 'failed_old').first.to_i,
         failed_first: values(facts, 'failed_first').first,
@@ -140,9 +140,15 @@ module DeployWatch
       facts.select { |key, _value| key == name }.map(&:last)
     end
 
-    def heartbeat_fact(value)
-      kind, age = value.split('|')
-      [kind, age.to_i]
+    # Solid Queue saves the supervisor's kind with its mode, such as
+    # "Supervisor(async)", so the mode is cut off, as lib/solid_queue_check.rb
+    # does. Two rows can then share a kind; the newer heartbeat counts.
+    def heartbeats(lines)
+      lines.each_with_object({}) do |line, ages|
+        kind, age = line.split('|')
+        kind = kind.sub(/\(\w+\)\z/, '')
+        ages[kind] = [ages[kind], age.to_i].compact.min
+      end
     end
 
     def ledger_fact(value)

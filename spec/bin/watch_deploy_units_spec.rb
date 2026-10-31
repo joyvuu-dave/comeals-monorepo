@@ -561,6 +561,12 @@ RSpec.describe 'bin/watch-deploy, its parts' do
                                a_string_matching(/\Afailed_first=.*two/))
     end
 
+    it 'cuts the mode off a kind, and takes the newer heartbeat when two rows then share a kind' do
+      ages = reads.send(:heartbeats, ['Supervisor(fork)|500', 'Supervisor(async)|18', 'Worker|7'])
+
+      expect(ages).to eq('Supervisor' => 18, 'Worker' => 7)
+    end
+
     it 'never raises: an error of any kind is a failed read' do
       allow(reads).to receive(:release).and_raise(TypeError)
 
