@@ -41,7 +41,6 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       'run typecheck' => reply(''),
       'run format:check' => reply("Checking formatting...\nAll matched files use Prettier code style!\n"),
       'run build' => reply("built in 3.2s\n"),
-      'audit' => reply("found 0 vulnerabilities\n"),
       # Vitest colors its summary on CI, between the words and the counts.
       'run test:coverage' => reply("#{esc}[2m Test Files #{esc}[22m #{esc}[1m#{esc}[32m140 passed#{esc}[39m\n" \
                                    "#{esc}[2m      Tests #{esc}[22m #{esc}[1m#{esc}[32m1500 passed#{esc}[39m\n"),
@@ -77,6 +76,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
     sandbox.fake('gitleaks')
     sandbox.fake_script('bin/tapioca')
     sandbox.fake_script('bin/bundle-budget', "echo 'ok     first load: 180.7 KB gzipped (budget 190 KB)'")
+    sandbox.fake_script('bin/npm-audit', "echo 'no vulnerabilities'")
     sandbox.fake_script('bin/visual-coverage', "echo 'Markup branches : 100%'")
     sandbox.fake_script('bin/test-integration', "echo '  95 passed (1.5m)'")
   end
@@ -572,9 +572,9 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
     end
 
     it 'fails on a vulnerable gem or package' do
+      sandbox.fake_script('bin/npm-audit', "echo 'GHSA-aaaa-aaaa-aaaa  axios: Severity: high'; exit 1")
       result = run_check(
-        bundle: { 'exec bundle audit check' => reply("\nName: rack\nVulnerabilities found!\n", status: 1) },
-        npm: { 'audit' => reply("axios  <1.0\nSeverity: high\n1 high severity vulnerability\n", status: 1) }
+        bundle: { 'exec bundle audit check' => reply("\nName: rack\nVulnerabilities found!\n", status: 1) }
       )
 
       expect(step_output(result.output, 'bundle audit'))
@@ -582,6 +582,30 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       expect(step_output(result.output, 'npm audit')).to include('✗ Vulnerable packages found', 'Severity: high')
       expect(summary_line(result.output, 'bundle audit')).to eq('✗  bundle audit         vulnerabilities found')
       expect(summary_line(result.output, 'npm audit')).to eq('✗  npm audit            vulnerabilities found')
+    end
+
+    # The same mistake as #254: a check that never ran must not say it found
+    # something, and must not pass.
+    it 'says npm audit could not run when bin/npm-audit could not read an answer' do
+      sandbox.fake_script('bin/npm-audit', "echo 'npm audit could not run, so no package was checked.'; exit 2")
+
+      result = run_check
+
+      expect(result.exitstatus).to eq(1)
+      expect(step_output(result.output, 'npm audit'))
+        .to eq("==> npm audit\n    ✗ npm audit could not run, so no package was checked\n" \
+               "npm audit could not run, so no package was checked.\n\n")
+      expect(summary_line(result.output, 'npm audit')).to eq('✗  npm audit            could not run')
+    end
+
+    it 'says which advisories the list allowed when it passes' do
+      sandbox.fake_script('bin/npm-audit', "echo 'no new vulnerabilities, 1 allowed: GHSA-aaaa-aaaa-aaaa'")
+
+      result = run_check
+
+      expect(result).to be_success, result.output
+      expect(summary_line(result.output, 'npm audit'))
+        .to eq('✓  npm audit            no new vulnerabilities, 1 allowed: GHSA-aaaa-aaaa-aaaa')
     end
   end
 
@@ -648,7 +672,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
                                                         "of 100%.\n", status: 1) })
 
       expect(step_output(result.output, 'Node scripts'))
-        .to eq("==> Node scripts\n    ✗ Failures, or bin/bundle-budget below 100% coverage\n" \
+        .to eq("==> Node scripts\n    ✗ Failures, or a bin script below 100% coverage\n" \
                "✖ stops when there is no build\nℹ Error: 90.00% line coverage does not meet threshold of 100%.\n\n")
       expect(summary_line(result.output, 'Node scripts')).to eq('✗  Node scripts         failures or coverage')
     end
