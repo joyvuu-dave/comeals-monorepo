@@ -153,7 +153,9 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.output).to include('No new or changed migration — push deploy', 'PUSH deploy (no migrations)',
                                        'Proceeding without a prompt (--yes)', 'Release phase succeeded',
                                        'Cache flushed', 'Billing recalculated', 'Smoke test passed',
-                                       'Deploy complete!')
+                                       'Deploy complete!',
+                                       'To watch comeals-monorepo for the next 30 minutes, run: ' \
+                                       'DEPLOY_APP=comeals-monorepo bin/watch-deploy')
       expect_production(maintenance: false, web: 1, pushed: true)
       expect(deploy.state[:backups]).to eq(1)
       expect(deploy.calls_to('heroku').grep(/maintenance|ps:scale/))
