@@ -1239,6 +1239,7 @@ main() {
   green "============================================"
   green "  Deploy complete!"
   green "============================================"
+  info "To watch $APP for the next 30 minutes, run: DEPLOY_APP=$APP bin/watch-deploy"
 }
 
 main "$@"

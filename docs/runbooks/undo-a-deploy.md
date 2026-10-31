@@ -3,6 +3,34 @@
 Written 2026-10-15 for #133. Use it when production must go back to the
 release before a deploy.
 
+## After a deploy: watch it
+
+`bin/deploy` ends by printing the command for this:
+
+```bash
+bin/watch-deploy                                   # production, 30 minutes
+bin/watch-deploy --minutes 60
+DEPLOY_APP=comeals-staging bin/watch-deploy
+```
+
+Run it from the repository's root, on a laptop that stays awake. It only
+reads: it changes nothing in production and runs no `rake ledger:verify`.
+It watches the release, the dynos, the site, the requests, the app log,
+the jobs, the ledger's last check, and Bugsnag. It ends with ALL CLEAR
+(exit 0) or NEEDS A LOOK (exit 1), and saves the report in
+`tmp/deploy/watch-<time>.txt`.
+
+NEEDS A LOOK lists each problem with its first log line, and prints the
+Rollback workflow command with the release and the backup filled in. It
+does not mean you must roll back. A check that says "could not check" did
+not pass; it means the script could not see that part. The same goes for a
+gap, which means the laptop slept during the watch. Expected log lines are
+in `docs/deploy-known-warnings.txt`, the list `bin/deploy` uses. Add a line
+there when you know why it is fine.
+
+Bugsnag needs `BUGSNAG_AUTH_TOKEN` in `.env`. Without it, that check says
+"not checked" and is not counted.
+
 ## When bin/deploy stops because the ledger check failed
 
 After the balance refresh, `bin/deploy` runs `rake ledger:verify`, which

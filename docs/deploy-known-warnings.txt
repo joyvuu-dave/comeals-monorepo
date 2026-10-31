@@ -19,6 +19,11 @@
 # logger's time and process number. A buildpack's "###### WARNING:" line
 # is compared together with the next line that is not blank.
 #
+# bin/watch-deploy reads this list too (bin/lib/deploy_watch/known_warnings.rb).
+# It compares every log line it would call a problem, so this list also holds
+# log lines that are not warnings, such as a router code. bin/deploy never
+# asks about those.
+#
 # Add a warning here only once you know why it is fine. A warning being
 # fixed elsewhere stays out, so it shows as NEW until the fix is deployed.
 
@@ -45,3 +50,15 @@ why: the link line of the same Heroku backup note
 fixed: npm warn deprecated eslint@9
 app: both
 why: eslint 10 is blocked by eslint-plugin-react
+
+regex: code=H80\b
+app: both
+why: Heroku's maintenance page; bin/watch-deploy's Release check says when maintenance is on
+
+regex: code=H27\b
+app: both
+why: a client (a browser, Better Stack) closed the connection before the answer ended
+
+regex: No route matches \[
+app: both
+why: a scanner asked for a path that does not exist; the app answers 404

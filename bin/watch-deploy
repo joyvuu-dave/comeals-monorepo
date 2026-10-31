@@ -1,0 +1,15 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Watches an app after a deploy for a set time, and says whether all is
+# well. It only reads: it changes nothing in production. Exits 0 when all
+# was clear and 1 when not. Run it from the repository's root.
+#
+#   bin/watch-deploy                    production, 30 minutes
+#   bin/watch-deploy --minutes 60
+#   DEPLOY_APP=comeals-staging bin/watch-deploy
+#
+# The code is in bin/lib/deploy_watch/. Tested by spec/bin/watch_deploy_spec.rb.
+require_relative 'lib/deploy_watch/watch'
+
+exit DeployWatch.main(ARGV)
