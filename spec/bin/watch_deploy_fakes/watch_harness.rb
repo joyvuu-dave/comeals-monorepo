@@ -90,8 +90,9 @@ class WatchHarness
   end
 
   def database(**facts)
-    defaults = { heartbeats: { 'Supervisor' => 18, 'Dispatcher' => 5, 'Worker' => 7, 'Scheduler' => 9 }, failed_new: 0,
-                 failed_old: 0,
+    # Solid Queue saves the supervisor's kind with its mode.
+    defaults = { heartbeats: { 'Supervisor(async)' => 18, 'Dispatcher' => 5, 'Worker' => 7, 'Scheduler' => 9 },
+                 failed_new: 0, failed_old: 0,
                  ledger: "#{(START_TIME - 180).to_i}|4|0|", jobs: [], failed_first: nil }
     facts = defaults.merge(facts)
     lines = ['        line        ', '--------------------']
