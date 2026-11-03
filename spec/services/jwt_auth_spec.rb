@@ -21,6 +21,37 @@ RSpec.describe JwtAuth do
 
       expect(described_class.encode(resident)).not_to eq(described_class.encode(other))
     end
+
+    # mutant runs only this group for encode (docs/mutation-testing.md,
+    # "Mutant takes the most specific group"), so the claims encode
+    # writes are checked here, not only under .authenticate.
+    def claims_of(token)
+      JWT.decode(token, described_class.send(:secret), true, algorithm: 'HS256').first
+    end
+
+    it "carries the resident's keys_valid_since, to the microsecond" do
+      claims = claims_of(described_class.encode(resident))
+
+      expect(claims['keys_valid_since']).to eq(resident.reload.keys_valid_since.to_r * 1_000_000)
+    end
+
+    # New tokens are checked by keys_valid_since alone. iat stays, as the
+    # standard claim for when a token was made (RFC 7519), and tokens
+    # made before #265 are still checked by it.
+    it 'says when it was made, to the fraction of a second' do
+      made_at = Time.zone.at(1_800_000_000.25)
+
+      claims = travel_to(made_at, with_usec: true) { claims_of(described_class.encode(resident)) }
+
+      expect(claims['iat']).to eq(1_800_000_000.25)
+    end
+
+    it 'makes a token that a change of keys_valid_since to an earlier time refuses' do
+      token = described_class.encode(resident)
+      resident.update_column(:keys_valid_since, 1.day.ago)
+
+      expect(described_class.authenticate(token)).to be_nil
+    end
   end
 
   describe '.authenticate' do
@@ -148,13 +179,6 @@ RSpec.describe JwtAuth do
     # keys_valid_since (#265,
     # spec/requests/api/v1/sign_in_during_a_password_change_race_spec.rb).
     describe 'the keys_valid_since the token was made with' do
-      it 'is in the token, to the microsecond' do
-        token = described_class.encode(resident)
-        claims, = JWT.decode(token, described_class.send(:secret), true, algorithm: 'HS256')
-
-        expect(claims['keys_valid_since']).to eq(resident.reload.keys_valid_since.to_r * 1_000_000)
-      end
-
       it 'refuses the token once keys_valid_since changes, even to an earlier time' do
         token = described_class.encode(resident)
         resident.update_column(:keys_valid_since, 1.day.ago)
@@ -164,7 +188,7 @@ RSpec.describe JwtAuth do
 
       it 'refuses the token once keys_valid_since changes by one microsecond' do
         token = described_class.encode(resident)
-        resident.update_column(:keys_valid_since, resident.reload.keys_valid_since + 0.000_001)
+        resident.update_column(:keys_valid_since, resident.reload.keys_valid_since + Rational(1, 1_000_000))
 
         expect(described_class.authenticate(token)).to be_nil
       end

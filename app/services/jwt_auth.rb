@@ -4,10 +4,19 @@
 # Stateless authentication using JSON Web Tokens.
 #
 # Each login issues a JWT signed with a key derived from secret_key_base.
-# The token embeds the resident id and issued-at timestamp. Validation
-# consists of verifying the signature and confirming the `iat` claim is
-# at or after the resident's `keys_valid_since` column — no database row
-# per session, no lookup by token string.
+# The token holds the resident id, the time it was made (`iat`), and the
+# resident's `keys_valid_since` as it was when the token was made, in
+# microseconds. A token is good while its signature checks and the
+# resident's `keys_valid_since` still has that same value. There is no
+# database row per session, and no lookup by token string.
+#
+# Tokens made before 2026-11-03 have no `keys_valid_since` claim. They
+# are still saved on phones and browsers, and the rule is never to sign a
+# current user out, so they keep the old rule: their `iat` must not be
+# earlier than `keys_valid_since`. That rule alone let a sign-in with the
+# old password, made while a password change was saved but not yet
+# committed, keep working after the change (#265): the sign-in read the
+# old digest, and its `iat` was later than the new `keys_valid_since`.
 #
 # Revocation comes from bumping `keys_valid_since`:
 #   - Password change (via Resident#revoke_all_sessions_if_password_changed)
@@ -30,7 +39,8 @@ module JwtAuth
       payload = {
         resident_id: resident.id,
         iat: Time.current.to_f,
-        iss: ISSUER
+        iss: ISSUER,
+        keys_valid_since: microseconds(T.must(resident.keys_valid_since))
       }
       JWT.encode(payload, secret, ALGORITHM)
     end
@@ -47,13 +57,29 @@ module JwtAuth
       resident = Resident.find_by(id: claims['resident_id'])
       return nil unless resident
 
-      issued_at = Time.zone.at(claims['iat'].to_f)
-      return nil if issued_at < resident.keys_valid_since
+      return nil unless still_valid?(claims, T.must(resident.keys_valid_since))
 
       resident
     end
 
     private
+
+    # A token with a keys_valid_since claim is good only while the column
+    # still has that value. One without it (made before #265) keeps the
+    # old rule: made at or after keys_valid_since.
+    def still_valid?(claims, keys_valid_since)
+      made_with = claims['keys_valid_since']
+      return made_with == microseconds(keys_valid_since) unless made_with.nil?
+
+      Time.zone.at(claims['iat'].to_f) >= keys_valid_since
+    end
+
+    # The time in whole microseconds since 1970, which is what the column
+    # keeps. Two values are equal only when the times are the same to the
+    # microsecond. Whole numbers, so there is no Float rounding.
+    def microseconds(time)
+      (time.to_i * 1_000_000) + time.usec
+    end
 
     def decode(token)
       payload, _header = JWT.decode(

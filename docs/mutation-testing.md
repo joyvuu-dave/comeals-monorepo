@@ -4671,3 +4671,32 @@ here: 274 mutations, 273 killed. The one left puts `ENV.to_hash` for
 (`spec/lib/spa_page_redirect_spec.rb`): Rails builds the app's copy of a
 middleware once, at boot, so no request spec ever calls a mutated
 `initialize`.
+
+### 2026-11-03, a token remembers its keys_valid_since (#265)
+
+`JwtAuth*`, run here. First run: 235 mutations, 16 left. Second run,
+after the changes below: 239 mutations, 230 killed, 9 left.
+
+Fixed between the runs (8):
+
+- `JwtAuth.encode` (6): the `keys_valid_since` claim dropped, renamed
+  or nil, and `iat` dropped, renamed or made whole seconds. The example
+  that reads the claim was under `describe '.authenticate'`, and mutant
+  runs only the `.encode` group for `encode` (rule 2 above). The claim
+  examples are in `.encode` now, with one that expects a token to be
+  refused after `keys_valid_since` moves earlier, and one that pins
+  `iat`. New tokens are checked by `keys_valid_since` alone; `iat`
+  stays as the standard claim for when a token was made, and tokens
+  made before #265 are still checked by it.
+- `JwtAuth.microseconds` (2): `.to_int` and `Integer()` for `.to_i` on
+  a Rational, which give the same whole number. It is now
+  `time.to_i * 1_000_000 + time.usec`, whole numbers only.
+
+Left (9):
+
+- The algorithm in `JwtAuth.encode` (1), `Time.at` for `Time.zone.at`
+  (1, now in `still_valid?`), and the blank-token return in
+  `JwtAuth.authenticate` (6): the same as on 2026-10-16, above.
+- `Integer(time)` for `time.to_i` in `JwtAuth.microseconds` (1).
+  `Integer()` uses `to_i` when the object has no `to_int`, so both give
+  the same number.
