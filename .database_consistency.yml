@@ -196,3 +196,11 @@ Resident:
   index_residents_on_reset_password_token_digest:
     UniqueIndexChecker:
       enabled: false
+
+# At most one Common House login. enforce_singleton refuses a second
+# create with a readable message, and the unique index refuses it on
+# every other path, so a uniqueness validator would add nothing.
+CommonHouseLogin:
+  index_common_house_logins_on_singleton_guard:
+    UniqueIndexChecker:
+      enabled: false

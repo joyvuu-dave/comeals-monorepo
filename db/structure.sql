@@ -960,6 +960,40 @@ ALTER SEQUENCE public.browser_counts_id_seq OWNED BY public.browser_counts.id;
 
 
 --
+-- Name: common_house_logins; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.common_house_logins (
+    id bigint NOT NULL,
+    singleton_guard integer DEFAULT 0 NOT NULL,
+    password_digest character varying NOT NULL,
+    keys_valid_since timestamp(6) without time zone DEFAULT CURRENT_TIMESTAMP NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    updated_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT common_house_logins_singleton_guard_is_zero CHECK ((singleton_guard = 0))
+);
+
+
+--
+-- Name: common_house_logins_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.common_house_logins_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: common_house_logins_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.common_house_logins_id_seq OWNED BY public.common_house_logins.id;
+
+
+--
 -- Name: common_house_reservations; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2411,6 +2445,13 @@ ALTER TABLE ONLY public.browser_counts ALTER COLUMN id SET DEFAULT nextval('publ
 
 
 --
+-- Name: common_house_logins id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.common_house_logins ALTER COLUMN id SET DEFAULT nextval('public.common_house_logins_id_seq'::regclass);
+
+
+--
 -- Name: common_house_reservations id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2737,6 +2778,14 @@ ALTER TABLE ONLY public.bills_save_keys
 
 ALTER TABLE ONLY public.browser_counts
     ADD CONSTRAINT browser_counts_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: common_house_logins common_house_logins_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.common_house_logins
+    ADD CONSTRAINT common_house_logins_pkey PRIMARY KEY (id);
 
 
 --
@@ -3149,6 +3198,13 @@ CREATE UNIQUE INDEX index_bills_save_keys_on_meal_id_and_key ON public.bills_sav
 --
 
 CREATE UNIQUE INDEX index_browser_counts_on_the_count_key ON public.browser_counts USING btree (date, browser, COALESCE(major, 0), os, device, result);
+
+
+--
+-- Name: index_common_house_logins_on_singleton_guard; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_common_house_logins_on_singleton_guard ON public.common_house_logins USING btree (singleton_guard);
 
 
 --
@@ -4404,6 +4460,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261103120000'),
 ('20261029120000'),
 ('20261023140000'),
 ('20261023130100'),
