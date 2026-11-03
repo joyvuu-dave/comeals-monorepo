@@ -76,6 +76,13 @@ RSpec.describe CommonHouseLogin do
       expect(login).not_to be_valid
     end
 
+    it 'must match its confirmation, when one is given' do
+      login = described_class.new(password: password, password_confirmation: 'something else')
+
+      expect(login).not_to be_valid
+      expect(login.errors[:password_confirmation]).to include("doesn't match Password")
+    end
+
     it 'is required when the login is created' do
       expect(described_class.new).not_to be_valid
     end
