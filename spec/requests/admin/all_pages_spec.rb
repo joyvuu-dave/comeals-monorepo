@@ -39,6 +39,14 @@ ADMIN_PAGE_RESOURCES = {
     pages: %i[index show new edit],
     record: -> { create(:common_house_reservation, community: community, resident: resident) }
   },
+  # At most one Common House login, and this spec always has one, so the
+  # new form is refused here (common_house_login_spec.rb covers it and the
+  # case with no login). The index only redirects to the show page.
+  'CommonHouseLogin' => {
+    pages: %i[index show new edit],
+    unrendered: %i[index new],
+    record: -> { create(:common_house_login) }
+  },
   # Community is a singleton. The new form is only reachable on a fresh
   # deployment with no row yet, and this spec always has one, so opening it
   # here is refused (community_creation_spec.rb covers the refusal and the

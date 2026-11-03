@@ -39,7 +39,8 @@ RSpec.describe 'Admin Common House login' do
     it 'refuses a password that does not match its confirmation, and saves nothing' do
       post '/common_house_logins', params: form('a long shared password', 'a long shared passwort')
 
-      expect(response).to have_http_status(:unprocessable_content)
+      # ActiveAdmin draws a refused form again with 200, as on every admin page.
+      expect(response).to have_http_status(:ok)
       expect(response.body).to include('doesn&#39;t match Password')
       expect(CommonHouseLogin.count).to eq(0)
     end
@@ -82,7 +83,7 @@ RSpec.describe 'Admin Common House login' do
       get "/common_house_logins/#{login.id}"
 
       expect(response).to have_http_status(:ok)
-      expect(response.body).to include('Password last changed')
+      expect(response.body).to include('Password Last Changed')
       expect(response.body).not_to include(login.password_digest)
     end
 
@@ -107,7 +108,8 @@ RSpec.describe 'Admin Common House login' do
     end
 
     it 'has no delete route' do
-      expect { delete "/common_house_logins/#{login.id}" }.not_to change(CommonHouseLogin, :count)
+      expect { delete "/common_house_logins/#{login.id}" }.to raise_error(ActionController::RoutingError)
+      expect(CommonHouseLogin.exists?(login.id)).to be(true)
     end
   end
 

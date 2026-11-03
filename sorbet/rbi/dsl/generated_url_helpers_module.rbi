@@ -31,6 +31,12 @@ module GeneratedUrlHelpersModule
   def admin_comments_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def admin_common_house_login_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def admin_common_house_logins_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def admin_common_house_reservation_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -184,6 +190,9 @@ module GeneratedUrlHelpersModule
   def edit_admin_bill_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def edit_admin_common_house_login_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def edit_admin_common_house_reservation_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -221,6 +230,9 @@ module GeneratedUrlHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def new_admin_bill_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def new_admin_common_house_login_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def new_admin_common_house_reservation_url(*args); end

@@ -40,6 +40,8 @@ const SIGNED_IN_PAGES = [
   ["common_house_reservations-show", "/common_house_reservations/1"],
   ["common_house_reservations-new", "/common_house_reservations/new"],
   ["common_house_reservations-edit", "/common_house_reservations/1/edit"],
+  ["common_house_logins-show", "/common_house_logins/1"],
+  ["common_house_logins-edit", "/common_house_logins/1/edit"],
   ["communities-show", "/communities/1"],
   ["communities-edit", "/communities/1/edit"],
   ["events-index", "/events"],

@@ -54,6 +54,9 @@ def seed_people
     reset_password_sent_at: SEED_NOW
   )
   FactoryBot.create(:admin_user, community: community, email: 'helper@example.com')
+  # The show page prints when the password last changed, so it is the
+  # seed's frozen time, not the time the seed ran.
+  FactoryBot.create(:common_house_login).update_columns(keys_valid_since: SEED_NOW)
 
   unit_a = FactoryBot.create(:unit, community: community, name: 'A')
   unit_b = FactoryBot.create(:unit, community: community, name: 'B')

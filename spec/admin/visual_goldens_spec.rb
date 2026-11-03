@@ -15,6 +15,8 @@ RSpec.describe 'admin visual goldens' do
 
   let(:not_a_page) do
     {
+      'admin/common_house_logins#index' => 'redirects to the one login\'s page',
+      'admin/common_house_logins#new' => 'refused once the login exists (SuperuserAdapter), and the seed makes it',
       'admin/communities#index' => 'redirects to the one community\'s page',
       'admin/communities#new' => 'refused once the community exists (SuperuserAdapter), and it always does',
       'admin/comments#index' => 'comments are off; the route ahead of ActiveAdmin\'s answers 404 (#82)',

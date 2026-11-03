@@ -31,6 +31,12 @@ module GeneratedPathHelpersModule
   def admin_comments_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def admin_common_house_login_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def admin_common_house_logins_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def admin_common_house_reservation_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -184,6 +190,9 @@ module GeneratedPathHelpersModule
   def edit_admin_bill_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def edit_admin_common_house_login_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def edit_admin_common_house_reservation_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
@@ -221,6 +230,9 @@ module GeneratedPathHelpersModule
 
   sig { params(args: T.untyped).returns(String) }
   def new_admin_bill_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def new_admin_common_house_login_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
   def new_admin_common_house_reservation_path(*args); end

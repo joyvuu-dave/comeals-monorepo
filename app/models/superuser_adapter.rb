@@ -43,8 +43,10 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
 
   # Not money, but restricted for a related reason: these decide who may act.
   # AdminUser grants and revokes the superuser flag. Community holds `cap`,
-  # which changes every subsidized meal's settlement math.
-  GOVERNANCE_MODELS = %w[AdminUser Community].freeze
+  # which changes every subsidized meal's settlement math. CommonHouseLogin
+  # holds the password of the shared screen, which can change anything a
+  # resident can.
+  GOVERNANCE_MODELS = %w[AdminUser CommonHouseLogin Community].freeze
 
   SUPERUSER_ONLY_MODELS = (LEDGER_MODELS + GOVERNANCE_MODELS).freeze
 
@@ -82,6 +84,10 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
   # submit, so a rule has to cover both.
   CREATE_ACTIONS = %i[new create].freeze
 
+  # The models whose table holds at most one row. See
+  # creating_a_second_singleton?.
+  SINGLETON_MODELS = %w[Community CommonHouseLogin].freeze
+
   def authorized?(action, subject = nil)
     # No user means we cannot tell who is asking, so the answer is no, the
     # same as for a subject we cannot identify (below). Inside an admin
@@ -91,7 +97,7 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
     return false if user.nil?
     return token_authorized?(action, subject) if Current.read_only_admin_token
 
-    return false if creating_a_second_community?(action, subject)
+    return false if creating_a_second_singleton?(action, subject)
     return true if READ_ACTIONS.include?(action)
     return true if user.superuser?
 
@@ -122,18 +128,19 @@ class SuperuserAdapter < ActiveAdmin::AuthorizationAdapter
     false if action == :destroy && model == 'Rotation'
   end
 
-  # The communities table holds exactly one row. Creating it is a bootstrap
-  # step on an empty database, and once the row exists there is nothing left
-  # to create, so both the button and the actions go away — for a superuser
-  # too. The model's enforce_singleton validation still refuses a second row
-  # if a write ever gets past this.
+  # The communities table holds exactly one row, and common_house_logins at
+  # most one. Creating that row is a one-time step, and once it exists there
+  # is nothing left to create, so both the button and the actions go away —
+  # for a superuser too. Each model's enforce_singleton validation still
+  # refuses a second row if a write ever gets past this.
   #
-  # This lives in the adapter rather than in app/admin/community.rb because
+  # This lives in the adapter rather than in the admin files because
   # ActiveAdmin asks the adapter the same question to draw the button and to
   # run the action. One rule then covers both, and the button can never show
   # up pointing at an action that refuses.
-  def creating_a_second_community?(action, subject)
-    CREATE_ACTIONS.include?(action) && model_name(subject) == 'Community' && Community.exists?
+  def creating_a_second_singleton?(action, subject)
+    model = model_name(subject)
+    CREATE_ACTIONS.include?(action) && SINGLETON_MODELS.include?(model) && model.constantize.exists?
   end
 
   # Token requests read, and only from the allowlist. Writes are refused here

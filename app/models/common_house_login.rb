@@ -29,10 +29,15 @@ class CommonHouseLogin < ApplicationRecord
   extend T::Sig
 
   MINIMUM_PASSWORD_LENGTH = 12
+  ALREADY_EXISTS = 'There is already a Common House login. Change its password instead.'
 
   validate :enforce_singleton, on: :create
   validates :password_digest, presence: true
   validate :password_long_enough
+  # Checked only when a confirmation is given (Rails skips a nil one), so
+  # the admin form, which always sends one, is checked, and the console is
+  # not made to type the password twice.
+  validates :password, confirmation: true
 
   # The history names this row, so it stays. To sign the screen out,
   # change the password.
@@ -46,6 +51,11 @@ class CommonHouseLogin < ApplicationRecord
 
     SCrypt::Password.new(T.must(password_digest)).is_password?(unencrypted_password) ? self : false
   end
+
+  # The password typed in this object's life, for the validations. Never
+  # read from the database: only the digest is stored.
+  sig { returns(T.nilable(String)) }
+  attr_reader :password
 
   sig { params(unencrypted_password: String).void }
   def password=(unencrypted_password)
@@ -69,7 +79,7 @@ class CommonHouseLogin < ApplicationRecord
   def enforce_singleton
     return unless CommonHouseLogin.exists?
 
-    errors.add(:base, 'There is already a Common House login. Change its password instead.')
+    errors.add(:base, ALREADY_EXISTS)
   end
 
   # @password is set only when a password was given in this object's

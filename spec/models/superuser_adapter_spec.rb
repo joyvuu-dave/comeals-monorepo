@@ -76,6 +76,7 @@ RSpec.describe SuperuserAdapter do
     it 'may write on the governance models' do
       expect(adapter_for(superuser).authorized?(:update, AdminUser)).to be true
       expect(adapter_for(superuser).authorized?(:update, Community)).to be true
+      expect(adapter_for(superuser).authorized?(:update, CommonHouseLogin)).to be true
     end
 
     it 'may write on everything else' do
@@ -107,6 +108,28 @@ RSpec.describe SuperuserAdapter do
 
       expect(adapter_for(superuser).authorized?(:edit, Community)).to be true
       expect(adapter_for(superuser).authorized?(:update, community)).to be true
+    end
+  end
+
+  describe 'the Common House login' do
+    it 'may be created by a superuser while none exists' do
+      expect(adapter_for(superuser).authorized?(:new, CommonHouseLogin)).to be true
+      expect(adapter_for(superuser).authorized?(:create, CommonHouseLogin)).to be true
+    end
+
+    it 'may not be created again once it exists, by a superuser either' do
+      create(:common_house_login)
+
+      expect(adapter_for(superuser).authorized?(:new, CommonHouseLogin)).to be false
+      expect(adapter_for(superuser).authorized?(:create, CommonHouseLogin)).to be false
+    end
+
+    it 'may not be written by a plain admin, because its password decides who may act at the screen' do
+      login = create(:common_house_login)
+
+      expect(adapter_for(admin).authorized?(:create, CommonHouseLogin)).to be false
+      expect(adapter_for(admin).authorized?(:update, login)).to be false
+      expect(adapter_for(admin).authorized?(:read, login)).to be true
     end
   end
 

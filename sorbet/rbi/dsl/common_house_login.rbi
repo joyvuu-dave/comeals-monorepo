@@ -10,6 +10,12 @@ class CommonHouseLogin
   extend CommonRelationMethods
   extend GeneratedRelationMethods
 
+  sig { returns(T.untyped) }
+  def password_confirmation; end
+
+  sig { params(password_confirmation: T.untyped).returns(T.untyped) }
+  def password_confirmation=(password_confirmation); end
+
   private
 
   sig { returns(NilClass) }
