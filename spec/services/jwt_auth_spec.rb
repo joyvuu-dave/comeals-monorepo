@@ -52,6 +52,18 @@ RSpec.describe JwtAuth do
 
       expect(described_class.authenticate(token)).to be_nil
     end
+
+    describe 'for the Common House login' do
+      let(:login) { create(:common_house_login) }
+
+      it 'names the login, not a resident, with its keys_valid_since' do
+        claims = claims_of(described_class.encode(login))
+
+        expect(claims).to include('common_house_login_id' => login.id,
+                                  'keys_valid_since' => login.reload.keys_valid_since.to_r * 1_000_000)
+        expect(claims).not_to have_key('resident_id')
+      end
+    end
   end
 
   describe '.authenticate' do
@@ -286,6 +298,66 @@ RSpec.describe JwtAuth do
         token = described_class.encode(pre_deploy_resident)
 
         expect(described_class.authenticate(token)).to eq(pre_deploy_resident)
+      end
+    end
+
+    # The shared screen in the Common House signs in with its own login,
+    # which is not a resident (CommonHouseLogin). Its token names
+    # common_house_login_id instead of resident_id, and authenticate
+    # returns the login, so a caller must say what the screen may do.
+    describe 'a Common House token' do
+      let(:login) { create(:common_house_login) }
+
+      def signed(claims)
+        JWT.encode(claims, described_class.send(:secret), 'HS256')
+      end
+
+      def good_claims
+        { common_house_login_id: login.id, iat: Time.current.to_f, iss: 'comeals',
+          keys_valid_since: (login.reload.keys_valid_since.to_r * 1_000_000).to_i }
+      end
+
+      it 'returns the login' do
+        expect(described_class.authenticate(described_class.encode(login))).to eq(login)
+      end
+
+      it 'is refused once the password changes' do
+        token = described_class.encode(login)
+        login.update!(password: 'another long password')
+
+        expect(described_class.authenticate(token)).to be_nil
+      end
+
+      # The same claims without resident_id are accepted, so only naming
+      # two logins refuses this one.
+      it 'is refused when it also names a resident' do
+        expect(described_class.authenticate(signed(good_claims))).to eq(login)
+        expect(described_class.authenticate(signed(good_claims.merge(resident_id: resident.id)))).to be_nil
+      end
+
+      it 'is refused when it names a login that does not exist' do
+        expect(described_class.authenticate(signed(good_claims.merge(common_house_login_id: login.id + 1)))).to be_nil
+      end
+
+      # Every Common House token is made after #265, so the old rule for
+      # tokens with no keys_valid_since claim is for residents only.
+      it 'is refused without a keys_valid_since claim, even when made after it' do
+        expect(described_class.authenticate(signed(good_claims.except(:keys_valid_since)))).to be_nil
+      end
+
+      it 'signs in the login, not the resident whose id is the same number' do
+        create(:resident, id: login.id, community: community, unit: unit)
+
+        expect(described_class.authenticate(described_class.encode(login))).to eq(login)
+      end
+    end
+
+    describe 'a token that names no login' do
+      it 'is refused' do
+        token = JWT.encode({ iat: Time.current.to_f, iss: 'comeals', keys_valid_since: 1 },
+                           described_class.send(:secret), 'HS256')
+
+        expect(described_class.authenticate(token)).to be_nil
       end
     end
 
