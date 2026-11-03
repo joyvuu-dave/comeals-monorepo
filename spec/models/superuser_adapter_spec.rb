@@ -5,8 +5,11 @@ require 'rails_helper'
 # Adapter logic in isolation. spec/requests/admin/superuser_authorization_spec.rb
 # proves ActiveAdmin actually invokes it end-to-end through routing.
 RSpec.describe SuperuserAdapter do
-  # A page registered with ActiveAdmin.register_page, by its name.
+  # A page registered with ActiveAdmin.register_page, by its name. load!
+  # reads the files in app/admin, which nothing else in this file does, so
+  # without it the file passes only after another spec has loaded them.
   def admin_page(name)
+    ActiveAdmin.application.load!
     ActiveAdmin.application.namespaces.flat_map { |namespace| namespace.resources.grep(ActiveAdmin::Page) }
                .find { |page| page.name == name } || raise("no admin page named #{name}")
   end
