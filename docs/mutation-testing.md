@@ -4700,3 +4700,29 @@ Left (9):
 - `Integer(time)` for `time.to_i` in `JwtAuth.microseconds` (1).
   `Integer()` uses `to_i` when the object has no `to_int`, so both give
   the same number.
+
+### 2026-11-03, a token for the Common House login
+
+`JwtAuth*`, run here after `JwtAuth` learned a second kind of login
+(`CommonHouseLogin`): 320 mutations, 294 killed, 26 left.
+
+Fixed after the run (7): the guard in `JwtAuth.find_login` that refuses
+a token naming a resident and the Common House login, removed or never
+true. The example refused such a token anyway, because the resident's
+`keys_valid_since` differed from the login's, so the token failed the
+later check. The resident now has the same value, and only the guard
+refuses it.
+
+Left (19), changes no caller can see:
+
+- The nine from the run above: the algorithm in `encode`, the
+  blank-token return (6), `Time.at` and `Integer(time)`.
+- `T.absurd(login)` in `JwtAuth.encode` (7): replaced, removed, or given
+  another argument. The line never runs: a Login is a Resident or a
+  CommonHouseLogin, and both have a `when`. Sorbet checks that before
+  the code runs, and fails if a third kind of login is added.
+- `instance_of?` for `is_a?` in `JwtAuth.still_valid?` (1): no class
+  inherits from Resident.
+- The `if common_house_login_id` in `JwtAuth.find_login`, made always
+  true or removed (2). `CommonHouseLogin.find_by(id: nil)` is nil too;
+  the check only saves a query.

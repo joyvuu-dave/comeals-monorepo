@@ -328,10 +328,15 @@ RSpec.describe JwtAuth do
         expect(described_class.authenticate(token)).to be_nil
       end
 
-      # The same claims without resident_id are accepted, so only naming
-      # two logins refuses this one.
+      # The same claims without resident_id are accepted, and the resident
+      # has the same keys_valid_since, so the claim fits either login.
+      # Only naming two logins refuses this one.
       it 'is refused when it also names a resident' do
+        resident.update_column(:keys_valid_since, login.reload.keys_valid_since)
+
         expect(described_class.authenticate(signed(good_claims))).to eq(login)
+        expect(described_class.authenticate(signed(good_claims.except(:common_house_login_id)
+                                                                .merge(resident_id: resident.id)))).to eq(resident)
         expect(described_class.authenticate(signed(good_claims.merge(resident_id: resident.id)))).to be_nil
       end
 
