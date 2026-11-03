@@ -29,49 +29,80 @@ module JwtAuth
   ALGORITHM = 'HS256'
   ISSUER    = 'comeals'
 
+  # Who a token can sign in: a resident, or the shared screen in the
+  # Common House (CommonHouseLogin, which is not a resident). A caller of
+  # authenticate gets one of the two and must say what each may do;
+  # Sorbet refuses a call that only a Resident has.
+  Login = T.type_alias { T.any(Resident, CommonHouseLogin) }
+
   class << self
-    # Sign and return a JWT string for the given resident. `iat` is stored
-    # with fractional-second precision so the comparison against
-    # keys_valid_since (a microsecond-precision datetime) doesn't round trip
-    # through a lossy second boundary. Fractional NumericDate is permitted
-    # by RFC 7519.
-    def encode(resident)
+    extend T::Sig
+
+    # Sign and return a JWT string for the given login. The token names
+    # the login by resident_id or by common_house_login_id, never both.
+    # `iat` keeps its fraction of a second (RFC 7519 allows it).
+    sig { params(login: Login).returns(String) }
+    def encode(login)
+      id_claim = case login
+                 when Resident then :resident_id
+                 when CommonHouseLogin then :common_house_login_id
+                 else T.absurd(login)
+                 end
       payload = {
-        resident_id: resident.id,
+        id_claim => login.id,
         iat: Time.current.to_f,
         iss: ISSUER,
-        keys_valid_since: microseconds(T.must(resident.keys_valid_since))
+        keys_valid_since: microseconds(T.must(login.keys_valid_since))
       }
       JWT.encode(payload, secret, ALGORITHM)
     end
 
-    # Verify `token` and return the authenticated Resident, or nil for any
-    # failure (bad signature, wrong issuer, revoked by keys_valid_since,
-    # unknown resident_id, malformed input).
+    # Verify `token` and return the login it names, or nil for any failure
+    # (bad signature, wrong issuer, revoked by keys_valid_since, no such
+    # login, a token that names two logins or none, malformed input).
+    sig { params(token: T.nilable(String)).returns(T.nilable(Login)) }
     def authenticate(token)
       return nil if token.blank?
 
       claims = decode(token)
       return nil unless claims
 
-      resident = Resident.find_by(id: claims['resident_id'])
-      return nil unless resident
+      login = find_login(claims)
+      return nil unless login
 
-      return nil unless still_valid?(claims, T.must(resident.keys_valid_since))
+      return nil unless still_valid?(claims, login)
 
-      resident
+      login
     end
 
     private
 
+    # The login the token names. A token that names both kinds is refused:
+    # encode never makes one, so it was not made by this code.
+    sig { params(claims: T::Hash[String, T.untyped]).returns(T.nilable(Login)) }
+    def find_login(claims)
+      resident_id = claims['resident_id']
+      common_house_login_id = claims['common_house_login_id']
+      return nil if resident_id && common_house_login_id
+
+      if resident_id
+        Resident.find_by(id: resident_id)
+      elsif common_house_login_id
+        CommonHouseLogin.find_by(id: common_house_login_id)
+      end
+    end
+
     # A token with a keys_valid_since claim is good only while the column
-    # still has that value. One without it (made before #265) keeps the
-    # old rule: made at or after keys_valid_since.
-    def still_valid?(claims, keys_valid_since)
+    # still has that value. A resident's token without it (made before
+    # #265) keeps the old rule: made at or after keys_valid_since. Every
+    # Common House token was made after #265, so it must have the claim.
+    sig { params(claims: T::Hash[String, T.untyped], login: Login).returns(T::Boolean) }
+    def still_valid?(claims, login)
+      keys_valid_since = T.must(login.keys_valid_since)
       made_with = claims['keys_valid_since']
       return made_with == microseconds(keys_valid_since) unless made_with.nil?
 
-      Time.zone.at(claims['iat'].to_f) >= keys_valid_since
+      login.is_a?(Resident) && Time.zone.at(claims['iat'].to_f) >= keys_valid_since
     end
 
     # The time in whole microseconds since 1970, which is what the column

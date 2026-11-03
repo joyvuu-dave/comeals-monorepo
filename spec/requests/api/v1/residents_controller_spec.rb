@@ -114,6 +114,18 @@ RSpec.describe 'Residents API' do
 
       expect(response).to have_http_status(:unauthorized)
     end
+
+    # The Common House screen is not a resident, so it has no resident id.
+    # Its token is good (JwtAuth.authenticate returns the login), and the
+    # resident's id is the same number, so only the kind of login refuses.
+    it 'returns 401 for the Common House token' do
+      login = create(:common_house_login)
+      create(:resident, id: login.id, community: community, unit: unit) unless Resident.exists?(login.id)
+
+      get '/api/v1/residents/id', params: { token: JwtAuth.encode(login) }
+
+      expect(response).to have_http_status(:unauthorized)
+    end
   end
 
   # ---------------------------------------------------------------------------

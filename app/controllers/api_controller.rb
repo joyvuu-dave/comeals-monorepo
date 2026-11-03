@@ -315,9 +315,12 @@ class ApiController < ActionController::API
     @session_resolved = true
     token = bearer_token_from_header || token_param
 
-    if (resident = JwtAuth.authenticate(token))
+    # Only a resident is signed in here. A Common House token
+    # (CommonHouseLogin) is not a resident; the next change gives it a
+    # session of its own.
+    if (resident = JwtAuth.authenticate(token)).is_a?(Resident)
       @current_api_key = nil
-      @current_resident_api = resident
+      @current_resident_api = T.let(resident, T.nilable(Resident))
       return
     end
 
