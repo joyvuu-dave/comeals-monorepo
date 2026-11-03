@@ -141,6 +141,53 @@ RSpec.describe JwtAuth do
       end
     end
 
+    # A token made by encode carries the keys_valid_since it read, and is
+    # good only while the row still has that value. Comparing times was
+    # not enough: a sign-in with the old password during a password
+    # change reads the old digest and makes a token dated after the new
+    # keys_valid_since (#265,
+    # spec/requests/api/v1/sign_in_during_a_password_change_race_spec.rb).
+    describe 'the keys_valid_since the token was made with' do
+      it 'is in the token, to the microsecond' do
+        token = described_class.encode(resident)
+        claims, = JWT.decode(token, described_class.send(:secret), true, algorithm: 'HS256')
+
+        expect(claims['keys_valid_since']).to eq(resident.reload.keys_valid_since.to_r * 1_000_000)
+      end
+
+      it 'refuses the token once keys_valid_since changes, even to an earlier time' do
+        token = described_class.encode(resident)
+        resident.update_column(:keys_valid_since, 1.day.ago)
+
+        expect(described_class.authenticate(token)).to be_nil
+      end
+
+      it 'refuses the token once keys_valid_since changes by one microsecond' do
+        token = described_class.encode(resident)
+        resident.update_column(:keys_valid_since, resident.reload.keys_valid_since + 0.000_001)
+
+        expect(described_class.authenticate(token)).to be_nil
+      end
+
+      it 'accepts a token made from the resident just created, before any reload' do
+        fresh = create(:resident, community: community, unit: unit)
+
+        expect(described_class.authenticate(described_class.encode(fresh))).to eq(fresh)
+      end
+
+      it 'refuses a token whose keys_valid_since is not a whole number' do
+        claims = { resident_id: resident.id, iat: Time.current.to_f, iss: 'comeals',
+                   keys_valid_since: (resident.reload.keys_valid_since.to_r * 1_000_000).to_s }
+        token = JWT.encode(claims, described_class.send(:secret), 'HS256')
+
+        expect(described_class.authenticate(token)).to be_nil
+      end
+    end
+
+    # Tokens made before #265 have no keys_valid_since claim. They are
+    # still saved on phones and browsers, so they keep the old rule: the
+    # token's iat must not be earlier than keys_valid_since. The examples
+    # below build such tokens by hand.
     describe 'the keys_valid_since revocation lever' do
       it 'rejects a token whose iat is earlier than resident.keys_valid_since' do
         token = described_class.encode(resident)
