@@ -7,7 +7,7 @@ require 'rails_helper'
 # may, except the two things that need a person: settle a period, and read
 # "which resident am I".
 RSpec.describe 'A Common House session' do
-  let(:community) { create(:community, timezone: 'America/New_York') }
+  let!(:community) { create(:community, timezone: 'America/New_York') }
   let(:unit) { create(:unit, community: community) }
   let(:resident) { create(:resident, community: community, unit: unit) }
   let(:login) { create(:common_house_login) }
@@ -55,14 +55,12 @@ RSpec.describe 'A Common House session' do
   # Reading a resident id answers 403: residents_controller_spec.rb.
 
   it 'may not preview a settlement' do
-    community
     get '/api/v1/reconciliations/preview', params: { cutoff: 20.days.ago.to_date.iso8601 }, headers: headers
 
     expect(response).to have_http_status(:forbidden)
   end
 
   it 'may not settle' do
-    community
     post '/api/v1/reconciliations', params: { cutoff: 20.days.ago.to_date.iso8601 }, headers: headers
 
     expect(response).to have_http_status(:forbidden)

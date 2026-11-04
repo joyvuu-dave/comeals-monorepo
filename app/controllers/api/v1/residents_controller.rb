@@ -21,7 +21,10 @@ module Api
 
       # GET /api/v1/residents/id
       def show_id
-        render json: current_resident_api.id
+        resident = current_resident_api
+        return not_a_resident_api if resident.nil?
+
+        render json: resident.id
       end
 
       # A reset token never travels in a path or a query string. Rails

@@ -2,6 +2,8 @@
 # frozen_string_literal: true
 
 class ApiController < ActionController::API
+  extend T::Sig
+
   around_action :set_community_timezone
 
   # The backstop for a conflict that reaches no other rescue.
@@ -46,34 +48,51 @@ class ApiController < ActionController::API
 
   # Non-nil only for legacy Key-backed sessions. JWT sessions have no
   # server-stored row, so this returns nil even when the caller is
-  # authenticated. Use current_resident_api as the canonical check.
+  # authenticated. Use current_login as the canonical check.
   def current_api_key
     resolve_current_session
     @current_api_key
   end
 
-  def current_resident_api
+  # Who signed in: a resident, the Common House screen
+  # (CommonHouseLogin), or nil for nobody.
+  sig { returns(T.nilable(JwtAuth::Login)) }
+  def current_login
     resolve_current_session
-    @current_resident_api
+    @current_login
   end
 
-  def signed_in_resident_api?
-    current_resident_api.present?
+  # The resident who signed in, or nil. nil for the Common House screen
+  # too, because it is not a resident. Only the actions that need a
+  # person read this: settling, and "which resident am I".
+  sig { returns(T.nilable(Resident)) }
+  def current_resident_api
+    login = current_login
+    login if login.is_a?(Resident)
   end
 
   # Who the audited gem records as the author of a change (see
-  # config/initializers/audited.rb). API changes are attributed to the
-  # authenticated resident.
+  # config/initializers/audited.rb): the resident, or the Common House
+  # login. The history row stores its class and id (user_type, user_id).
   def audited_user
-    current_resident_api
+    current_login
   end
 
   # The API auth check. Each controller wires it with its own
   # before_action line — which actions are public (an iCal feed, a
   # password reset) is per-controller knowledge, but the check itself
-  # lives once.
+  # lives once. The Common House screen passes it: it may do what a
+  # resident may, except what an action refuses itself.
   def authenticate
-    not_authenticated_api unless signed_in_resident_api?
+    not_authenticated_api if current_login.nil?
+  end
+
+  # For an action only a resident may take. 403, not 401: the Common
+  # House screen is signed in, and a 401 makes the web app show that it
+  # was signed out (data_store_app.js).
+  def not_a_resident_api
+    render json: { message: 'Only a resident may do this, not the Common House screen.' },
+           status: :forbidden
   end
 
   def not_authenticated_api
@@ -315,18 +334,15 @@ class ApiController < ActionController::API
     @session_resolved = true
     token = bearer_token_from_header || token_param
 
-    # Only a resident is signed in here. A Common House token
-    # (CommonHouseLogin) is not a resident; the next change gives it a
-    # session of its own.
-    if (resident = JwtAuth.authenticate(token)).is_a?(Resident)
+    if (login = JwtAuth.authenticate(token))
       @current_api_key = nil
-      @current_resident_api = T.let(resident, T.nilable(Resident))
+      @current_login = T.let(login, T.nilable(JwtAuth::Login))
       return
     end
 
     key = token ? Key.find_by(token: token) : nil
     @current_api_key = key
-    @current_resident_api = key&.identity
+    @current_login = key&.identity
   end
 
   # Extract a token from "Authorization: Bearer <token>". Returns nil for any
@@ -347,9 +363,11 @@ class ApiController < ActionController::API
     token.presence if token.is_a?(String)
   end
 
+  # The Common House login belongs to no community row, so the zone comes
+  # from the one community, which every login belongs to.
   def set_community_timezone(&)
     if bearer_token_from_header || token_param
-      tz = current_resident_api&.community&.timezone.presence
+      tz = (Community.first if current_login)&.timezone.presence
       return Time.use_zone(tz, &) if tz && ActiveSupport::TimeZone[tz]
     end
     yield

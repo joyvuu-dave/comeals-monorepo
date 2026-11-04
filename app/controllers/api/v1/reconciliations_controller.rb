@@ -82,10 +82,13 @@ module Api
       # every resident's balance. Both are for the person who does the
       # books: a superuser grants residents.can_reconcile in admin (#72).
       # A resident token never expires, so "any logged-in resident" would
-      # mean anyone who can reach the shared screen's token.
+      # mean anyone who picks up a signed-in phone. The Common House screen
+      # is not a resident at all, so it gets the 403 of not_a_resident_api.
       sig { void }
       def require_reconciler
-        return if current_resident_api.can_reconcile?
+        resident = current_resident_api
+        return not_a_resident_api if resident.nil?
+        return if resident.can_reconcile?
 
         render json: { message: 'Only a resident with the reconciler role may do this. Ask an admin.' },
                status: :forbidden

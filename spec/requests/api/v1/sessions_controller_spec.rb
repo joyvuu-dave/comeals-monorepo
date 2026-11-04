@@ -104,10 +104,10 @@ RSpec.describe 'Sessions API' do
         expect(controller.current_api_key).to eq(legacy_key)
       end
 
-      it 'answers true or false for whether a resident is signed in' do
+      it 'answers who is signed in, or nil' do
         expect(controller_for('HTTP_AUTHORIZATION' => "Bearer #{JwtAuth.encode(resident)}")
-                 .signed_in_resident_api?).to be(true)
-        expect(controller_for({}).signed_in_resident_api?).to be(false)
+                 .current_login).to eq(resident)
+        expect(controller_for({}).current_login).to be_nil
       end
     end
 
