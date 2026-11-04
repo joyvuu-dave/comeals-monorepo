@@ -4726,3 +4726,31 @@ Left (19), changes no caller can see:
 - The `if common_house_login_id` in `JwtAuth.find_login`, made always
   true or removed (2). `CommonHouseLogin.find_by(id: nil)` is nil too;
   the check only saves a query.
+
+### 2026-11-04, the Common House screen signs in as itself
+
+The nine methods changed so that a Common House token is signed in
+(`ApiController#current_login`): `current_login`,
+`current_resident_api`, `authenticate`, `audited_user`,
+`not_a_resident_api`, `resolve_current_session` and
+`set_community_timezone` in `ApiController`, `show_id` in
+`Api::V1::ResidentsController`, and `require_reconciler` in
+`Api::V1::ReconciliationsController`. 232 mutations, 217 killed, 15
+left.
+
+Fixed after the run (7): the message of the 403 in
+`not_a_resident_api`, removed, renamed or emptied. No example read it.
+The settlement preview example now expects it, and all 17 mutations of
+the method are killed.
+
+Left (8), changes no caller can see:
+
+- The five from the 2026-10 runs: the memo in `resolve_current_session`
+  (4) and `.presence` on the zone in `set_community_timezone` (1).
+- `instance_of?` for `is_a?` in `current_resident_api` (1): no class
+  inherits from Resident.
+- The `if current_login` in `set_community_timezone`, made always true
+  or removed (2). It reads the zone only for a request that is signed
+  in. A request whose token is refused is answered 401, or is a public
+  action that reads no time, so the zone it runs in shows nowhere. The
+  check saves reading the community for it.

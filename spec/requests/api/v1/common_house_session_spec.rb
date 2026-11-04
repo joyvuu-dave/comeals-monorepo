@@ -54,10 +54,11 @@ RSpec.describe 'A Common House session' do
 
   # Reading a resident id answers 403: residents_controller_spec.rb.
 
-  it 'may not preview a settlement' do
+  it 'may not preview a settlement, and is told why' do
     get '/api/v1/reconciliations/preview', params: { cutoff: 20.days.ago.to_date.iso8601 }, headers: headers
 
     expect(response).to have_http_status(:forbidden)
+    expect(response.parsed_body).to eq('message' => 'Only a resident may do this, not the Common House screen.')
   end
 
   it 'may not settle' do

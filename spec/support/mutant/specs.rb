@@ -140,8 +140,10 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/calendar_birthday_chips_spec.rb' =>
     %w[ResidentBirthdaySerializer CalendarSerializer Api::V1::CommunitiesController],
   'spec/requests/api/v1/residents_controller_spec.rb' =>
-    %w[JwtAuth ResidentNameShortener PasswordReset Api::V1::ResidentsController],
-  'spec/requests/api/v1/sessions_controller_spec.rb' => %w[JwtAuth Api::V1::SessionsController],
+    %w[JwtAuth ApiController ResidentNameShortener PasswordReset Api::V1::ResidentsController],
+  'spec/requests/api/v1/sessions_controller_spec.rb' => %w[JwtAuth ApiController Api::V1::SessionsController],
+  'spec/requests/api/v1/common_house_session_spec.rb' =>
+    %w[ApiController Api::V1::ResidentsController Api::V1::ReconciliationsController],
   'spec/requests/api/v1/sign_in_during_a_password_change_race_spec.rb' =>
     %w[JwtAuth Api::V1::ResidentsController],
   'spec/requests/api/v1/authentication_pinning_spec.rb' => %w[JwtAuth ApiController],
