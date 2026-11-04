@@ -118,13 +118,15 @@ RSpec.describe 'Residents API' do
     # The Common House screen is not a resident, so it has no resident id.
     # Its token is good (JwtAuth.authenticate returns the login), and the
     # resident's id is the same number, so only the kind of login refuses.
-    it 'returns 401 for the Common House token' do
+    # 403, not 401: the screen is signed in, and a 401 makes the web app
+    # show "you have been signed out" (data_store_app.js).
+    it 'returns 403 for the Common House token' do
       login = create(:common_house_login)
       create(:resident, id: login.id, community: community, unit: unit) unless Resident.exists?(login.id)
 
       get '/api/v1/residents/id', params: { token: JwtAuth.encode(login) }
 
-      expect(response).to have_http_status(:unauthorized)
+      expect(response).to have_http_status(:forbidden)
     end
   end
 
