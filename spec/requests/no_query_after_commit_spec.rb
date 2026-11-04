@@ -375,6 +375,19 @@ RSpec.describe 'what a write runs after its commit' do
     -> { delete "/common_house_reservations/#{reservation.id}" }
   end
 
+  admin_write 'POST /common_house_logins' do
+    params = { password: 'a long shared password', password_confirmation: 'a long shared password' }
+    -> { post '/common_house_logins', params: { common_house_login: params } }
+  end
+
+  # A new password also moves keys_valid_since (after_save), inside the
+  # same transaction.
+  admin_write 'PATCH /common_house_logins/:id' do
+    login = create(:common_house_login)
+    params = { password: 'a new long password', password_confirmation: 'a new long password' }
+    -> { patch "/common_house_logins/#{login.id}", params: { common_house_login: params } }
+  end
+
   # The one community is made once, on an empty database, by the first
   # admin (spec/requests/admin/bootstrap_guard_spec.rb).
   context 'with no community yet' do

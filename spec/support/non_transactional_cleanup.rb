@@ -65,6 +65,7 @@ module NonTransactionalCleanup
     meals
     reconciliations
     keys
+    common_house_logins
     residents
     units
     communities
