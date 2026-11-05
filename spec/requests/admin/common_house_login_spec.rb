@@ -93,6 +93,7 @@ RSpec.describe 'Admin Common House login' do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('Password Last Changed')
       expect(response.body).not_to include(login.password_digest)
+      expect(response.body).not_to include('A screen signed in before this time is signed out.')
     end
 
     it 'shows the sign-in email on the login and on the edit form' do
