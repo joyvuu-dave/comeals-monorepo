@@ -97,7 +97,10 @@ const NIGHTS = [
     zone: "America/Havana",
     night:
       "Havana goes back from 01:00 to midnight, and Los Angeles from 02:00 to 01:00",
-    day: "2026-11-01",
+    // Not 2026-11-01: time zone data from 2026f on says Cuba keeps its
+    // summer time that autumn, so that night is no longer a clock change
+    // (#266). Every copy of the data agrees on 2025-11-02.
+    day: "2025-11-02",
     start: "00:30",
     end: "01:30",
   },
