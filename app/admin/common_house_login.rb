@@ -49,6 +49,7 @@ ActiveAdmin.register CommonHouseLogin do
 
   show do
     attributes_table do
+      row('Sign-in email') { CommonHouseLogin::EMAIL }
       row('Password last changed', &:keys_valid_since)
     end
 
@@ -59,6 +60,9 @@ ActiveAdmin.register CommonHouseLogin do
   form do |f|
     f.semantic_errors :base
     f.inputs 'Common House login' do
+      # The admin who sets the password also tells people the address
+      # to type with it, so the form shows both.
+      li "Sign in on the Common House screen with #{CommonHouseLogin::EMAIL} and this password."
       f.input :password, hint: "At least #{CommonHouseLogin::MINIMUM_PASSWORD_LENGTH} characters. " \
                                'Changing it signs the Common House screen out.'
       f.input :password_confirmation
