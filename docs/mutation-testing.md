@@ -4774,3 +4774,28 @@ killed, 4 left, changes no caller can see:
 from CommonHouseLogin. The run on `#common_house_token` after it added
 `username` and `common_house` to its answer: 112 mutations, 111 killed;
 the one left is its `instance_of?(String)` from the run above.
+
+### 2026-11-05, the Common House login and the history relabel task
+
+`CommonHouseHistory` (new) and `CommonHouseLogin`, which was missing
+from `.mutant.yml` until now, so mutant had never run on it. First run:
+309 mutations, 34 left. Fixed by new tests:
+
+- "leaves sessions alone when something else is saved" used `touch`,
+  which runs no `after_save` callback, so it could not fail. It saves
+  now.
+- No test passed options to `serializable_hash`, a password of exactly
+  12, a short password on a saved login, or a new login with no
+  password.
+- "refuses an id no resident has" ran with no resident in the table, so
+  `Resident.exists?` with no id passed it too.
+
+Second run: 306 mutations, 297 killed. Left (9), all equivalent:
+
+- `CommonHouseLogin#authenticate`, 7 on `return false if
+  unencrypted_password.nil?`: SCrypt answers false for nil, so with the
+  line gone the method still answers false. The line stays, so the
+  answer does not depend on how SCrypt treats nil.
+- `CommonHouseHistory.relabel`, `rows.size` and `rows.length` for
+  `rows.count`: the relation is not loaded, so all three count the same
+  rows.

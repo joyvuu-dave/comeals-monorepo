@@ -84,7 +84,29 @@ RSpec.describe CommonHouseLogin do
     end
 
     it 'is required when the login is created' do
-      expect(described_class.new).not_to be_valid
+      login = described_class.new
+
+      expect(login).not_to be_valid
+      expect(login.errors[:password]).to include('must be at least 12 characters')
+    end
+
+    it 'may be exactly 12 characters' do
+      expect(described_class.new(password: 'a' * 12)).to be_valid
+    end
+
+    it 'must be at least 12 characters when it is changed' do
+      login = described_class.create!(password: password)
+      login.password = 'a' * 11
+
+      expect(login).not_to be_valid
+      expect(login.errors[:password]).to include('must be at least 12 characters')
+    end
+
+    # A login read from the database has no password, only its digest.
+    it 'is not asked for again when a saved login is saved without one' do
+      login = described_class.create!(password: password)
+
+      expect(described_class.find(login.id)).to be_valid
     end
 
     it 'is stored only as a digest' do
@@ -110,8 +132,9 @@ RSpec.describe CommonHouseLogin do
       login = described_class.create!(password: password)
       before = login.reload.keys_valid_since
 
+      # A save, not a touch: touch runs no after_save callback.
       travel 1.minute do
-        login.touch
+        described_class.find(login.id).update!(updated_at: Time.current)
       end
 
       expect(login.reload.keys_valid_since).to eq(before)
@@ -129,6 +152,12 @@ RSpec.describe CommonHouseLogin do
     login = described_class.create!(password: password)
 
     expect(login.serializable_hash.keys).not_to include('password_digest', 'keys_valid_since')
+  end
+
+  it "keeps the caller's options, and still leaves the secret columns out" do
+    login = described_class.create!(password: password)
+
+    expect(login.serializable_hash(only: %w[id password_digest])).to eq('id' => login.id)
   end
 
   # The resident sign-in form takes it, so it must be an address the

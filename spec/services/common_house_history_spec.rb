@@ -35,13 +35,12 @@ RSpec.describe CommonHouseHistory do
 
     # The cutoff is the first moment that is not moved.
     it 'leaves the rows written at the cutoff and after it' do
-      at_cutoff = audit_by(screen_account, at: cutoff)
-      later = audit_by(screen_account, at: cutoff + 1.day)
+      kept = [audit_by(screen_account, at: cutoff), audit_by(screen_account, at: cutoff + 1.day)]
 
       described_class.relabel(resident_id: screen_account.id, before: cutoff, write: true)
 
-      expect([at_cutoff.reload, later.reload]).to all(have_attributes(user_type: 'Resident',
-                                                                      user_id: screen_account.id))
+      expect(Audited::Audit.where(id: kept).pluck(:user_type, :user_id))
+        .to eq([['Resident', screen_account.id]] * 2)
     end
 
     it "leaves other residents' rows" do
@@ -52,14 +51,15 @@ RSpec.describe CommonHouseHistory do
       expect(other.reload).to have_attributes(user_type: 'Resident', user_id: someone_else.id)
     end
 
-    # An AdminUser row with the same id is a different author.
-    it 'leaves rows by an admin whose id is the same number' do
-      admin = create(:admin_user)
-      admin_row = audit_by(admin, at: cutoff - 1.day)
+    # The rows name their author by type and id. An admin row with the
+    # resident's id number is a different author.
+    it "leaves an admin's rows that carry the same id number" do
+      admin_row = audit_by(create(:admin_user), at: cutoff - 1.day)
+      admin_row.update_columns(user_id: screen_account.id)
 
-      described_class.relabel(resident_id: admin.id, before: cutoff, write: true)
+      described_class.relabel(resident_id: screen_account.id, before: cutoff, write: true)
 
-      expect(admin_row.reload).to have_attributes(user_type: 'AdminUser', user_id: admin.id)
+      expect(admin_row.reload).to have_attributes(user_type: 'AdminUser', user_id: screen_account.id)
     end
 
     it 'without write, counts the rows and changes none' do
@@ -95,6 +95,8 @@ RSpec.describe CommonHouseHistory do
 
     # A typo in the id must not run as "0 rows" with no error.
     it 'refuses an id no resident has' do
+      screen_account
+
       expect { described_class.relabel(resident_id: 0, before: cutoff, write: true) }
         .to raise_error(CommonHouseHistory::Refused, 'No resident has id 0.')
     end

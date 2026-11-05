@@ -32,8 +32,8 @@ module CommonHouseHistory
     raise Refused, 'There is no Common House login yet. An admin makes it first.' if login.nil?
     raise Refused, "No resident has id #{resident_id}." unless Resident.exists?(resident_id)
 
-    made = T.must(login.created_at).to_time
-    if before > made
+    made = T.must(login.created_at)
+    if made < before
       raise Refused, "The cutoff must not be after the Common House login was made (#{made.getutc.iso8601})."
     end
 
