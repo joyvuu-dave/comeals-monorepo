@@ -28,7 +28,7 @@
 class CommonHouseLogin < ApplicationRecord
   extend T::Sig
 
-  MINIMUM_PASSWORD_LENGTH = 12
+  MINIMUM_PASSWORD_LENGTH = 8
 
   # What the headers call the screen ("logout Common House").
   NAME = 'Common House'

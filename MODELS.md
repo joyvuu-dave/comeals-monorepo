@@ -1325,7 +1325,7 @@ is a `Resident` or this login; `#current_resident_api` is only ever a
 `Resident`, and the two actions that need a person (settling, and
 `GET /residents/id`) answer 403 for this login.
 
-**CommonHouseLogin fields:** `password_digest` (SCrypt, at least 12
+**CommonHouseLogin fields:** `password_digest` (SCrypt, at least 8
 characters), `keys_valid_since`, `singleton_guard`
 
 ### Key

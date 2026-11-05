@@ -26,7 +26,7 @@ So:
    The row cannot be deleted, because the history names it.
 
 2. **Only admins know its password.** A superuser sets it on the admin
-   page "Common House Login". It must be at least 12 characters, and it
+   page "Common House Login". It must be at least 8 characters, and it
    has no reset link: the sign-in page says to ask an admin. Changing it
    signs the screen out everywhere (`keys_valid_since`, as for a
    resident). If the screen is signed out and no admin is around, a
