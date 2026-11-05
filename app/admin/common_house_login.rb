@@ -52,9 +52,6 @@ ActiveAdmin.register CommonHouseLogin do
       row('Sign-in email') { CommonHouseLogin::EMAIL }
       row('Password last changed', &:keys_valid_since)
     end
-
-    para 'A screen signed in before this time is signed out. To sign the Common House screen ' \
-         'out from here, change the password.'
   end
 
   form do |f|
