@@ -125,7 +125,10 @@ test.describe("The Common House screen (real backend)", () => {
       0,
     );
 
-    // The dinner page's header names it the same way.
+    // The dinner page's header names it the same way. Wait for the
+    // calendar's requests first: WebKit cancels the ones still running
+    // when the page changes, and the app logs "no response" for each.
+    await page.waitForLoadState("networkidle");
     await page.goto(`/meals/${auth.meals.tomorrow.id}/edit/`);
     await expect(
       page.locator('[aria-label="Enter meal description"]'),
