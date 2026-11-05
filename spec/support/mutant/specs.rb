@@ -142,6 +142,7 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/residents_controller_spec.rb' =>
     %w[JwtAuth ApiController ResidentNameShortener PasswordReset Api::V1::ResidentsController],
   'spec/requests/api/v1/sessions_controller_spec.rb' => %w[JwtAuth ApiController Api::V1::SessionsController],
+  'spec/requests/api/v1/common_house_sign_in_spec.rb' => %w[JwtAuth Api::V1::ResidentsController],
   'spec/requests/api/v1/common_house_session_spec.rb' =>
     %w[ApiController Api::V1::ResidentsController Api::V1::ReconciliationsController],
   'spec/requests/api/v1/sign_in_during_a_password_change_race_spec.rb' =>

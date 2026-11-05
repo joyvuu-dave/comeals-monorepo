@@ -4754,3 +4754,15 @@ Left (8), changes no caller can see:
   in. A request whose token is refused is answered 401, or is a public
   action that reads no time, so the zone it runs in shows nowhere. The
   check saves reading the community for it.
+
+### 2026-11-04, the Common House screen signs in on the resident form
+
+`Resident#email_not_reserved`, and `token`, `common_house_token` and
+`password_reset` in `Api::V1::ResidentsController`: 480 mutations, 476
+killed, 4 left, changes no caller can see:
+
+- `params.fetch(:email)` for `params[:email]` (3): twice in `#token` and
+  once in `#password_reset`. Both have answered "Email required." for a
+  blank email already, so the key is there and `fetch` never raises.
+- `instance_of?(String)` for `is_a?(String)` in `#common_house_token`
+  (1): a request parameter is a plain String, never a subclass of it.
