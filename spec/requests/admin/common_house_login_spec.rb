@@ -36,6 +36,14 @@ RSpec.describe 'Admin Common House login' do
       expect(login.authenticate('a long shared password')).to eq(login)
     end
 
+    # The admin who sets the password also needs the address the screen
+    # types with it, on the same page.
+    it 'shows the sign-in email on the new form' do
+      get '/common_house_logins/new'
+
+      expect(response.body).to include('Sign in on the Common House screen with common-house@comeals.invalid')
+    end
+
     it 'refuses a password that does not match its confirmation, and saves nothing' do
       post '/common_house_logins', params: form('a long shared password', 'a long shared passwort')
 
@@ -85,6 +93,14 @@ RSpec.describe 'Admin Common House login' do
       expect(response).to have_http_status(:ok)
       expect(response.body).to include('Password Last Changed')
       expect(response.body).not_to include(login.password_digest)
+    end
+
+    it 'shows the sign-in email on the login and on the edit form' do
+      get "/common_house_logins/#{login.id}"
+      expect(response.body).to include('Sign In Email', 'common-house@comeals.invalid')
+
+      get "/common_house_logins/#{login.id}/edit"
+      expect(response.body).to include('Sign in on the Common House screen with common-house@comeals.invalid')
     end
 
     it 'has no New button and refuses the new form' do
