@@ -3501,7 +3501,7 @@ class ActiveRecord::Associations::CollectionAssociation < ::ActiveRecord::Associ
   # check <tt>collection.length.zero?</tt>.
   #
   # pkg:gem/activerecord#lib/active_record/associations/collection_association.rb:236
-  def empty?(*args, **kwargs, &block); end
+  def empty?(*, **, &); end
 
   # pkg:gem/activerecord#lib/active_record/associations/collection_association.rb:98
   def find(*args); end
@@ -3512,7 +3512,7 @@ class ActiveRecord::Associations::CollectionAssociation < ::ActiveRecord::Associ
   # Implements the ids reader method, e.g. foo.item_ids for Foo.has_many :items
   #
   # pkg:gem/activerecord#lib/active_record/associations/collection_association.rb:51
-  def ids_reader(*args, **kwargs, &block); end
+  def ids_reader(*, **, &); end
 
   # Implements the ids writer method, e.g. foo.item_ids= for Foo.has_many :items
   #
@@ -3563,7 +3563,7 @@ class ActiveRecord::Associations::CollectionAssociation < ::ActiveRecord::Associ
   # +count_records+, which is a method descendants have to provide.
   #
   # pkg:gem/activerecord#lib/active_record/associations/collection_association.rb:213
-  def size(*args, **kwargs, &block); end
+  def size(*, **, &); end
 
   # pkg:gem/activerecord#lib/active_record/associations/collection_association.rb:289
   def target=(record); end
@@ -36966,7 +36966,7 @@ ActiveRecord::VERSION::MAJOR = T.let(T.unsafe(nil), Integer)
 ActiveRecord::VERSION::MINOR = T.let(T.unsafe(nil), Integer)
 
 # pkg:gem/activerecord#lib/active_record/gem_version.rb:13
-ActiveRecord::VERSION::PRE = T.let(T.unsafe(nil), T.untyped)
+ActiveRecord::VERSION::PRE = T.let(T.unsafe(nil), String)
 
 # pkg:gem/activerecord#lib/active_record/gem_version.rb:15
 ActiveRecord::VERSION::STRING = T.let(T.unsafe(nil), String)
