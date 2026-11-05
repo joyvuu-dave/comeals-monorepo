@@ -46,6 +46,19 @@ RSpec.describe 'history:relabel_as_common_house' do
     expect(old.reload.user_type).to eq('CommonHouseLogin')
   end
 
+  it 'says rows and them for more than one row' do
+    second = Audited::Audit.create!(auditable: old.auditable, action: 'update', user: screen_account,
+                                    audited_changes: {})
+    second.update_columns(created_at: Time.utc(2021, 1, 2))
+    env = { RESIDENT_ID: screen_account.id.to_s, BEFORE: '2021-10-26T00:00:00-07:00' }
+
+    expect { run_task(env) }
+      .to output("2 history rows would be relabeled as the Common House. Run again with WRITE=yes to change them.\n")
+      .to_stdout
+    Rake::Task['history:relabel_as_common_house'].reenable
+    expect { run_task(env.merge(WRITE: 'yes')) }.to output("Relabeled 2 history rows as the Common House.\n").to_stdout
+  end
+
   it 'refuses a RESIDENT_ID that is not a number' do
     expect { run_task(RESIDENT_ID: 'sixty', BEFORE: '2021-10-26T00:00:00-07:00', WRITE: 'yes') }
       .to raise_error(ArgumentError, /invalid value for Integer/)

@@ -36,6 +36,14 @@ module JwtAuth
   # Sorbet refuses a call that only a Resident has.
   Login = T.type_alias { T.any(Resident, CommonHouseLogin) }
 
+  # The claim that names each kind of login. A table, not a case with
+  # T.absurd: the sig on encode refuses anything else before a case
+  # could, so an else arm could never run, and every line here must run
+  # under the specs. A new kind of login that is not in the table makes
+  # encode raise KeyError.
+  ID_CLAIMS = T.let({ Resident => :resident_id, CommonHouseLogin => :common_house_login_id }.freeze,
+                    T::Hash[Module, Symbol])
+
   class << self
     extend T::Sig
 
@@ -44,11 +52,7 @@ module JwtAuth
     # `iat` keeps its fraction of a second (RFC 7519 allows it).
     sig { params(login: Login).returns(String) }
     def encode(login)
-      id_claim = case login
-                 when Resident then :resident_id
-                 when CommonHouseLogin then :common_house_login_id
-                 else T.absurd(login)
-                 end
+      id_claim = ID_CLAIMS.fetch(login.class)
       payload = {
         id_claim => login.id,
         iat: Time.current.to_f,
