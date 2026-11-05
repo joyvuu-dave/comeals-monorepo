@@ -4793,7 +4793,7 @@ from `.mutant.yml` until now, so mutant had never run on it. First run:
 Second run: 306 mutations, 297 killed. Left (9), all equivalent:
 
 - `CommonHouseLogin#authenticate`, 7 on `return false if
-  unencrypted_password.nil?`: SCrypt answers false for nil, so with the
+unencrypted_password.nil?`: SCrypt answers false for nil, so with the
   line gone the method still answers false. The line stays, so the
   answer does not depend on how SCrypt treats nil.
 - `CommonHouseHistory.relabel`, `rows.size` and `rows.length` for
