@@ -4799,3 +4799,10 @@ unencrypted_password.nil?`: SCrypt answers false for nil, so with the
 - `CommonHouseHistory.relabel`, `rows.size` and `rows.length` for
   `rows.count`: the relation is not loaded, so all three count the same
   rows.
+
+### 2026-11-05, JwtAuth.encode reads the claim from a table
+
+`JwtAuth.encode` after its `case` with `T.absurd` became the lookup
+`ID_CLAIMS.fetch(login.class)`: 46 mutations, 45 killed. Left (1): the
+algorithm left out of `JWT.encode`, which signs with HS256 anyway (the
+2026-11-03 entry above).
