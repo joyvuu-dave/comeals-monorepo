@@ -4766,3 +4766,11 @@ killed, 4 left, changes no caller can see:
   blank email already, so the key is there and `fetch` never raises.
 - `instance_of?(String)` for `is_a?(String)` in `#common_house_token`
   (1): a request parameter is a plain String, never a subclass of it.
+
+### 2026-11-04, the history names the Common House screen
+
+`AuditSerializer#user_name`: 81 mutations, 80 killed. Left (1):
+`instance_of?` for `is_a?(CommonHouseLogin)`, since no class inherits
+from CommonHouseLogin. The run on `#common_house_token` after it added
+`username` and `common_house` to its answer: 112 mutations, 111 killed;
+the one left is its `instance_of?(String)` from the run above.
