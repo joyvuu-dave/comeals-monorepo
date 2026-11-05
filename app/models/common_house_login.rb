@@ -29,6 +29,14 @@ class CommonHouseLogin < ApplicationRecord
   extend T::Sig
 
   MINIMUM_PASSWORD_LENGTH = 12
+
+  # What the screen types in the email box of the resident sign-in form.
+  # It ends in .invalid, which RFC 2606 keeps from ever being a real
+  # domain, so no mail can reach anyone through it. No resident may have
+  # a .invalid address (Resident#email_not_reserved and the CHECK
+  # residents_email_not_invalid_domain), so a sign-in with this address
+  # is always this login.
+  EMAIL = 'common-house@comeals.invalid'
   ALREADY_EXISTS = 'There is already a Common House login. Change its password instead.'
 
   validate :enforce_singleton, on: :create

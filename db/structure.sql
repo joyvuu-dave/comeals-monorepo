@@ -1678,6 +1678,7 @@ CREATE TABLE public.residents (
     can_reconcile boolean DEFAULT false NOT NULL,
     reset_password_token_digest character varying,
     CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
+    CONSTRAINT residents_email_not_invalid_domain CHECK (((email IS NULL) OR (lower((email)::text) !~~ '%.invalid'::text))),
     CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text))),
     CONSTRAINT residents_reset_password_token_digest_is_sha256 CHECK (((reset_password_token_digest)::text ~ '^[0-9a-f]{64}$'::text))
 );
@@ -4460,6 +4461,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261104120000'),
 ('20261103120000'),
 ('20261029120000'),
 ('20261023140000'),

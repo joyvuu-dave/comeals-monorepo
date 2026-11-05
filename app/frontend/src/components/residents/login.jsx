@@ -141,11 +141,18 @@ const ResidentsLogin = observer(() => {
         Cookie.set("community_id", response.data.community_id, {
           expires: 7300,
         });
-        Cookie.set("resident_id", response.data.resident_id, {
-          expires: 7300,
-        });
-        Cookie.set("username", response.data.username, {
-          expires: 7300,
+        // The Common House screen signs in here too, and its answer names
+        // no resident. A cookie written from a missing value would hold
+        // the text "undefined", and the calendar link would read that as
+        // a resident id; one left by a resident's session would show the
+        // screen as that resident. So each is written when the answer
+        // has it, and removed when it does not.
+        ["resident_id", "username"].forEach(function (name) {
+          if (response.data[name] === undefined) {
+            Cookie.remove(name);
+          } else {
+            Cookie.set(name, response.data[name], { expires: 7300 });
+          }
         });
         if (response.data.timezone) {
           Cookie.set("timezone", response.data.timezone, {

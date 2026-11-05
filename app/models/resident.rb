@@ -188,6 +188,7 @@ class Resident < ApplicationRecord
                     format: { with: VALID_EMAIL_REGEX },
                     uniqueness: { case_sensitive: false }, allow_nil: true
   validate :email_presence
+  validate :email_not_reserved
 
   before_validation :set_email
   before_save { self.email = email&.downcase }
@@ -277,6 +278,16 @@ class Resident < ApplicationRecord
   sig { void }
   def email_presence
     errors.add(:email, 'cannot be blank.') if active && can_cook && !child? && email.nil?
+  end
+
+  # A .invalid address is kept for the Common House screen
+  # (CommonHouseLogin::EMAIL). The CHECK residents_email_not_invalid_domain
+  # holds the same rule for writes that skip the model.
+  sig { void }
+  def email_not_reserved
+    return unless email.to_s.downcase.end_with?('.invalid')
+
+    errors.add(:email, 'cannot end in .invalid. That address is for the Common House screen.')
   end
 
   sig { void }

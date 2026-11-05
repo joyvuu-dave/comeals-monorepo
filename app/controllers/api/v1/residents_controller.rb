@@ -17,6 +17,9 @@ module Api
       # that changed the link (2026-10-24), so none can work.
       RETIRED_RESET_LINK = 'This password reset link no longer works. Please request a new one.'
 
+      COMMON_HOUSE_NOT_SET_UP = 'The Common House login is not set up yet. Ask an admin.'
+      COMMON_HOUSE_PASSWORD_BY_ADMIN = 'An admin sets the Common House password. Ask an admin to change it.'
+
       before_action :authenticate, only: [:show_id]
 
       # GET /api/v1/residents/id
@@ -58,7 +61,12 @@ module Api
         # this prevents those accounts from signing in
         render json: { message: 'Email required.' }, status: :bad_request and return if params[:email].blank?
 
-        resident = Resident.find_by(email: params[:email].to_s.strip.downcase)
+        email = params[:email].to_s.strip.downcase
+        # Before the resident lookup, so that address always means the
+        # screen. No resident can have it anyway (Resident#email_not_reserved).
+        return common_house_token if email == CommonHouseLogin::EMAIL
+
+        resident = Resident.find_by(email: email)
         # Says which one is wrong, the email or the password, on purpose (docs/adr/0010-explicit-login-messages.md).
         if resident.nil?
           return render json: { message: "No resident with email #{params[:email]}" }, status: :bad_request
@@ -80,7 +88,14 @@ module Api
       def password_reset
         render json: { message: 'Email required.' }, status: :bad_request and return if params[:email].blank?
 
-        resident = Resident.find_by(email: params[:email].to_s.strip.downcase)
+        email = params[:email].to_s.strip.downcase
+        # Only admins set the Common House password (decided 2026-11-01),
+        # and the address has no mailbox.
+        if email == CommonHouseLogin::EMAIL
+          return render json: { message: COMMON_HOUSE_PASSWORD_BY_ADMIN }, status: :bad_request
+        end
+
+        resident = Resident.find_by(email: email)
 
         # Says the email is unknown, on purpose (docs/adr/0010-explicit-login-messages.md).
         return render json: { message: 'No resident with that email address.' }, status: :bad_request if resident.nil?
@@ -164,6 +179,22 @@ module Api
       end
 
       private
+
+      # The sign-in of the Common House screen (CommonHouseLogin::EMAIL on
+      # the resident form). The answer names the community and no
+      # resident: the screen is not one.
+      def common_house_token
+        login = CommonHouseLogin.first
+        return render json: { message: COMMON_HOUSE_NOT_SET_UP }, status: :bad_request if login.nil?
+
+        password = params[:password]
+        unless password.is_a?(String) && login.authenticate(password)
+          return render json: { message: 'Incorrect password' }, status: :bad_request
+        end
+
+        community = Community.instance
+        render json: { token: JwtAuth.encode(login), community_id: community.id, timezone: community.timezone }
+      end
 
       # The resident row did not save, and what this request changed is
       # never why: a password has no validation (Resident#password=), and

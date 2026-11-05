@@ -237,6 +237,39 @@ describe("ResidentsLogin", () => {
       }
     });
 
+    // The Common House screen signs in on this form too, and its answer
+    // names no resident (ResidentsController#common_house_token). A cookie
+    // written from a missing value holds the text "undefined", and the
+    // calendar link would read that as a resident id. A resident's
+    // cookies left on the device are removed, so the screen never shows
+    // as that resident.
+    it("writes only the cookies the answer has, and removes a resident's", async () => {
+      cookies.current.resident_id = "3";
+      cookies.current.username = "Jane Smith";
+      axios.post.mockResolvedValue({
+        status: 200,
+        data: { token: "tok", community_id: 7, timezone: "America/Chicago" },
+      });
+      const { location, restore } = fakeLocation();
+      try {
+        renderLogin();
+        typeCredentials();
+        fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+        await vitestWaitFor(() => {
+          expect(location.href).toMatch(/^\/calendar\/all\//);
+        });
+        expect(Cookie.set).toHaveBeenCalledTimes(3);
+        expect(cookies.current).toEqual({
+          token: "tok",
+          community_id: "7",
+          timezone: "America/Chicago",
+        });
+      } finally {
+        restore();
+      }
+    });
+
     it("writes nothing when the answer lands after the page is gone", async () => {
       let deliver;
       axios.post.mockReturnValue(
