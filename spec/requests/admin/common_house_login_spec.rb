@@ -48,7 +48,7 @@ RSpec.describe 'Admin Common House login' do
     it 'refuses a short password' do
       post '/common_house_logins', params: form('short')
 
-      expect(response.body).to include('must be at least 12 characters')
+      expect(response.body).to include('must be at least 8 characters')
       expect(CommonHouseLogin.count).to eq(0)
     end
 

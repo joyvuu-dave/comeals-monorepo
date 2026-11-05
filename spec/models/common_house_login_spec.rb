@@ -63,11 +63,11 @@ RSpec.describe CommonHouseLogin do
   end
 
   describe 'the password' do
-    it 'must be at least 12 characters' do
-      login = described_class.new(password: 'a' * 11)
+    it 'must be at least 8 characters' do
+      login = described_class.new(password: 'a' * 7)
 
       expect(login).not_to be_valid
-      expect(login.errors[:password]).to include('must be at least 12 characters')
+      expect(login.errors[:password]).to include('must be at least 8 characters')
     end
 
     it 'cannot be blank, unlike a resident password' do
@@ -87,19 +87,19 @@ RSpec.describe CommonHouseLogin do
       login = described_class.new
 
       expect(login).not_to be_valid
-      expect(login.errors[:password]).to include('must be at least 12 characters')
+      expect(login.errors[:password]).to include('must be at least 8 characters')
     end
 
-    it 'may be exactly 12 characters' do
-      expect(described_class.new(password: 'a' * 12)).to be_valid
+    it 'may be exactly 8 characters' do
+      expect(described_class.new(password: 'a' * 8)).to be_valid
     end
 
-    it 'must be at least 12 characters when it is changed' do
+    it 'must be at least 8 characters when it is changed' do
       login = described_class.create!(password: password)
-      login.password = 'a' * 11
+      login.password = 'a' * 7
 
       expect(login).not_to be_valid
-      expect(login.errors[:password]).to include('must be at least 12 characters')
+      expect(login.errors[:password]).to include('must be at least 8 characters')
     end
 
     # A login read from the database has no password, only its digest.
