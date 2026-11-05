@@ -534,6 +534,35 @@ detect_deploy_needs() {
   return 0
 }
 
+# The commits this deploy changes: the ones between the commit the app
+# runs and HEAD. It printed the newest 5 commits on main until 2026-11,
+# which left out mobx 7 on a staging deploy of 10 commits (#263). A
+# deploy of an older commit takes commits out, and the plan lists those.
+print_deployed_commits() {
+  if [ -z "$HEROKU_SHA" ] || ! git cat-file -e "$HEROKU_SHA^{commit}" 2>/dev/null; then
+    warn "Cannot list the commits being deployed: the commit $APP runs is not known here."
+    return
+  fi
+
+  local running=${HEROKU_SHA:0:7} here
+  here=$(git rev-parse --short HEAD)
+  print_commit_range "Deploys" ", from $running to $here" "$HEROKU_SHA..HEAD"
+  print_commit_range "Takes" " out, from $running back to $here" "HEAD..$HEROKU_SHA"
+}
+
+# Prints "<verb> N commit(s)<what>:" and the commits of the range, when
+# the range has any.
+print_commit_range() {
+  local verb=$1 what=$2 range=$3 count noun=commits
+  count=$(git rev-list --count "$range")
+  [ "$count" -gt 0 ] || return 0
+  [ "$count" -eq 1 ] && noun=commit
+  info "$verb $count $noun$what:"
+  git log --oneline "$range" | while IFS= read -r line; do
+    info "  $line"
+  done
+}
+
 detect_pending_migrations() {
   step "Checking for pending migrations"
 
@@ -1197,9 +1226,7 @@ main() {
   else
     green "    $APP ($sha):  PUSH deploy (no migrations)"
   fi
-  git log --oneline -5 | while IFS= read -r line; do
-    info "  $line"
-  done
+  print_deployed_commits
 
   echo
   if [ "${DEPLOY_YES:-}" = "1" ]; then
