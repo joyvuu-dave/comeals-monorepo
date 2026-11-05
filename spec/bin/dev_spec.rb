@@ -80,7 +80,7 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
 
     result = sandbox.run(script)
 
-    expect(result.status).to eq(1)
+    expect(result.exitstatus).to eq(1)
     expect(result.output).to include('node_modules does not match package-lock.json:', 'Run npm ci')
     expect(sandbox.call_lines).to eq(['bin/npm-installed-check'])
   end
@@ -93,7 +93,7 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
 
     result = sandbox.run(script)
 
-    expect(result.status).to eq(1)
+    expect(result.exitstatus).to eq(1)
     expect(result.output).to include('Bundler cannot find rack-3.2.9',
                                      'Gemfile.lock names gems that are not installed. ' \
                                      'Run bundle install, then rerun bin/dev.')
@@ -109,7 +109,7 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
     expect(result).to be_success, result.output
     expect(result.output).to include("Stopping leftover Rails server (pid #{pid}) on port 3000...")
     expect(alive?(pid)).to be(false)
-    expect(sandbox.calls_to('bundle').size).to eq(1)
+    expect(sandbox.call_lines.grep(/foreman/).size).to eq(1)
   end
 
   it 'gives up after five seconds when the leftover server does not stop' do
@@ -121,7 +121,7 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
     expect(result.exitstatus).to eq(1)
     expect(result.output).to include("Port 3000 is still busy. Stop pid #{pid} yourself", "kill -9 #{pid}")
     expect(sandbox.calls_to('sleep').size).to eq(10)
-    expect(sandbox.calls_to('bundle')).to be_empty
+    expect(sandbox.call_lines.grep(/foreman/)).to be_empty
   end
 
   # A server from a sibling worktree is someone else's running session.
@@ -135,7 +135,7 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
     expect(result.output).to include('Port 3000 is used by a program that was not started from this directory',
                                      "comeals-other-task]\n", "    kill #{pid}")
     expect(alive?(pid)).to be(true)
-    expect(sandbox.calls_to('bundle')).to be_empty
+    expect(sandbox.call_lines.grep(/foreman/)).to be_empty
   end
 
   # The main checkout is comeals-monorepo. Its name contains the name of

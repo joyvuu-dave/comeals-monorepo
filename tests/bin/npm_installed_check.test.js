@@ -116,3 +116,17 @@ test("fails when npm has installed nothing here", () => {
       "  Run npm ci, then rerun bin/dev.\n",
   );
 });
+
+// CI and bin/check run this after npm ci, so the repo's own node_modules
+// must match its lock.
+test("checks the repo's own node_modules when NPM_INSTALLED_ROOT is not set", () => {
+  const env = { ...process.env };
+  delete env.NPM_INSTALLED_ROOT;
+
+  const result = spawnSync(process.execPath, [script], {
+    encoding: "utf8",
+    env,
+  });
+
+  assert.equal(result.status, 0, result.stdout);
+});

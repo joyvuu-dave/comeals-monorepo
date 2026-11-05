@@ -1,0 +1,57 @@
+#!/usr/bin/env node
+// Does node_modules hold the packages package-lock.json names? bin/dev
+// runs this before it starts. A merge or a pull that changes the lock
+// leaves the old packages installed, and the page then crashes in the
+// browser with no message in the terminal (#262).
+//
+// npm writes what it installed to node_modules/.package-lock.json, in the
+// same form as package-lock.json, so the two can be compared without
+// running npm. An optional package may be missing: npm leaves out one
+// built for another system.
+//
+// Exit 0 = they match, 1 = they do not, or npm has installed nothing.
+
+const fs = require("fs");
+const path = require("path");
+
+// NPM_INSTALLED_ROOT is for its test (tests/bin/npm_installed_check.test.js).
+// It is never set otherwise.
+const root = process.env.NPM_INSTALLED_ROOT || path.resolve(__dirname, "..");
+const SHOWN = 5;
+
+function packages(file) {
+  return JSON.parse(fs.readFileSync(path.join(root, file), "utf8")).packages;
+}
+
+function refuse(lines) {
+  console.log([...lines, "  Run npm ci, then rerun bin/dev."].join("\n"));
+  process.exit(1);
+}
+
+const recordFile = "node_modules/.package-lock.json";
+if (!fs.existsSync(path.join(root, recordFile))) {
+  refuse(["  node_modules has no record of what npm installed."]);
+}
+
+const installed = packages(recordFile);
+const differences = [];
+for (const [where, { version, optional }] of Object.entries(
+  packages("package-lock.json"),
+)) {
+  if (where === "") continue; // the app itself
+  const have = installed[where]?.version;
+  if (have === version || (have === undefined && optional)) continue;
+  const name = where.slice(where.lastIndexOf("node_modules/") + 13);
+  differences.push(
+    `    ${name}: ${have ? `${have} installed` : "not installed"}, ${version} in the lock`,
+  );
+}
+
+if (differences.length > 0) {
+  const more = differences.length - SHOWN;
+  refuse([
+    "  node_modules does not match package-lock.json:",
+    ...differences.slice(0, SHOWN),
+    ...(more > 0 ? [`    and ${more} more`] : []),
+  ]);
+}
