@@ -145,9 +145,10 @@ const ResidentsLogin = observer(() => {
         // no resident. A cookie written from a missing value would hold
         // the text "undefined", and the calendar link would read that as
         // a resident id; one left by a resident's session would show the
-        // screen as that resident. So each is written when the answer
-        // has it, and removed when it does not.
-        ["resident_id", "username"].forEach(function (name) {
+        // screen as that resident, and a common_house cookie left by the
+        // screen would show a resident's page as the screen. So each is
+        // written when the answer has it, and removed when it does not.
+        ["resident_id", "username", "common_house"].forEach(function (name) {
           if (response.data[name] === undefined) {
             Cookie.remove(name);
           } else {

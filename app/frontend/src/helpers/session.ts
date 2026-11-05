@@ -40,8 +40,9 @@ export function communityApiPath(endpoint: string): string | null {
   return `/api/v1/communities/${id}/${endpoint}`;
 }
 
-// True on the Common House screen. Not written yet: the tests that need
-// it fail until the next commit.
+// True on the Common House screen: its sign-in answer has
+// common_house: true, which login.jsx keeps as the text "true". A
+// resident's answer has no such field, and login.jsx removes the cookie.
 export function isCommonHouse(): boolean {
-  return false;
+  return cookie("common_house") === "true";
 }

@@ -30,6 +30,9 @@ class CommonHouseLogin < ApplicationRecord
 
   MINIMUM_PASSWORD_LENGTH = 12
 
+  # What the headers call the screen ("logout Common House").
+  NAME = 'Common House'
+
   # What the screen types in the email box of the resident sign-in form.
   # It ends in .invalid, which RFC 2606 keeps from ever being a real
   # domain, so no mail can reach anyone through it. No resident may have

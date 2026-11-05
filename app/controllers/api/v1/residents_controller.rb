@@ -182,7 +182,9 @@ module Api
 
       # The sign-in of the Common House screen (CommonHouseLogin::EMAIL on
       # the resident form). The answer names the community and no
-      # resident: the screen is not one.
+      # resident: the screen is not one. The web app keeps each field in a
+      # cookie (login.jsx): username is what the headers show, and
+      # common_house tells the page it is the shared screen.
       def common_house_token
         login = CommonHouseLogin.first
         return render json: { message: COMMON_HOUSE_NOT_SET_UP }, status: :bad_request if login.nil?
@@ -193,7 +195,8 @@ module Api
         end
 
         community = Community.instance
-        render json: { token: JwtAuth.encode(login), community_id: community.id, timezone: community.timezone }
+        render json: { token: JwtAuth.encode(login), community_id: community.id, timezone: community.timezone,
+                       username: CommonHouseLogin::NAME, common_house: true }
       end
 
       # The resident row did not save, and what this request changed is

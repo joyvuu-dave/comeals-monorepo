@@ -186,6 +186,7 @@ export function appActions(self) {
       Cookie.remove("community_id", { path: "/" });
       Cookie.remove("resident_id", { path: "/" });
       Cookie.remove("username", { path: "/" });
+      Cookie.remove("common_house", { path: "/" });
       Cookie.remove("timezone", { path: "/" });
     },
     setIsOnline(val) {
