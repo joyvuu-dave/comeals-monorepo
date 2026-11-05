@@ -22,8 +22,13 @@ class AuditSerializer
   # first word. A data fix writes its rows with neither, so the release
   # before this one, which still asks `user` for a name, can show them
   # after a rollback; its comment says who, and starts with AUTOMATIC_FIX.
+  #
+  # The Common House screen (CommonHouseLogin) is not a person and has no
+  # name, so it is named by CommonHouseLogin::NAME, whole: shortened like
+  # a person's name, "Common House" would be "Common H".
   def user_name(audit)
     person = audit.user_as_model
+    return CommonHouseLogin::NAME if person.is_a?(CommonHouseLogin)
     return ResidentNameShortener.short(person.name) unless person.nil?
     return audit.username if audit.username.present?
 
