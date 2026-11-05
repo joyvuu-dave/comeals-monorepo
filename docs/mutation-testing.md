@@ -4805,4 +4805,4 @@ unencrypted_password.nil?`: SCrypt answers false for nil, so with the
 `JwtAuth.encode` after its `case` with `T.absurd` became the lookup
 `ID_CLAIMS.fetch(login.class)`: 46 mutations, 45 killed. Left (1): the
 algorithm left out of `JWT.encode`, which signs with HS256 anyway (the
-2026-11-03 entry above).
+"2026-10-16, how a request is signed in" entry above).
