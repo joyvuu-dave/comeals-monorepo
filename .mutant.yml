@@ -212,6 +212,7 @@ matcher:
     - AdminUser.ransackable_attributes
     - Bill.ransackable_attributes
     - Bill.ransackable_associations
+    - CommonHouseLogin.ransackable_attributes
     - CommonHouseReservation.ransackable_attributes
     - Community.ransackable_attributes
     - Event.ransackable_attributes

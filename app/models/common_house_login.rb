@@ -56,6 +56,13 @@ class CommonHouseLogin < ApplicationRecord
 
   after_save :revoke_all_sessions_if_password_changed
 
+  # What admin may sort by (AdminOrderClause). The page has no list and
+  # no filters, but it sorts by id by default. Never the digest or the
+  # session time.
+  def self.ransackable_attributes(_auth_object = nil)
+    %w[id created_at updated_at]
+  end
+
   sig { params(unencrypted_password: T.nilable(String)).returns(T.any(FalseClass, CommonHouseLogin)) }
   def authenticate(unencrypted_password)
     return false if unencrypted_password.nil?
