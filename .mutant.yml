@@ -49,6 +49,7 @@ matcher:
     - BrowserDescription*
     - BrowserReport*
     - CollectionList*
+    - CommonHouseHistory*
     - CorrectionWords*
     - DateRangeDescription*
     - DinnerCancelling*
@@ -127,6 +128,7 @@ matcher:
     - AdminUser*
     - Bill*
     - BillsSaveKey*
+    - CommonHouseLogin*
     - CommonHouseReservation*
     - Community*
     - Event*

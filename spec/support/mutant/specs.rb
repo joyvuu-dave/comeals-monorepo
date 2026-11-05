@@ -356,6 +356,7 @@ MUTANT_SPEC_ROWS = {
   'spec/models/resident_spec.rb' => %w[Resident LiveUpdate BelongsToTheCommunity HasPhoneNumber],
   'spec/models/resident_price_band_spec.rb' => %w[Resident Community LiveUpdate BelongsToTheCommunity HasPhoneNumber],
   'spec/models/resident_birthday_chip_spec.rb' => %w[Resident BelongsToTheCommunity HasPhoneNumber],
+  'spec/models/resident_reserved_email_spec.rb' => %w[Resident BelongsToTheCommunity HasPhoneNumber],
   'spec/models/unit_spec.rb' => %w[Unit LiveUpdate BelongsToTheCommunity],
   'spec/requests/admin/all_pages_spec.rb' =>
     %w[BalanceDisplayHelper SettlementLinesTable LedgerCheckFindingsTable MoneyFieldHelper ScheduleWeekLabelHelper
@@ -412,6 +413,8 @@ MUTANT_SPEC_ROWS = {
   'spec/tasks/deploy_verify_spec.rb' =>
     %w[SolidQueueCheck SquashedMigrationsCheck SolidQueueCheck.verify_processes!
        SolidQueueCheck.verify_recurring_run! SquashedMigrationsCheck.verify!],
+  'spec/services/common_house_history_spec.rb' => %w[CommonHouseHistory],
+  'spec/tasks/history_relabel_as_common_house_spec.rb' => %w[CommonHouseHistory],
   'spec/lib/solid_cache/store_spec.rb' => [],
 
   # Slow or timing-dependent by design: a storm, random sequences, a
