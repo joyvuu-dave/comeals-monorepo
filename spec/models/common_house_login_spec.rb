@@ -130,4 +130,16 @@ RSpec.describe CommonHouseLogin do
 
     expect(login.serializable_hash.keys).not_to include('password_digest', 'keys_valid_since')
   end
+
+  # The resident sign-in form takes it, so it must be an address the
+  # resident model would take, except for its .invalid ending.
+  describe 'EMAIL' do
+    it 'is the reserved address' do
+      expect(described_class::EMAIL).to eq('common-house@comeals.invalid')
+    end
+
+    it 'has the form of an email address' do
+      expect(described_class::EMAIL).to match(Resident::VALID_EMAIL_REGEX)
+    end
+  end
 end
