@@ -1303,12 +1303,30 @@ at SERIALIZABLE the second is refused. The job retries it
 
 `POST /api/v1/residents/token` checks the password and returns a JWT from
 `JwtAuth.encode` (`app/services/jwt_auth.rb`): HS256, signed with a key
-derived from `secret_key_base`, with `resident_id`, `iat` (issued-at, with
-fractional seconds), and `iss` = "comeals" in the payload. No database row is
-written per session. `JwtAuth.authenticate` checks the signature and issuer,
-loads the resident, and refuses the token if `iat` is before
-`residents.keys_valid_since`. Raising `keys_valid_since` is how every session
-is revoked at once; a password change does it.
+derived from `secret_key_base`. The payload has `resident_id` or
+`common_house_login_id` (never both), `iat` (issued-at, with fractional
+seconds), `iss` = "comeals", and the login's `keys_valid_since` as it was when
+the token was made, in whole microseconds. No database row is written per
+session. `JwtAuth.authenticate` checks the signature and issuer, loads the
+login, and refuses the token unless `keys_valid_since` still has the value the
+token carries (#265). A resident's token made before 2026-11-03 has no
+`keys_valid_since` claim and keeps the old rule: its `iat` must not be before
+`keys_valid_since`. Changing `keys_valid_since` is how every session of a
+login is revoked at once; a password change does it.
+
+### CommonHouseLogin
+
+The login of the shared screen in the Common House. It is not a resident
+(ADR 0013). At most one row (`singleton_guard`), never deleted, because the
+history names it. It signs in on the resident form with
+`common-house@comeals.invalid` (`CommonHouseLogin::EMAIL`), and only a
+superuser sets its password, on the admin page. `ApiController#current_login`
+is a `Resident` or this login; `#current_resident_api` is only ever a
+`Resident`, and the two actions that need a person (settling, and
+`GET /residents/id`) answer 403 for this login.
+
+**CommonHouseLogin fields:** `password_digest` (SCrypt, at least 12
+characters), `keys_valid_since`, `singleton_guard`
 
 ### Key
 

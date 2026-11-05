@@ -11,7 +11,8 @@ Worth writing down so nobody rebuilds it.
 
 - **Who changed a row.** `config/initializers/audited.rb` sets
   `current_user_method = :audited_user`, resolved per controller — API requests
-  attribute to the resident, ActiveAdmin requests to the admin user. The
+  attribute to the resident or to the Common House login (ADR 0013),
+  ActiveAdmin requests to the admin user. The
   `audits` table records `user_id`, `username`, `remote_address`, and
   `request_uuid`.
 - **Correlating one request's changes.** `audits.request_uuid` groups every row

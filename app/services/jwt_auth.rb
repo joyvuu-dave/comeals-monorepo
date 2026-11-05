@@ -4,10 +4,11 @@
 # Stateless authentication using JSON Web Tokens.
 #
 # Each login issues a JWT signed with a key derived from secret_key_base.
-# The token holds the resident id, the time it was made (`iat`), and the
-# resident's `keys_valid_since` as it was when the token was made, in
-# microseconds. A token is good while its signature checks and the
-# resident's `keys_valid_since` still has that same value. There is no
+# The token holds the id of the login (a resident, or the Common House
+# login), the time it was made (`iat`), and the login's
+# `keys_valid_since` as it was when the token was made, in microseconds.
+# A token is good while its signature checks and the login's
+# `keys_valid_since` still has that same value. There is no
 # database row per session, and no lookup by token string.
 #
 # Tokens made before 2026-11-03 have no `keys_valid_since` claim. They
