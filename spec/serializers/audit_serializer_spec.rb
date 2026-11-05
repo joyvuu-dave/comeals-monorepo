@@ -17,6 +17,15 @@ RSpec.describe AuditSerializer do
     )
   end
 
+  # The Common House screen is not a person, so its name is shown whole.
+  # Shortened like a person's name, it would show as "Common".
+  it 'names the Common House screen as the Common House' do
+    login = create(:common_house_login)
+    meal = Audited.audit_class.as_user(login) { create(:meal, community: community) }
+
+    expect(described_class.new(meal.audits.first).to_h).to include(user_name: 'Common House')
+  end
+
   it 'names the cook of a single bill row' do
     meal = create(:meal, community: community)
     bill = create(:bill, meal: meal, resident: resident, community: community)

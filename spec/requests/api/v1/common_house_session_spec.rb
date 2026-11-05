@@ -33,6 +33,19 @@ RSpec.describe 'A Common House session' do
     expect(audit).to have_attributes(user_type: 'CommonHouseLogin', user_id: login.id)
   end
 
+  # The history of the dinner is a page every resident reads. A row the
+  # screen wrote must show, with its name, and not break the page.
+  it 'shows its sign-up in the dinner history as the Common House' do
+    meal = create(:meal, community: community)
+    post "/api/v1/meals/#{meal.id}/residents/#{resident.id}",
+         params: { late: false, vegetarian: false }, headers: headers
+
+    get "/api/v1/meals/#{meal.id}/history", headers: headers
+
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body['items'].pluck('user_name')).to include('Common House')
+  end
+
   # 19:00 typed at the screen is 19:00 in New York, the community's zone,
   # not in the app's default zone.
   it "reads the times it sends in the community's zone" do
