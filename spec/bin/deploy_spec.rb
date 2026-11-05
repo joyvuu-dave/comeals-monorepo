@@ -518,6 +518,58 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     end
   end
 
+  # The plan before "Continue? (y/n)" lists what the deploy changes: the
+  # commits between the one production runs and this one. It listed the
+  # newest 5 on main until 2026-11, and so left out mobx 7 on a staging
+  # deploy of 10 commits (#263).
+  describe 'the deploy plan' do
+    let(:running) { deploy.commits[:second_migration] }
+
+    def plan(result) = result.output[/Deploy plan:.*?(Proceeding|Continue)/m]
+
+    it 'lists only the commits being deployed, and counts them' do
+      result = deploy.run('--yes')
+
+      expect(plan(result)).to include("Deploys 1 commit, from #{running[0, 7]} to #{head[0, 7]}:",
+                                      "#{head[0, 7]} only app code")
+      expect(plan(result)).not_to include('second', 'first')
+    end
+
+    it 'lists every commit when there are more than five' do
+      deploy.production(heroku_sha: deploy.commits[:first_migration])
+      6.times { |n| deploy.commits[:head] = deploy.commit({ "app/n#{n}.rb" => n.to_s }, "change #{n}") }
+      deploy.git('update-ref', 'refs/remotes/origin/main', deploy.commits[:head])
+
+      result = deploy.run('--yes')
+
+      expect(plan(result)).to include('Deploys 8 commits, from ', 'second', 'only app code',
+                                      *(0..5).map { "change #{it}" })
+      expect(plan(result)).not_to include(' first')
+    end
+
+    it 'lists the commits a deploy of an older commit takes out of production' do
+      newer = deploy.commit({ 'app/b.rb' => 'newer' }, 'newer, running now')
+      deploy.git('reset', '-q', '--hard', head)
+      deploy.production(heroku_sha: newer)
+
+      result = deploy.run('--yes')
+
+      expect(plan(result)).to include("Takes 1 commit out, from #{newer[0, 7]} back to #{head[0, 7]}:",
+                                      "#{newer[0, 7]} newer, running now")
+      expect(plan(result)).not_to include('Deploys ')
+    end
+
+    it 'says it cannot list the commits when it cannot read the commit Heroku runs' do
+      deploy.production(heroku_sha: '')
+
+      result = deploy.run('--yes')
+
+      expect(plan(result)).to include('Cannot list the commits being deployed: the commit comeals-monorepo runs ' \
+                                      'is not known here.')
+      expect(plan(result)).not_to include('only app code')
+    end
+  end
+
   describe 'the commit Heroku runs is not in the local history' do
     it 'fetches it from Heroku and compares migrations as usual' do
       sha, side = deploy.commit_elsewhere('app/a.rb' => 'elsewhere')

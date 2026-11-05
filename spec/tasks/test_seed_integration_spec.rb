@@ -51,6 +51,16 @@ RSpec.describe 'test:seed_integration', type: :task do
     expect(rotations).to all(satisfy { |rotation| rotation[:id] != rotation[:place_value] })
   end
 
+  # The check above that no rotation's id equals its place holds only
+  # when ids start where a new database starts them. Earlier examples use
+  # up ids, and a sequence does not go back on a rollback, so the seed
+  # restarts them (#267).
+  it 'starts the ids again, whatever ids were used before it' do
+    ActiveRecord::Base.connection.execute("SELECT setval('rotations_id_seq', 500)")
+
+    expect(seed[:rotations].values.pluck(:id)).to all(be < 500)
+  end
+
   it 'refuses to run outside the test environment' do
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new('development'))
 

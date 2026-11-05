@@ -19,6 +19,7 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
     sandbox.fake('ps')
     sandbox.fake('sleep')
     sandbox.fake('bundle')
+    sandbox.fake_script('bin/npm-installed-check')
   end
 
   after do
@@ -60,9 +61,43 @@ RSpec.describe 'bin/dev', bash_coverage: BashCoverage.new('spec/bin/dev_spec.rb'
 
     expect(result).to be_success, result.output
     expect(result.output).to include('Comeals:       http://localhost:3036')
-    expect(sandbox.call_lines).to eq(['lsof -nP -tiTCP:3000 -sTCP:LISTEN', 'lsof -nP -tiTCP:3036 -sTCP:LISTEN',
+    expect(sandbox.call_lines).to eq(['bin/npm-installed-check', 'bundle check',
+                                      'lsof -nP -tiTCP:3000 -sTCP:LISTEN', 'lsof -nP -tiTCP:3036 -sTCP:LISTEN',
                                       'rm -f tmp/pids/server.pid', 'bundle exec foreman start -f Procfile.dev web=1'])
     expect(File).not_to exist(pid_file)
+  end
+
+  # After a merge or a pull changes package-lock.json, node_modules can
+  # still hold the old packages, and the page crashes in the browser with
+  # no message here (#262). bin/dev does not install them itself: a dev
+  # server from this folder may still be running from those files.
+  it 'refuses to start when node_modules does not match package-lock.json' do
+    sandbox.fake_script('bin/npm-installed-check', <<~BASH)
+      echo '  node_modules does not match package-lock.json:'
+      echo '  Run npm ci, then rerun bin/dev.'
+      exit 1
+    BASH
+
+    result = sandbox.run(script)
+
+    expect(result.status).to eq(1)
+    expect(result.output).to include('node_modules does not match package-lock.json:', 'Run npm ci')
+    expect(sandbox.call_lines).to eq(['bin/npm-installed-check'])
+  end
+
+  it 'refuses to start when Gemfile.lock names gems that are not installed' do
+    sandbox.fake('bundle', <<~BASH)
+      [ "$1" = check ] && { echo 'Bundler cannot find rack-3.2.9'; exit 1; }
+      exit 0
+    BASH
+
+    result = sandbox.run(script)
+
+    expect(result.status).to eq(1)
+    expect(result.output).to include('Bundler cannot find rack-3.2.9',
+                                     'Gemfile.lock names gems that are not installed. ' \
+                                     'Run bundle install, then rerun bin/dev.')
+    expect(sandbox.call_lines).to eq(['bin/npm-installed-check', 'bundle check'])
   end
 
   it 'stops a leftover server that was started from this folder, then starts' do
