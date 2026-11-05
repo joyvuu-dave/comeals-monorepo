@@ -248,7 +248,13 @@ describe("ResidentsLogin", () => {
       cookies.current.username = "Jane Smith";
       axios.post.mockResolvedValue({
         status: 200,
-        data: { token: "tok", community_id: 7, timezone: "America/Chicago" },
+        data: {
+          token: "tok",
+          community_id: 7,
+          timezone: "America/Chicago",
+          username: "Common House",
+          common_house: true,
+        },
       });
       const { location, restore } = fakeLocation();
       try {
@@ -259,12 +265,36 @@ describe("ResidentsLogin", () => {
         await vitestWaitFor(() => {
           expect(location.href).toMatch(/^\/calendar\/all\//);
         });
-        expect(Cookie.set).toHaveBeenCalledTimes(3);
+        expect(Cookie.set).toHaveBeenCalledTimes(5);
         expect(cookies.current).toEqual({
           token: "tok",
           community_id: "7",
           timezone: "America/Chicago",
+          username: "Common House",
+          common_house: "true",
         });
+      } finally {
+        restore();
+      }
+    });
+
+    // A resident signs in on a device the Common House screen used. The
+    // resident's answer has no common_house field, so the cookie the
+    // screen left goes, and the page is the resident's.
+    it("removes the Common House cookie when a resident signs in", async () => {
+      cookies.current.common_house = "true";
+      axios.post.mockResolvedValue({ status: 200, data: SESSION });
+      const { location, restore } = fakeLocation();
+      try {
+        renderLogin();
+        typeCredentials();
+        fireEvent.click(screen.getByRole("button", { name: "Submit" }));
+
+        await vitestWaitFor(() => {
+          expect(location.href).toMatch(/^\/calendar\/all\//);
+        });
+        expect(cookies.current.common_house).toBeUndefined();
+        expect(cookies.current.resident_id).toBe("3");
       } finally {
         restore();
       }

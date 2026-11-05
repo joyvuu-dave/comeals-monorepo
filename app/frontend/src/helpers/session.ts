@@ -39,3 +39,9 @@ export function communityApiPath(endpoint: string): string | null {
   if (id === null) return null;
   return `/api/v1/communities/${id}/${endpoint}`;
 }
+
+// True on the Common House screen. Not written yet: the tests that need
+// it fail until the next commit.
+export function isCommonHouse(): boolean {
+  return false;
+}

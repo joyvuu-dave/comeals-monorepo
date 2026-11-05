@@ -133,6 +133,11 @@ RSpec.describe CommonHouseLogin do
 
   # The resident sign-in form takes it, so it must be an address the
   # resident model would take, except for its .invalid ending.
+  # What the headers and the history call the screen.
+  it 'is called Common House' do
+    expect(described_class::NAME).to eq('Common House')
+  end
+
   describe 'EMAIL' do
     it 'is the reserved address' do
       expect(described_class::EMAIL).to eq('common-house@comeals.invalid')

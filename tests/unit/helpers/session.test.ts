@@ -5,6 +5,7 @@ import Cookie from "js-cookie";
 
 import {
   communityApiPath,
+  isCommonHouse,
   signedIn,
 } from "../../../app/frontend/src/helpers/session";
 
@@ -39,5 +40,19 @@ describe("session", () => {
 
     Cookie.remove("token");
     expect(signedIn()).toBe(false);
+  });
+
+  // The sign-in answer of the Common House screen has common_house: true,
+  // and login.jsx keeps it as the text "true". A resident's answer has
+  // no such field, so the page has no such cookie.
+  it("is the Common House screen only with the cookie the sign-in wrote", () => {
+    Cookie.set("common_house", "true");
+    expect(isCommonHouse()).toBe(true);
+
+    Cookie.remove("common_house");
+    expect(isCommonHouse()).toBe(false);
+
+    Cookie.set("common_house", "undefined");
+    expect(isCommonHouse()).toBe(false);
   });
 });

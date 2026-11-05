@@ -16,8 +16,11 @@ namespace :test do
     # ledger_check_runs and audits are listed by name: they have no foreign
     # key to communities, so the CASCADE does not reach them. This suite
     # shares the RSpec test database, and until 2026-10-14 every run left
-    # its audits there for the next RSpec run to find.
-    ActiveRecord::Base.connection.execute('TRUNCATE communities, ledger_check_runs, audits CASCADE')
+    # its audits there for the next RSpec run to find. common_house_logins
+    # has no foreign key either.
+    ActiveRecord::Base.connection.execute(
+      'TRUNCATE communities, ledger_check_runs, audits, common_house_logins CASCADE'
+    )
     Current.reset
 
     # ------------------------------------------------------------------
@@ -271,6 +274,10 @@ namespace :test do
     first_rotation = Rotation.create!(meals_attributes: [{ date: 40.days.from_now.to_date }])
     Bill.create!(meal: first_rotation.meals.first, resident: jane, amount: BigDecimal('0'))
 
+    # The Common House screen's login, with a test password, so a browser
+    # test can sign in with CommonHouseLogin::EMAIL.
+    CommonHouseLogin.create!(password: 'common house test password')
+
     # Write test context for Playwright to read at test time.
     auth_file = Rails.root.join('tmp/integration_auth.json')
     FileUtils.mkdir_p(auth_file.dirname)
@@ -282,6 +289,8 @@ namespace :test do
                             bob_email: bob.email,
                             bob_password: 'password',
                             bob_id: bob.id,
+                            common_house_email: CommonHouseLogin::EMAIL,
+                            common_house_password: 'common house test password',
                             diana_id: diana.id,
                             rotations: {
                               first: { id: first_rotation.id, place_value: first_rotation.reload.place_value },

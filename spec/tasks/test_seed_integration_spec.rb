@@ -34,6 +34,8 @@ RSpec.describe 'test:seed_integration', type: :task do
     expect(Resident.find(auth[:bob_id]).email).to eq(auth[:bob_email])
     expect(Resident.find(auth[:diana_id]).active).to be(false)
     expect(auth[:community_id]).to eq(Community.instance.id)
+    expect(CommonHouseLogin.sole.authenticate(auth[:common_house_password])).to eq(CommonHouseLogin.sole)
+    expect(auth[:common_house_email]).to eq(CommonHouseLogin::EMAIL)
 
     meals = auth[:meals].transform_values { |meal| Meal.find(meal[:id]) }
     expect(meals.transform_values { |meal| meal.date.iso8601 }).to eq(auth[:meals].transform_values { |m| m[:date] })

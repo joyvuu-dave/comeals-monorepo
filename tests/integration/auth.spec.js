@@ -85,3 +85,55 @@ test.describe("Authentication (real backend)", () => {
     await expect(page.locator('input[aria-label="email"]')).toHaveCount(0);
   });
 });
+
+// The Common House screen signs in on the resident form with its own
+// address (CommonHouseLogin::EMAIL) and the password an admin set. It is
+// not a resident: the headers name it "Common House", and the calendar
+// shows no feed links, so the page never asks which resident it is.
+test.describe("The Common House screen (real backend)", () => {
+  test.beforeEach(async ({ page }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+  });
+
+  test("signs in on the resident form and shows itself as the Common House", async ({
+    page,
+  }) => {
+    const auth = loadAuthInfo();
+    const residentIdAsks = [];
+    page.on("request", (request) => {
+      if (request.url().includes("/api/v1/residents/id")) {
+        residentIdAsks.push(request.url());
+      }
+    });
+
+    await page.goto("/");
+    await page
+      .locator('input[aria-label="email"]')
+      .fill(auth.common_house_email);
+    await page
+      .locator('input[aria-label="password"]')
+      .fill(auth.common_house_password);
+    await page.getByRole("button", { name: "Submit" }).click();
+
+    await expect(page).toHaveURL(/\/calendar\//, { timeout: 10000 });
+    await expect(page.locator(".rbc-calendar")).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByRole("button", { name: "logout Common House" }),
+    ).toBeVisible();
+    await expect(page.getByRole("link", { name: /Subscribe to/ })).toHaveCount(
+      0,
+    );
+
+    // The dinner page's header names it the same way.
+    await page.goto(`/meals/${auth.meals.tomorrow.id}/edit/`);
+    await expect(
+      page.locator('[aria-label="Enter meal description"]'),
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByRole("button", { name: "logout Common House" }),
+    ).toBeVisible();
+
+    expect(residentIdAsks).toEqual([]);
+  });
+});

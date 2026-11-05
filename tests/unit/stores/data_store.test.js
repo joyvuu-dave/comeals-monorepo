@@ -4649,12 +4649,17 @@ describe("DataStore", () => {
       expect(axios.delete).toHaveBeenCalledWith("/api/v1/sessions/current", {
         headers: { Authorization: "Bearer test-token" },
       });
-      ["token", "community_id", "resident_id", "username", "timezone"].forEach(
-        (name) => {
-          expect(Cookie.remove).toHaveBeenCalledWith(name, { path: "/" });
-          expect(Cookie.get(name)).toBeUndefined();
-        },
-      );
+      [
+        "token",
+        "community_id",
+        "resident_id",
+        "username",
+        "common_house",
+        "timezone",
+      ].forEach((name) => {
+        expect(Cookie.remove).toHaveBeenCalledWith(name, { path: "/" });
+        expect(Cookie.get(name)).toBeUndefined();
+      });
     });
 
     it("skips the server call when no token cookie is present", () => {

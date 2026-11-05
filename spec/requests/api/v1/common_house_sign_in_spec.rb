@@ -16,21 +16,24 @@ RSpec.describe 'Signing in the Common House screen' do
   describe 'with the login made in admin' do
     let!(:login) { create(:common_house_login, password: password) }
 
-    it 'answers a token for the Common House login, and the community' do
+    # The web app keeps each field in a cookie (login.jsx). username is
+    # what the headers show ("logout Common House"), and common_house
+    # tells the page it is the shared screen.
+    it 'answers a token for the Common House login, the community, and what the screen is called' do
       sign_in
 
       expect(response).to have_http_status(:ok)
       body = response.parsed_body
       expect(JwtAuth.authenticate(body['token'])).to eq(login)
-      expect(body.except('token')).to eq('community_id' => community.id, 'timezone' => 'America/New_York')
+      expect(body.except('token')).to eq('community_id' => community.id, 'timezone' => 'America/New_York',
+                                         'username' => 'Common House', 'common_house' => true)
     end
 
-    # The screen is not a resident, so the answer names none: no
-    # resident_id, no username.
+    # The screen is not a resident, so the answer has no resident id.
     it 'names no resident' do
       sign_in
 
-      expect(response.parsed_body.keys).to contain_exactly('token', 'community_id', 'timezone')
+      expect(response.parsed_body).not_to have_key('resident_id')
     end
 
     it 'takes the address in capitals and with spaces around it' do

@@ -20,6 +20,21 @@ describe("WebcalLinks", () => {
     vi.clearAllMocks();
     delete cookies.current.resident_id;
     delete cookies.current.token;
+    delete cookies.current.common_house;
+  });
+
+  // The Common House screen is not a resident, so it has no feed of its
+  // own, and the server answers 403 to "which resident am I". The
+  // community's feed is on every resident's calendar, so the shared
+  // screen shows neither link.
+  it("draws nothing and asks nothing on the Common House screen", async () => {
+    cookies.current.token = "tok";
+    cookies.current.common_house = "true";
+    const { container } = render(<WebcalLinks />);
+    await act(async () => {});
+
+    expect(container).toBeEmptyDOMElement();
+    expect(axios.get).not.toHaveBeenCalled();
   });
 
   // Logout removes every session cookie just before the page reloads,

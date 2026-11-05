@@ -54,12 +54,14 @@ cleanup() {
     wait "$RAILS_PID" 2>/dev/null || true
   fi
   # Wipe integration seed data so RSpec finds a clean database.
-  # ledger_check_runs, audits and browser_counts are listed by name: the
-  # seed task and the suite write them (browser_counts when the server
-  # runs its jobs), but they have no foreign key to communities, so the
-  # CASCADE does not reach them.
+  # ledger_check_runs, audits, browser_counts and common_house_logins are
+  # listed by name: the seed task and the suite write them (browser_counts
+  # when the server runs its jobs), but they have no foreign key to
+  # communities, so the CASCADE does not reach them. A login left behind
+  # would make every RSpec example that creates one fail, because there
+  # may be only one.
   echo "Resetting test database..."
-  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, audits, browser_counts CASCADE" 2>/dev/null || true
+  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, audits, browser_counts, common_house_logins CASCADE" 2>/dev/null || true
 }
 trap cleanup EXIT
 
