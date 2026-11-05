@@ -17,9 +17,12 @@ namespace :test do
     # key to communities, so the CASCADE does not reach them. This suite
     # shares the RSpec test database, and until 2026-10-14 every run left
     # its audits there for the next RSpec run to find. common_house_logins
-    # has no foreign key either.
+    # has no foreign key either. RESTART IDENTITY starts every id at 1
+    # again, so the ids do not depend on which rows came before: one check
+    # needs each rotation's id to differ from its place (#267). Inside a
+    # spec's transaction, PostgreSQL undoes the restart with the rollback.
     ActiveRecord::Base.connection.execute(
-      'TRUNCATE communities, ledger_check_runs, audits, common_house_logins CASCADE'
+      'TRUNCATE communities, ledger_check_runs, audits, common_house_logins RESTART IDENTITY CASCADE'
     )
     Current.reset
 
