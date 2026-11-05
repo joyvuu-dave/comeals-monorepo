@@ -14,7 +14,7 @@ RSpec.describe 'bin/lib/staging_smoke_seed.rb' do
   seed = RubyVM::InstructionSequence.compile_file(Rails.root.join('bin/lib/staging_smoke_seed.rb').to_s)
 
   let(:env) do
-    { 'COMEALS_STAGING' => '1', 'SMOKE_EMAIL' => 'smoke@staging.invalid', 'SMOKE_PASSWORD' => 'made-up-password' }
+    { 'COMEALS_STAGING' => '1', 'SMOKE_EMAIL' => 'smoke@staging.test', 'SMOKE_PASSWORD' => 'made-up-password' }
   end
   let(:today) { Community.instance.today }
   let!(:unit) { create(:unit, name: 'A1') }
@@ -40,7 +40,7 @@ RSpec.describe 'bin/lib/staging_smoke_seed.rb' do
 
     expect { run_seed }.to output(/\ASMOKE_MEAL_ID=\d+\n\z/).to_stdout
 
-    resident = Resident.find_by!(email: 'smoke@staging.invalid')
+    resident = Resident.find_by!(email: 'smoke@staging.test')
     expect(resident).to have_attributes(name: 'Smoke Test', unit:, can_cook: true, vegetarian: false,
                                         birthday: Date.new(1990, 1, 1))
     expect(resident.authenticate('made-up-password')).to eq(resident)
@@ -49,13 +49,13 @@ RSpec.describe 'bin/lib/staging_smoke_seed.rb' do
   end
 
   it 'gives the password of this rehearsal to a smoke resident left from an earlier one' do
-    old = create(:resident, email: 'smoke@staging.invalid', name: 'Old Smoke', password: 'older-password')
+    old = create(:resident, email: 'smoke@staging.test', name: 'Old Smoke', password: 'older-password')
 
     expect { run_seed }.to output.to_stdout
 
     expect(old.reload.name).to eq('Smoke Test')
     expect(old.authenticate('made-up-password')).to eq(old)
-    expect(Resident.where(email: 'smoke@staging.invalid').count).to eq(1)
+    expect(Resident.where(email: 'smoke@staging.test').count).to eq(1)
   end
 
   it 'takes the first free date from 120 days out' do
@@ -70,7 +70,7 @@ RSpec.describe 'bin/lib/staging_smoke_seed.rb' do
     ENV['COMEALS_STAGING'] = ''
 
     expect { run_seed }.to a_refusal('Refusing: COMEALS_STAGING is not set')
-    expect(Resident.exists?(email: 'smoke@staging.invalid')).to be(false)
+    expect(Resident.exists?(email: 'smoke@staging.test')).to be(false)
   end
 
   it 'refuses when the database has no units' do

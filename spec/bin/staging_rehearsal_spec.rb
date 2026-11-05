@@ -110,7 +110,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
         "heroku run --exit-code #{staging} -- bin/rake ledger:verify",
         'openssl rand -hex 16',
         'mktemp',
-        "heroku run --exit-code #{staging} --env SMOKE_EMAIL=smoke@staging.invalid;" \
+        "heroku run --exit-code #{staging} --env SMOKE_EMAIL=smoke@staging.test;" \
         'SMOKE_PASSWORD=made-up-password -- bin/rails runner bin/lib/staging_smoke_seed.rb',
         "heroku ps:scale web=1 worker=1 #{staging}",
         "heroku apps:info #{staging} --json",
@@ -192,7 +192,7 @@ RSpec.describe 'bin/staging-rehearsal', bash_coverage: BashCoverage.new('spec/bi
     rehearse
 
     smoke, aggressive = sandbox.calls_to('node')
-    login = { 'SMOKE_EMAIL' => 'smoke@staging.invalid', 'SMOKE_PASSWORD' => 'made-up-password' }
+    login = { 'SMOKE_EMAIL' => 'smoke@staging.test', 'SMOKE_PASSWORD' => 'made-up-password' }
     expect(smoke.env).to eq(login.merge('SMOKE_URL' => url))
     expect(aggressive.env).to eq(login.merge('SMOKE_URL' => url, 'SMOKE_MEAL_ID' => '42'))
   end

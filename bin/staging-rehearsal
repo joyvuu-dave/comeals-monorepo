@@ -173,7 +173,10 @@ step "Seed the smoke resident and smoke meal"
 
 # A per-rehearsal random password, passed as env, never stored. The
 # seed refuses to run unless the app says COMEALS_STAGING.
-SMOKE_EMAIL="smoke@staging.invalid"
+# .test is kept by RFC 2606 from ever being a real domain, so no mail
+# reaches anyone. Not .invalid: that ending is for the Common House
+# sign-in, and no resident may have it (ADR 0013).
+SMOKE_EMAIL="smoke@staging.test"
 SMOKE_PASSWORD=$(openssl rand -hex 16)
 seed_log=$(mktemp)
 seed_env="SMOKE_EMAIL=$SMOKE_EMAIL;SMOKE_PASSWORD=$SMOKE_PASSWORD"
