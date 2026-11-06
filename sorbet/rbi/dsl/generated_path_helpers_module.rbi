@@ -142,6 +142,15 @@ module GeneratedPathHelpersModule
   def api_v1_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def api_v1_profile_email_confirm_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_profile_email_link_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_profile_path(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def api_v1_reconciliations_path(*args); end
 
   sig { params(args: T.untyped).returns(String) }

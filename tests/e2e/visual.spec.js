@@ -19,6 +19,7 @@ const {
 const mealFixture = require("../fixtures/meal.json");
 const calendarFixture = require("../fixtures/calendar.json");
 const rotationFixture = require("../fixtures/rotation.json");
+const profileFixture = require("../fixtures/profile.json");
 
 /**
  * Visual regression tests.
@@ -389,6 +390,27 @@ test.describe("Visual Baselines", () => {
     await page.waitForTimeout(500);
 
     await expect(page).toHaveScreenshot("event-edit.png", { fullPage: true });
+  });
+
+  test("profile form", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    // The modal opens straight from the URL; mockApi serves the profile.
+    await page.goto("/calendar/all/2026-01-15/profile/edit/");
+    await page.waitForLoadState("networkidle");
+
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal).toBeVisible({ timeout: 10000 });
+    await expect(modal.locator("#profile-child-4-name")).toHaveValue(
+      "Sam Smith",
+      { timeout: 5000 },
+    );
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("profile-edit.png", {
+      fullPage: true,
+    });
   });
 
   test("delete confirmation modal", async ({ page, context }) => {
@@ -1329,6 +1351,61 @@ test.describe("Visual Baselines", () => {
     await page.waitForTimeout(500);
 
     await expect(page).toHaveScreenshot("guest-room-form-submitting.png", {
+      fullPage: true,
+    });
+  });
+
+  test("profile form saving", async ({ page, context }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await holdRoute(page, "**/api/v1/profile", "PATCH");
+
+    await page.goto("/calendar/all/2026-01-15/profile/edit/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#profile-name")).toHaveValue("Jane Smith", {
+      timeout: 10000,
+    });
+    await modal.getByRole("button", { name: "Save" }).click();
+    await expect(modal.locator(".button-loader")).toBeVisible({
+      timeout: 5000,
+    });
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("profile-edit-saving.png", {
+      fullPage: true,
+    });
+  });
+
+  // A change of email that waits for its link (ADR 0014): the box shows
+  // the new address, and the form says which address still signs in.
+  test("profile form with an email change waiting", async ({
+    page,
+    context,
+  }) => {
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+    await page.route("**/api/v1/profile", (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: "application/json",
+        body: JSON.stringify({
+          ...profileFixture,
+          pending_email: "jane.new@test.com",
+        }),
+      }),
+    );
+
+    await page.goto("/calendar/all/2026-01-15/profile/edit/");
+    await page.waitForLoadState("networkidle");
+    const modal = page.locator(".ReactModal__Content--after-open");
+    await expect(modal.locator("#profile-email")).toHaveValue(
+      "jane.new@test.com",
+      { timeout: 10000 },
+    );
+    await page.waitForTimeout(500);
+
+    await expect(page).toHaveScreenshot("profile-edit-pending.png", {
       fullPage: true,
     });
   });

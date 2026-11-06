@@ -18,6 +18,7 @@ const rotationFixture = require("../fixtures/rotation.json");
 const eventFixture = require("../fixtures/event.json");
 const commonHouseReservationFixture = require("../fixtures/common_house_reservation.json");
 const guestRoomReservationFixture = require("../fixtures/guest_room_reservation.json");
+const profileFixture = require("../fixtures/profile.json");
 const fs = require("fs");
 const path = require("path");
 const { disableIdleTimer, clearStorage } = require("./browser_setup");
@@ -493,6 +494,16 @@ async function mockApi(page, options = {}) {
       status: 200,
       contentType: "application/json",
       body: JSON.stringify({ message: "Signed out." }),
+    });
+  });
+
+  // The signed-in resident's profile (GET /api/v1/profile). Jane, with
+  // her son, who has no email.
+  await page.route("**/api/v1/profile", (route) => {
+    route.fulfill({
+      status: 200,
+      contentType: "application/json",
+      body: JSON.stringify(profileFixture),
     });
   });
 

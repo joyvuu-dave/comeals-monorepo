@@ -59,12 +59,32 @@ Other sign-in endpoints:
 | `GET`    | `/residents/name/:old_token`           | Retired. Always `400`: reset links mailed before 2026-10-23 no longer work.                                                   |
 | `POST`   | `/residents/password-reset/:old_token` | Retired. Always `400`, as above.                                                                                              |
 
+## Your profile
+
+A signed-in resident reads and changes their own name, email and
+vegetarian setting, and those of each child in their unit who has no
+email. The Common House login has no profile and gets `403`.
+
+| Verb    | Path                     | What it does                                                                                                                                                                                                                         |
+| ------- | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `GET`   | `/profile`               | Returns `{ "id", "name", "username", "email", "pending_email", "vegetarian", "children": [{ "id", "name", "vegetarian" }] }`. `username` is the short name the app shows.                                                            |
+| `PATCH` | `/profile`               | Body `{ "name", "email", "vegetarian", "children": [{ "id", "name", "vegetarian" }] }`. Every field but `children` is required; a child left out does not change. Saves all of it or none of it. Returns `{ "message", "profile" }`. |
+| `POST`  | `/profile/email-link`    | Sends the link for a waiting change of email again, as a new link. `400` when no change waits.                                                                                                                                       |
+| `POST`  | `/profile/email-confirm` | Body `{ "email_token": ... }`. The token from the link. Makes the waiting address the email. No login needed.                                                                                                                        |
+
+A new email is not used at once. It waits in `pending_email`, and the
+old address still signs in, until the link mailed to the new address is
+opened. The link works once, for 24 hours. The old address gets a
+notice. Sending the old address again takes the change off. If the link
+email cannot be sent, the answer is `503` with the saved `profile`.
+
 ## Rate limits
 
 Per IP address:
 
 - `POST /residents/token`: 20 per 5 minutes.
 - `POST /residents/password-reset`: 10 per hour.
+- `PATCH /profile` and `POST /profile/email-link` together: 20 per hour.
 - Everything under `/api/`: 600 per minute.
 - `POST /browser-reports`: 60 per 10 minutes, and of those, 10 per hour
   with `result=failed` or `result=error`.

@@ -225,7 +225,15 @@ Resident
   (`PasswordReset`); the token itself is only in the email. A CHECK allows
   nothing but 64 hex digits. Until 2026-10-23 a `reset_password_token`
   column held the token as it was mailed; it was dropped on 2026-10-29.
-- `password_digest`, `reset_password_token_digest`, `reset_password_sent_at` and
+- `pending_email` / `email_change_token_digest` / `email_change_sent_at` — a
+  change of email the resident asked for from their profile (ADR 0014). The
+  new address waits here, and the old one still signs in, until the resident
+  opens the link mailed to the new address (`EmailChange`). The link works
+  once, for 24 hours. As for a reset, the table keeps only the SHA-256
+  digest of the token. A CHECK keeps the three all set or all empty, and
+  another refuses a `.invalid` address here too.
+- `password_digest`, `reset_password_token_digest`, `reset_password_sent_at`,
+  `email_change_token_digest`, `email_change_sent_at` and
   `keys_valid_since` are never sent out. `Resident#serializable_hash` leaves
   them out of every JSON of a resident, the admin's JSON download included,
   and ActiveAdmin's `filter_attributes` (`config/initializers/active_admin.rb`)
@@ -233,6 +241,13 @@ Resident
   sorted by them either: they are not in `Resident.ransackable_attributes`,
   and both Ransack's filters and `AdminOrderClause`
   (`lib/admin_order_clause.rb`, for `?order=`) read that list.
+
+**Editing their own profile (ADR 0014):** a signed-in resident changes their
+own name, email and vegetarian setting from the calendar's "profile" link
+(`Api::V1::ProfilesController`, `ProfileUpdate`). An adult also changes the
+name and vegetarian setting of each child in their unit who has no email
+(`children_i_can_edit`). The birthday is not on the profile, because it sets
+prices. No password is asked for.
 
 **Scopes:**
 

@@ -68,6 +68,8 @@ matcher:
     - NoCostMarking*
     - PacedDelivery*
     - PasswordReset*
+    - EmailChange*
+    - ProfileUpdate*
     - ReconciliationWarnings*
     - RecurringCatchUp*
     - ResidentNameShortener*
@@ -182,6 +184,7 @@ matcher:
     - Api::V1::EventsController*
     - Api::V1::GuestRoomReservationsController*
     - Api::V1::MealsController*
+    - Api::V1::ProfilesController*
     - Api::V1::ReconciliationsController*
     - Api::V1::ResidentsController*
     - Api::V1::RotationsController*

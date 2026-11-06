@@ -39,6 +39,11 @@ Rails.application.routes.draw do
       get '/residents/name/:old_token', to: 'residents#retired_reset_link'
       post '/residents/password-reset/:old_token', to: 'residents#retired_reset_link', format: false
       delete '/sessions/current', to: 'sessions#destroy_current'
+      get '/profile', to: 'profiles#show'
+      patch '/profile', to: 'profiles#update', format: false
+      post '/profile/email-link', to: 'profiles#email_link', format: false
+      # The token is in the body, never in the path (ProfilesController).
+      post '/profile/email-confirm', to: 'profiles#confirm_email', format: false
       get '/communities/:id/birthdays', to: 'communities#birthdays'
       get '/communities/:id/hosts', to: 'communities#hosts'
       get '/communities/:id/calendar/:date', to: 'communities#calendar'

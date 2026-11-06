@@ -189,6 +189,25 @@ describe("MainCalendar", () => {
     expect(screen.getByText("January 2026")).toBeInTheDocument();
   });
 
+  it("opens the signed-in resident's profile from the header", () => {
+    renderCalendar();
+    fireEvent.click(screen.getByRole("button", { name: "profile" }));
+    expect(screen.getByTestId("location")).toHaveTextContent(
+      "/calendar/all/2026-01-15/profile/edit",
+    );
+  });
+
+  // The screen is not a resident, and has no profile (ADR 0014).
+  it("shows the Common House screen no profile link", () => {
+    cookies.current.common_house = "true";
+    try {
+      renderCalendar();
+      expect(screen.queryByRole("button", { name: "profile" })).toBeNull();
+    } finally {
+      delete cookies.current.common_house;
+    }
+  });
+
   it("renders the store's events on the grid", () => {
     renderCalendar();
     expect(screen.getByText("Meal: Jane Smith")).toBeInTheDocument();

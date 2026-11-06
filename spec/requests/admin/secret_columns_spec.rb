@@ -24,10 +24,12 @@ RSpec.describe 'Secret columns in admin downloads' do
   let(:secret_time) { Time.zone.local(2001, 2, 3, 4, 5, 6) }
   let(:secret_date) { '2001-02-03' }
   let(:reset_digest) { PasswordReset.digest('live-reset-token') }
+  let(:email_change_digest) { EmailChange.digest('live-email-token') }
   let!(:ann) do
     create(:resident, community: community, unit: unit, name: 'Ann Adult', email: 'ann@example.com').tap do |resident|
       resident.update_columns(reset_password_token_digest: reset_digest, reset_password_sent_at: secret_time,
-                              keys_valid_since: secret_time)
+                              keys_valid_since: secret_time, pending_email: 'ann.new@example.com',
+                              email_change_token_digest: email_change_digest, email_change_sent_at: secret_time)
     end
   end
   # Another admin with a reset under way. Devise stores a digest of the
@@ -61,19 +63,22 @@ RSpec.describe 'Secret columns in admin downloads' do
     it 'gets no resident secret from any download of the residents pages' do
       paths = %W[/residents.csv /residents.json /residents/#{ann.id}.json]
 
-      expect(paths_containing([reset_digest, ann.password_digest, secret_date], paths)).to eq({})
+      expect(paths_containing([reset_digest, email_change_digest, ann.password_digest, secret_date], paths))
+        .to eq({})
     end
 
     it 'gets the residents CSV without the secret columns, and every other column' do
       expect(csv_headers('/residents.csv')).to eq(
         ['Id', 'Active', 'Birthday', 'Can cook', 'Created at', 'Email', 'Name', 'Updated at', 'Vegetarian', 'Phone',
-         'Can reconcile']
+         'Can reconcile', 'Pending email']
       )
     end
 
     it 'gets the residents JSON without the secret keys, on the index and the show page' do
-      shown = %w[id active birthday can_cook can_reconcile community_id created_at email kind name phone unit_id
-                 updated_at vegetarian]
+      # pending_email is an address the resident asked to change to, not a
+      # secret: an admin may see a change that waits for its link (ADR 0014).
+      shown = %w[id active birthday can_cook can_reconcile community_id created_at email kind name pending_email
+                 phone unit_id updated_at vegetarian]
 
       expect(JSON.parse(download('/residents.json')).map(&:keys)).to match([match_array(shown)])
       expect(JSON.parse(download("/residents/#{ann.id}.json")).keys).to match_array(shown)

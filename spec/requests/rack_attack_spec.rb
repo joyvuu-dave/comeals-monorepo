@@ -46,6 +46,9 @@ RSpec.describe 'Rack::Attack throttles' do
 
       expect(Rack::Attack.throttles['browser-report-alerts/ip'].limit).to eq(10)
       expect(Rack::Attack.throttles['browser-report-alerts/ip'].period).to eq(1.hour)
+
+      expect(Rack::Attack.throttles['profile-email/ip'].limit).to eq(20)
+      expect(Rack::Attack.throttles['profile-email/ip'].period).to eq(1.hour)
     end
   end
 
@@ -96,6 +99,29 @@ RSpec.describe 'Rack::Attack throttles' do
            env: { 'REMOTE_ADDR' => '10.0.0.3' }
 
       expect(response).to have_http_status(:too_many_requests)
+    end
+  end
+
+  # A profile save and "Send the link again" can each email an address the
+  # person typed (Api::V1::ProfilesController). They share one count.
+  describe 'PATCH /api/v1/profile and POST /api/v1/profile/email-link' do
+    it 'throttles the 21st of them from the same IP, whichever it is' do
+      10.times do
+        patch '/api/v1/profile', env: { 'REMOTE_ADDR' => '10.0.0.7' }
+        post '/api/v1/profile/email-link', env: { 'REMOTE_ADDR' => '10.0.0.7' }
+        expect(response).not_to have_http_status(:too_many_requests)
+      end
+
+      patch '/api/v1/profile', env: { 'REMOTE_ADDR' => '10.0.0.7' }
+      expect(response).to have_http_status(:too_many_requests)
+      post '/api/v1/profile/email-link', env: { 'REMOTE_ADDR' => '10.0.0.7' }
+      expect(response).to have_http_status(:too_many_requests)
+    end
+
+    it 'does not count reading the profile' do
+      25.times { get '/api/v1/profile', env: { 'REMOTE_ADDR' => '10.0.0.8' } }
+
+      expect(response).to have_http_status(:unauthorized)
     end
   end
 

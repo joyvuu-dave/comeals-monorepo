@@ -24,6 +24,16 @@ module Rack
       req.ip if req.path == '/api/v1/residents/password-reset' && req.post?
     end
 
+    # 20 profile saves and "send the link again" requests per IP per hour.
+    # Either one can email an address the person typed
+    # (Api::V1::ProfilesController), so without a limit a signed-in
+    # script could fill someone's inbox. A person fixing their profile
+    # saves a few times.
+    throttle('profile-email/ip', limit: 20, period: 1.hour) do |req|
+      req.ip if (req.path == '/api/v1/profile' && req.patch?) ||
+                (req.path == '/api/v1/profile/email-link' && req.post?)
+    end
+
     # 600 authenticated API requests per IP per minute (= 10/sec sustained).
     # Covers the community-NAT case (many residents behind one public IP) with
     # generous headroom. A single normal user won't approach this.

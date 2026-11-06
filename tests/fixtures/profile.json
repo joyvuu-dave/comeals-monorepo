@@ -1,0 +1,15 @@
+{
+  "id": 1,
+  "name": "Jane Smith",
+  "username": "Jane",
+  "email": "jane@test.com",
+  "pending_email": null,
+  "vegetarian": false,
+  "children": [
+    {
+      "id": 4,
+      "name": "Sam Smith",
+      "vegetarian": true
+    }
+  ]
+}

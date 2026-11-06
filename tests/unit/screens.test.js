@@ -40,6 +40,7 @@ const GOLDENS = {
   "calendar/events/new": "event-form",
   "calendar/events/edit": "event-edit",
   "calendar/rotations/show": "rotation-modal",
+  "calendar/profile/edit": "profile-edit",
   meal: "meal-edit",
   "meal/history": "meal-history",
 };
@@ -62,7 +63,7 @@ describe("every screen has a golden image", () => {
     expect(LOGIN_PATH).toBe("/:modal?/:token?");
     expect(CALENDAR_PATH).toBe("/calendar/:type/:date/:modal?/:view?/:id?");
     expect(MEAL_EDIT_PATH).toBe("/meals/:id/edit/*");
-    expect(screens()).toHaveLength(12);
+    expect(screens()).toHaveLength(13);
   });
 
   it("names a golden for every screen, and no golden for a screen that is gone", () => {

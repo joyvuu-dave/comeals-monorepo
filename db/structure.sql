@@ -1677,8 +1677,14 @@ CREATE TABLE public.residents (
     phone character varying,
     can_reconcile boolean DEFAULT false NOT NULL,
     reset_password_token_digest character varying,
+    pending_email character varying,
+    email_change_token_digest character varying,
+    email_change_sent_at timestamp(6) without time zone,
     CONSTRAINT residents_birthday_not_sentinel CHECK (((birthday IS NULL) OR (birthday > '1900-01-01'::date))),
+    CONSTRAINT residents_email_change_all_or_none CHECK ((((pending_email IS NULL) = (email_change_token_digest IS NULL)) AND ((pending_email IS NULL) = (email_change_sent_at IS NULL)))),
+    CONSTRAINT residents_email_change_token_digest_is_sha256 CHECK (((email_change_token_digest)::text ~ '^[0-9a-f]{64}$'::text)),
     CONSTRAINT residents_email_not_invalid_domain CHECK (((email IS NULL) OR (lower((email)::text) !~~ '%.invalid'::text))),
+    CONSTRAINT residents_pending_email_not_invalid_domain CHECK (((pending_email IS NULL) OR (lower((pending_email)::text) !~~ '%.invalid'::text))),
     CONSTRAINT residents_phone_e164 CHECK (((phone IS NULL) OR ((phone)::text ~ '^\+[1-9][0-9]{1,14}$'::text))),
     CONSTRAINT residents_reset_password_token_digest_is_sha256 CHECK (((reset_password_token_digest)::text ~ '^[0-9a-f]{64}$'::text))
 );
@@ -3482,6 +3488,13 @@ CREATE UNIQUE INDEX index_resident_balances_on_resident_id ON public.resident_ba
 
 
 --
+-- Name: index_residents_on_email_change_token_digest; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_residents_on_email_change_token_digest ON public.residents USING btree (email_change_token_digest);
+
+
+--
 -- Name: index_residents_on_lower_email; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4461,6 +4474,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261106120000'),
 ('20261104120000'),
 ('20261103120000'),
 ('20261029120000'),

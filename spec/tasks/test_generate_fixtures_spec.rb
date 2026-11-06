@@ -31,7 +31,8 @@ RSpec.describe 'test:generate_fixtures', type: :task do
     expect { task.execute }.to output(/Fixtures written\./).to_stdout
 
     expect(written.keys).to match_array(%w[calendar.json meal.json history.json hosts.json rotation.json event.json
-                                           common_house_reservation.json guest_room_reservation.json])
+                                           common_house_reservation.json guest_room_reservation.json
+                                           profile.json])
     written.each do |name, content|
       expect(JSON.parse(content)).to eq(JSON.parse(fixtures_dir.join(name).read)), "#{name} differs"
     end

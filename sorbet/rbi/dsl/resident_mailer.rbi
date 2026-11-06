@@ -7,6 +7,12 @@
 
 class ResidentMailer
   class << self
+    sig { params(resident: T.untyped, token: T.untyped).returns(::ActionMailer::MessageDelivery) }
+    def email_change_link_email(resident, token); end
+
+    sig { params(resident: T.untyped, old_email: T.untyped).returns(::ActionMailer::MessageDelivery) }
+    def email_change_notice_email(resident, old_email); end
+
     sig do
       params(
         resident: T.untyped,

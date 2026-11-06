@@ -14,6 +14,9 @@ export const LOGIN_PATH = "/:modal?/:token?";
 // The one modal the login page opens: the new-password form behind a
 // reset link.
 export const RESET_PASSWORD_MODAL = "reset-password";
+// The page the link in an email change email opens. It opens the link
+// whether or not this browser is signed in, then goes on to "/".
+export const CONFIRM_EMAIL_PAGE = "confirm-email";
 
 // Matched by the descendant <Routes> inside DateBox against the
 // pathname left over after MEAL_EDIT_PATH's splat.

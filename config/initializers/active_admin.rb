@@ -175,7 +175,8 @@ ActiveAdmin.setup do |config|
   # defaults. The rest hold a credential, or say when one was made:
   #
   #   residents    password_digest, reset_password_token_digest,
-  #                reset_password_sent_at, keys_valid_since
+  #                reset_password_sent_at, keys_valid_since,
+  #                email_change_token_digest, email_change_sent_at
   #   admin_users  reset_password_token, reset_password_sent_at
   #   keys         token (a legacy API session; no admin page today)
   #
@@ -193,6 +194,7 @@ ActiveAdmin.setup do |config|
   config.filter_attributes = %i[
     encrypted_password password password_confirmation
     password_digest reset_password_token reset_password_token_digest reset_password_sent_at keys_valid_since
+    email_change_token_digest email_change_sent_at
     token
     current_sign_in_ip last_sign_in_ip
   ]

@@ -183,6 +183,13 @@ namespace :test do
       capture.call('/api/v1/events/70', 'event.json')
       capture.call('/api/v1/common-house-reservations/50', 'common_house_reservation.json')
       capture.call('/api/v1/guest-room-reservations/60', 'guest_room_reservation.json')
+
+      # Jane's son, made last so he is in no other fixture: the calendar,
+      # the meal and the rotation list residents, and their goldens would
+      # all change. A child with no email is on his parent's profile.
+      Resident.create!(id: 4, name: 'Sam Smith', email: nil, password: 'password', unit: jane.unit,
+                       vegetarian: true, birthday: Date.new(2018, 6, 10))
+      capture.call('/api/v1/profile', 'profile.json')
     end
 
     # Leave the test database the way RSpec expects to find it: empty.

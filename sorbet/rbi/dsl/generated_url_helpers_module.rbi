@@ -139,6 +139,15 @@ module GeneratedUrlHelpersModule
   def api_v1_meals_next_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }
+  def api_v1_profile_email_confirm_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_profile_email_link_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
+  def api_v1_profile_url(*args); end
+
+  sig { params(args: T.untyped).returns(String) }
   def api_v1_reconciliations_preview_url(*args); end
 
   sig { params(args: T.untyped).returns(String) }

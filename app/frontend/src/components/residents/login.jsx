@@ -10,8 +10,9 @@ import handleAxiosError from "../../helpers/handle_axios_error";
 import watchDialogFocus from "../../helpers/watch_dialog_focus";
 import toastStore from "../../stores/toast_store";
 import { communityNow } from "../../helpers/helpers";
-import { RESET_PASSWORD_MODAL } from "../../routes";
+import { CONFIRM_EMAIL_PAGE, RESET_PASSWORD_MODAL } from "../../routes";
 import ResidentsPasswordNew from "./password_new";
+import ResidentsEmailConfirm from "./email_confirm";
 
 // Where to send a signed-in resident when no redirect target was saved:
 // today's calendar, in the community's timezone.
@@ -176,6 +177,12 @@ const ResidentsLogin = observer(() => {
   }
 
   const { from } = location.state || { from: defaultFrom() };
+
+  // Before the signed-in check below: the person who opens the link is
+  // most often signed in.
+  if (params.modal === CONFIRM_EMAIL_PAGE) {
+    return <ResidentsEmailConfirm />;
+  }
 
   if (
     !reloadingRef.current &&

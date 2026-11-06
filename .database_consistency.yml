@@ -196,6 +196,10 @@ Resident:
   index_residents_on_reset_password_token_digest:
     UniqueIndexChecker:
       enabled: false
+  # The same for the email change link's token (EmailChange).
+  index_residents_on_email_change_token_digest:
+    UniqueIndexChecker:
+      enabled: false
 
 # At most one Common House login. enforce_singleton refuses a second
 # create with a readable message, and the unique index refuses it on

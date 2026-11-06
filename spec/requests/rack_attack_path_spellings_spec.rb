@@ -5,7 +5,8 @@ require 'rails_helper'
 # The login and the password-reset request each have a throttle of their
 # own in config/initializers/rack_attack.rb: 20 logins in 5 minutes and
 # 10 reset requests in an hour, from one IP address. ADR 0010 relies on
-# both. Each throttle counts one path. These check that the action behind
+# both. The profile save and "Send the link again" share one more: 20 in
+# an hour, because each can send an email (ADR 0014). Each throttle counts one path. These check that the action behind
 # it is reached no more often than its throttle allows, whatever the
 # path's spelling, here with a format at the end. (A slash at the end, or
 # two slashes in a row, needs no check: Rack::Attack takes those out of
@@ -65,6 +66,13 @@ RSpec.describe 'Rack::Attack throttles, for other spellings of the path' do
       reached = Array.new(25) { reaches?(login_answer) { login(path) } }
 
       expect(reached.count(true)).to be <= 20
+    end
+  end
+
+  %w[/api/v1/profile.json /api/v1/profile/email-link.json].each do |path|
+    it "routes no request to #{path}, so no spelling gets past the profile throttle" do
+      expect { patch path }.to raise_error(ActionController::RoutingError)
+      expect { post path }.to raise_error(ActionController::RoutingError)
     end
   end
 

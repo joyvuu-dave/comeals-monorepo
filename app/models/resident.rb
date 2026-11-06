@@ -196,6 +196,19 @@ class Resident < ApplicationRecord
   after_save :revoke_all_sessions_if_password_changed
   after_save :note_live_update
 
+  # The people this resident may edit besides themselves, from their own
+  # profile: the children in their unit who have no email (ADR 0014). A
+  # child with no email cannot sign in, so an adult they live with keeps
+  # their name and vegetarian setting. A child with an email signs in and
+  # edits their own. A child edits nobody else.
+  sig { returns(T::Array[Resident]) }
+  def children_i_can_edit
+    return [] if child?
+
+    Resident.where(unit_id: unit_id, active: true, email: nil).where.not(id: id)
+            .order(:name, :id).to_a.select(&:child?)
+  end
+
   # Priced below a full adult share today.
   sig { returns(T::Boolean) }
   def child?
@@ -238,7 +251,8 @@ class Resident < ApplicationRecord
   # out the same columns through config.filter_attributes in
   # config/initializers/active_admin.rb.
   SECRET_COLUMNS = T.let(%w[password_digest reset_password_token_digest reset_password_sent_at
-                            keys_valid_since].freeze, T::Array[String])
+                            keys_valid_since email_change_token_digest email_change_sent_at].freeze,
+                         T::Array[String])
   private_constant :SECRET_COLUMNS
 
   # Removed from the result, not added to options[:except], so a caller's
@@ -355,6 +369,7 @@ class Resident < ApplicationRecord
   # shows. A birthday moves someone into the adult band on its own, with
   # no write at all, so the SPA refetches the hosts list at midnight.
   UNSHOWN_COLUMNS = T.let(%w[email phone password_digest reset_password_token_digest reset_password_sent_at
+                             pending_email email_change_token_digest email_change_sent_at
                              created_at updated_at].freeze, T::Array[String])
   private_constant :UNSHOWN_COLUMNS
 

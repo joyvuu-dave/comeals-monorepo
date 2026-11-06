@@ -133,14 +133,19 @@ RSpec.describe Resident do
     # added here on purpose, which is the moment to ask whether an admin
     # download should carry it.
     let(:shown) do
-      %w[id active birthday can_cook can_reconcile community_id created_at email kind name phone unit_id
-         updated_at vegetarian]
+      %w[id active birthday can_cook can_reconcile community_id created_at email kind name pending_email phone
+         unit_id updated_at vegetarian]
     end
-    let(:secret) { %w[password_digest reset_password_token_digest reset_password_sent_at keys_valid_since] }
+    let(:secret) do
+      %w[password_digest reset_password_token_digest reset_password_sent_at keys_valid_since
+         email_change_token_digest email_change_sent_at]
+    end
     let(:resident) do
       create(:resident, community: community, unit: unit, name: 'Ann Adult').tap do |ann|
         ann.update_columns(reset_password_token_digest: PasswordReset.digest('live-reset-token'),
-                           reset_password_sent_at: Time.current)
+                           reset_password_sent_at: Time.current, pending_email: 'ann.new@example.com',
+                           email_change_token_digest: EmailChange.digest('live-email-token'),
+                           email_change_sent_at: Time.current)
       end
     end
 

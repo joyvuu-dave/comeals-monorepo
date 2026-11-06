@@ -535,6 +535,26 @@ describe("ResidentsLogin", () => {
     );
   });
 
+  // The person who opens the link is most often signed in, so the page
+  // opens it before the sign-in check sends them on.
+  it("opens an email change link, signed in or not", async () => {
+    cookies.current.token = "test-token";
+    axios.post.mockResolvedValue({
+      status: 200,
+      data: { message: "Your email is now new@example.com." },
+    });
+    renderLogin({ path: "/confirm-email#token=tok-1" });
+
+    await vitestWaitFor(() => {
+      expect(toastStore.toasts.map((t) => t.message)).toEqual([
+        "Your email is now new@example.com.",
+      ]);
+    });
+    expect(axios.post).toHaveBeenCalledWith("/api/v1/profile/email-confirm", {
+      email_token: "tok-1",
+    });
+  });
+
   it("the reset-password path opens the new-password modal", async () => {
     axios.post.mockResolvedValue({ status: 200, data: { name: "Jane Smith" } });
     renderLogin({ path: "/reset-password#token=tok-1" });

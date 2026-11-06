@@ -24,6 +24,8 @@ import GuestRoomReservationsEdit from "../guest_room_reservations/edit";
 import CommonHouseReservationsEdit from "../common_house_reservations/edit";
 import EventsEdit from "../events/edit";
 import RotationsShow from "../rotations/show";
+import ProfileEdit from "../profile/edit";
+import { isCommonHouse } from "../../helpers/session";
 import ConfirmModal from "../app/confirm_modal";
 import watchDialogFocus from "../../helpers/watch_dialog_focus";
 
@@ -80,6 +82,7 @@ export const MODAL_FORMS = {
   },
   events: { new: EventsNew, edit: EventsEdit },
   rotations: { show: RotationsShow },
+  profile: { edit: ProfileEdit },
 };
 
 // Module-level constants so react-big-calendar's prop identity stays stable
@@ -336,6 +339,12 @@ const MainCalendar = observer(() => {
     });
   }, []);
 
+  const handleClickProfile = useCallback(function () {
+    navigateRef.current(
+      `/calendar/${paramsRef.current.type}/${paramsRef.current.date}/profile/edit`,
+    );
+  }, []);
+
   const formatEvent = useCallback(function (event) {
     var eventStyles = { style: {} };
 
@@ -471,6 +480,16 @@ const MainCalendar = observer(() => {
           <span className="offline">OFFLINE</span>
         )}
         <span>
+          {/* Only a resident has a profile (ADR 0014). The Common House
+              screen is not one, and the server refuses it a profile. */}
+          {!isCommonHouse() && (
+            <button
+              onClick={handleClickProfile}
+              className="button-link text-secondary mar-r-sm"
+            >
+              profile
+            </button>
+          )}
           <button
             onClick={handleClickLogout}
             className="button-link text-secondary"

@@ -12,6 +12,26 @@ class ResidentMailer < ApplicationMailer
     mail(to: @resident.email, subject: 'Reset your password')
   end
 
+  # The link that makes the waiting address the resident's email
+  # (EmailChange). Sent to the new address, so opening it shows the
+  # person reads that inbox. The token goes after the #, like a reset
+  # token's.
+  def email_change_link_email(resident, token)
+    @resident = resident
+    @new_email = resident.pending_email
+    @url = "#{root_url}/confirm-email#token=#{token}"
+    mail(to: @new_email, subject: 'Confirm your new email')
+  end
+
+  # Sent to the old address when a change is asked for. Changing the
+  # email asks for no password, so this is how a person learns that
+  # someone else asked, from a device they left signed in.
+  def email_change_notice_email(resident, old_email)
+    @resident = resident
+    @new_email = resident.pending_email
+    mail(to: old_email, subject: 'Your Comeals email is being changed')
+  end
+
   def rotation_signup_email(resident, rotation, open_meal_dates, community)
     @resident = resident
     @rotation  = rotation

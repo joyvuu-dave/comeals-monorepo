@@ -126,6 +126,29 @@ RSpec.describe 'what a write runs after its commit' do
     }
   end
 
+  # With a new email, so the save sends its two emails after the commit:
+  # the answer is built inside the transaction (ProfileUpdate.save).
+  write 'PATCH /api/v1/profile' do
+    lambda {
+      patch '/api/v1/profile', params: { token: token, name: 'A New Name', vegetarian: true,
+                                         email: 'a.new.address@example.com' }, as: :json
+    }
+  end
+
+  write 'POST /api/v1/profile/email-link' do
+    resident.update_columns(pending_email: 'a.new.address@example.com',
+                            email_change_token_digest: EmailChange.digest('an-email-token'),
+                            email_change_sent_at: Time.current)
+    -> { post '/api/v1/profile/email-link', params: { token: token } }
+  end
+
+  write 'POST /api/v1/profile/email-confirm' do
+    resident.update_columns(pending_email: 'a.new.address@example.com',
+                            email_change_token_digest: EmailChange.digest('an-email-token'),
+                            email_change_sent_at: Time.current)
+    -> { post '/api/v1/profile/email-confirm', params: { email_token: 'an-email-token' } }
+  end
+
   # A POST so the reset token travels in the body, not the path. It
   # reads the name and writes nothing.
   it 'POST /api/v1/residents/password-reset/name commits nothing',
