@@ -10,9 +10,12 @@
 #  can_cook                    :boolean          default(TRUE), not null
 #  can_reconcile               :boolean          default(FALSE), not null
 #  email                       :string
+#  email_change_sent_at        :datetime
+#  email_change_token_digest   :string
 #  keys_valid_since            :datetime         not null
 #  name                        :string           not null
 #  password_digest             :string           not null
+#  pending_email               :string
 #  phone                       :string
 #  reset_password_sent_at      :datetime
 #  reset_password_token_digest :string
@@ -24,6 +27,7 @@
 #
 # Indexes
 #
+#  index_residents_on_email_change_token_digest    (email_change_token_digest) UNIQUE
 #  index_residents_on_lower_email                  (lower((email)::text)) UNIQUE
 #  index_residents_on_lower_name                   (lower((name)::text)) UNIQUE
 #  index_residents_on_reset_password_token_digest  (reset_password_token_digest) UNIQUE
