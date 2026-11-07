@@ -10,3 +10,8 @@ config/*.yml
 # was in neither list, so the 2026-08-17 nightly run checked every
 # file inside the gems and failed.
 vendor/
+
+# Written by bin/challenges from docs/challenges/*.md, byte for byte, and
+# checked against them (spec/bin/challenge_docs_spec.rb). Prettier would
+# change the bytes and make that check fail.
+docs/challenges/challenges.html

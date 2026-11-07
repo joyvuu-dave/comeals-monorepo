@@ -12,6 +12,7 @@ require 'yaml'
 # The parts: this file reads the docs and lists every problem;
 # challenge_docs/checks.rb holds the rules for one doc and for the set;
 # challenge_docs/index.rb writes the index in the README;
+# challenge_docs/html.rb writes docs/challenges/challenges.html;
 # challenge_docs/watches.rb keeps the fingerprints of watched files;
 # challenge_docs/cli.rb is the command line.
 module ChallengeDocs
@@ -73,11 +74,12 @@ module ChallengeDocs
     all = docs(dir)
     good = all.reject(&:error)
     all.flat_map { |doc| Checks.doc(doc, root, today) } +
-      Checks.ids(good) + Index.problems(dir, good) + Watches.problems(dir, good, root)
+      Checks.ids(good) + Index.problems(dir, good) + Html.problems(dir, good) + Watches.problems(dir, good, root)
   end
 end
 
 require_relative 'challenge_docs/checks'
 require_relative 'challenge_docs/index'
+require_relative 'challenge_docs/html'
 require_relative 'challenge_docs/watches'
 require_relative 'challenge_docs/cli'

@@ -44,13 +44,15 @@ module ChallengeDocs
       expected == readme ? [] : [OUT_OF_DATE]
     end
 
-    # Writes the index. Returns nil, or the problem that stopped it.
+    # Writes the index, and the HTML page (Html). Returns nil, or the
+    # problem that stopped it.
     def write(dir)
       path = File.join(dir, 'README.md')
       text = readme_with_index(File.read(path), ChallengeDocs.docs(dir).reject(&:error))
       return NO_MARKERS unless text
 
       File.write(path, text)
+      Html.write(dir)
       nil
     end
   end

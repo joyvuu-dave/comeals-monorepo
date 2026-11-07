@@ -13,7 +13,9 @@ A challenge is not a decision and not a task:
 
 ## How to read this folder
 
-Start with the index at the bottom. Each challenge is one file, and each file can be read alone, with no other file open. Every file has the same parts in the same order, so a person or a program can find the same thing in each one.
+For an overview, open `docs/challenges/challenges.html` in a browser. It shows how many challenges are left, a table by area, the lists of what is left and what is finished, and every challenge in full, with a search box and filters. It also counts the claims marked "not checked" and the outside facts whose source nobody has read. `bin/challenges` writes it from these files; do not edit it by hand.
+
+Or start with the index at the bottom. Each challenge is one file, and each file can be read alone, with no other file open. Every file has the same parts in the same order, so a person or a program can find the same thing in each one.
 
 **Front matter** (the lines between `---` at the top):
 
@@ -49,7 +51,7 @@ A doc that was right when written becomes wrong in a few ways. Some are caught b
 | The code it describes changes                                                        | **Checked.** `docs/challenges/watched.txt` holds a fingerprint (SHA-256) of every watched file. When a watched file changes, the check fails and names the challenge. Read what the doc says about that file, fix it, then run `bin/challenges reviewed <id>`. |
 | A file it names is moved or deleted                                                  | **Checked.** Every repo path written in backticks, and every relative link, must exist. To name a file that does not exist yet, write it without backticks and say it is not written yet.                                                                      |
 | The outside world changes                                                            | **Checked.** An outside fact checked more than 365 days ago fails the check. Read the source again and change the date.                                                                                                                                        |
-| The index no longer matches the files                                                | **Checked.** The index is written by `bin/challenges index`, and the check fails when it is out of date.                                                                                                                                                       |
+| The index or the HTML page no longer matches the files                               | **Checked.** Both are written by `bin/challenges index` (and by `reviewed` and `new`), and the check fails when either is out of date.                                                                                                                         |
 | Words that stop being true by themselves ("currently", "recently", "soon")           | **Checked.** These words fail the check. Write the date or the plain fact. The same check refuses the words the project's plain-language rules ban.                                                                                                            |
 | A file is missing a part, or has parts out of order                                  | **Checked.** Front matter keys, statuses, areas, dates, section names and order, History lines.                                                                                                                                                                |
 | The status is wrong (the work is done, but the doc says open)                        | **Rule.** The commit that does the work changes the status and adds a History line in the same commit.                                                                                                                                                         |
@@ -64,7 +66,7 @@ The checks catch a doc that is out of date with the code, the files, or the cale
 
 ```
 bin/challenges check              check every rule above
-bin/challenges index              write the index table below
+bin/challenges index              write the index table below and challenges.html
 bin/challenges reviewed ID [ID]   mark challenges as read again today, and record their watched files
 bin/challenges new AREA TITLE     start a new challenge from the template, with the next id
 ```

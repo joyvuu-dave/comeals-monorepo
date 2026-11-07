@@ -182,3 +182,4 @@ Architecture decisions live in `docs/adr/`. See `docs/agents/domain.md`.
 - When the check says a watched file changed: read what that challenge says about the file, fix the doc, run `bin/challenges reviewed <id>`, and say in the commit message what you checked. Never mark a challenge reviewed without reading it.
 - When the owner decides something about a challenge, write it in that challenge's History in the same session. When a change finishes a challenge, change its status in the same commit.
 - Start a new one with `bin/challenges new <area> <title>`.
+- `docs/challenges/challenges.html` is the overview page, written by `bin/challenges` from the files. Never edit it by hand; the check fails when it does not match them.

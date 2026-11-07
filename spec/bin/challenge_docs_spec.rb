@@ -268,12 +268,67 @@ RSpec.describe 'bin/challenges' do
     end
   end
 
+  describe 'the HTML page' do
+    let(:html) { ChallengeDocs::Html }
+
+    def stand(where, facts = nil)
+      sections = { 'The challenge' => 'Text.', 'The case that breaks it' => 'Text.', 'Where we stand' => where,
+                   'Options' => 'See [the other](0002-other.md) and [an ADR](../adr/0001-x.md#why).' }
+      sections['Outside facts'] = facts if facts
+      sections['Decision'] = 'Done.'
+      sections['History'] = '- 2026-11-01: Opened.'
+      sections
+    end
+
+    before do
+      write('README.md', readme)
+      write_root('app/x.rb')
+      write_root('app/y.rb')
+      write_root('docs/adr/0001-x.md')
+    end
+
+    it 'is written with the index, and fails the check when it no longer matches the files' do
+      write('0001-a-thing.md', front + body)
+      expect(problems).to include(html::OUT_OF_DATE)
+      ChallengeDocs::Index.write(dir)
+      expect(problems).to eq([])
+      write('0001-a-thing.md', front(status: 'exploring') + body)
+      expect(problems).to include(html::OUT_OF_DATE)
+    end
+
+    it 'shows what is left, what is finished, and what nobody has checked' do
+      facts = "- One. (checked 2026-11-01: Claude's memory, not the docs)\n" \
+              "- Two. (checked 2026-11-01: Claude's memory, not the docs)"
+      write('0001-a-thing.md', front(status: 'done', watches: '[app/x.rb, app/y.rb]') +
+                               body(sections: stand("- Not checked: one.\n- Not tried: two.", facts)))
+      one_fact = "- One. (checked 2026-11-01: Claude's memory)"
+      write('0002-other.md', front(id: 2, title: 'Other', area: 'money', watches: '[app/x.rb]') +
+                             body(title: 'Other', sections: stand('Fine.', one_fact)))
+      page = html.render(ChallengeDocs.docs(dir))
+      expect(page).to include('<div class="n">1</div><div>still to do, of 2</div>',
+                              '<span class="badge">2 not checked</span>',
+                              '<span class="badge">2 outside facts to read</span>',
+                              '<span class="badge">1 outside fact to read</span>',
+                              '<summary>Watches 2 files</summary>', '<summary>Watches 1 file</summary>',
+                              '<h3>The challenge</h3>', '<a href="#challenge-2">the other</a>',
+                              '<a href="../adr/0001-x.md#why">an ADR</a>',
+                              '<li class="area-head">money</li>', '<ul class="finished"><li>')
+      expect(page).not_to include('<h2 id="the-challenge"', 'area-head">time')
+    end
+
+    it 'shows an empty folder' do
+      page = html.render([])
+      expect(page).to include('still to do, of 0', 'style="width: 0%"', '<li class="none">None yet.</li>')
+      expect(page).not_to include('Watches')
+    end
+  end
+
   describe 'the command line' do
     it 'checks a good folder and a broken one' do
       good_folder
       expect(run_cli('check')).to eq([0, "ok: 1 challenges, no problems\n"])
       write('0002-other.md', front(id: 2) + body)
-      expect(run_cli('check')).to eq([1, "#{ChallengeDocs::Index::OUT_OF_DATE}\n"])
+      expect(run_cli('check')).to eq([1, "#{ChallengeDocs::Index::OUT_OF_DATE}\n#{ChallengeDocs::Html::OUT_OF_DATE}\n"])
     end
 
     it 'writes the index' do
