@@ -173,3 +173,12 @@ Every action a person can take, one row each, with a cell per entry point (API, 
 ### Domain docs
 
 Architecture decisions live in `docs/adr/`. See `docs/agents/domain.md`.
+
+### Challenges
+
+`docs/challenges/` lists hard things someone could ask this app to handle, one file each: keeping every guarantee with no database locks we take ourselves, running on every database Rails supports, time zone rule changes, someone else taking over, and more. Each file gives the case that breaks it, where we stand, and the options. Read `docs/challenges/README.md` before you write or change one. The rules that keep them true:
+
+- `spec/bin/challenge_docs_spec.rb` runs `bin/challenges check`, so `bin/check` and CI fail when a file a challenge watches has changed since the challenge was last reviewed, when a path it names is gone, when an outside fact was checked more than a year ago, or when the index is out of date.
+- When the check says a watched file changed: read what that challenge says about the file, fix the doc, run `bin/challenges reviewed <id>`, and say in the commit message what you checked. Never mark a challenge reviewed without reading it.
+- When the owner decides something about a challenge, write it in that challenge's History in the same session. When a change finishes a challenge, change its status in the same commit.
+- Start a new one with `bin/challenges new <area> <title>`.

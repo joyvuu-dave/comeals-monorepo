@@ -1,0 +1,12 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Keeps docs/challenges/ in order: checks its rules, writes its index,
+# marks a challenge as read again, and starts a new one. The rules and
+# the reasons are in docs/challenges/README.md. Run with no arguments for
+# the commands.
+require_relative 'lib/challenge_docs'
+
+root = File.expand_path('..', __dir__)
+# The laptop's own date: the day a person ran the command.
+exit ChallengeDocs::CLI.run(ARGV, dir: File.join(root, 'docs/challenges'), root: root, today: Time.now.getlocal.to_date)

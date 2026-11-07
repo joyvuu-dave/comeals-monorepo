@@ -47,7 +47,7 @@ SimpleCov.profiles.define 'comeals' do
   # spec/bin, and its counts are added to this run's result
   # (spec/child_coverage.rb). Named here, a script whose specs are gone is
   # counted at 0% instead of left out.
-  cover 'bin/{mutant-report,tapioca,setup,rails,rake,jobs,bundle,watch-deploy}'
+  cover 'bin/{mutant-report,tapioca,setup,rails,rake,jobs,bundle,watch-deploy,challenges}'
   # Loads the annotate_rb gem's own tasks, in development only. The gem is
   # in the development group of the Gemfile, so the test bundle cannot
   # load it, and no spec can run the file's one branch.
