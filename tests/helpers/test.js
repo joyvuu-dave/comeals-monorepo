@@ -32,7 +32,60 @@ const base = require("@playwright/test");
 const { saveCoverage } = require("./visual_coverage");
 const { failsTheTest } = require("./console_errors");
 
+// The test decides whether the browser is online, not the laptop's
+// network (#268). The app shows ONLINE or OFFLINE from navigator.onLine
+// and the browser's online and offline events, and Chromium takes those
+// from the computer's real connection. Every page here talks only to
+// localhost, which works with or without Wi-Fi, so a dropped network
+// changed nothing but that word, and failed 27 tests.
+//
+// So every page starts with navigator.onLine true, and the online and
+// offline events are stopped before the app hears them. A test that
+// calls context.setOffline gets the real value and the real events back
+// from that moment, in every page of the context, so the tests that go
+// offline on purpose (tests/e2e/visual.spec.js) still see OFFLINE.
+function keepTheBrowserOnline() {
+  const realOnLine = Object.getOwnPropertyDescriptor(
+    Navigator.prototype,
+    "onLine",
+  ).get;
+  Object.defineProperty(Navigator.prototype, "onLine", {
+    configurable: true,
+    enumerable: true,
+    get() {
+      return window.__testSetsTheNetwork ? realOnLine.call(this) : true;
+    },
+  });
+  // A capture listener on window runs before the app's own listeners.
+  for (const type of ["online", "offline"]) {
+    window.addEventListener(
+      type,
+      (event) => {
+        if (!window.__testSetsTheNetwork) event.stopImmediatePropagation();
+      },
+      true,
+    );
+  }
+}
+
+function letTheTestSetTheNetwork() {
+  window.__testSetsTheNetwork = true;
+}
+
 const test = base.test.extend({
+  context: async ({ context }, use) => {
+    await context.addInitScript(keepTheBrowserOnline);
+    const setOffline = context.setOffline.bind(context);
+    context.setOffline = async (offline) => {
+      // Pages that are open now, and pages loaded later.
+      await context.addInitScript(letTheTestSetTheNetwork);
+      await Promise.all(
+        context.pages().map((page) => page.evaluate(letTheTestSetTheNetwork)),
+      );
+      await setOffline(offline);
+    };
+    await use(context);
+  },
   allowedConsoleErrors: [null, { option: true }],
   allowedPageErrors: [null, { option: true }],
   // Every page load sends the browser check's report to

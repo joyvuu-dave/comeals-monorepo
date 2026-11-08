@@ -10,12 +10,8 @@ const { setupAuthenticatedPage } = require("../helpers/setup");
 // Chromium's own network switch (the CDP command, not Playwright's
 // context.setOffline) does to the page what a Wi-Fi drop does: it makes
 // navigator.onLine false and fires "offline". WebKit has no such
-// command, so these run in Chromium alone.
+// command, so that test runs in Chromium alone.
 test.describe("Network state in the browser tests", () => {
-  test.beforeEach(({ browserName }) => {
-    test.skip(browserName !== "chromium", "CDP is Chromium-only");
-  });
-
   async function openCalendar(page, context) {
     await setupAuthenticatedPage(page, context);
     await page.goto("/calendar/all/2026-01-15/");
@@ -39,12 +35,14 @@ test.describe("Network state in the browser tests", () => {
   test("the page stays ONLINE when the laptop's network drops", async ({
     page,
     context,
+    browserName,
   }) => {
+    test.skip(browserName !== "chromium", "CDP is Chromium-only");
     await openCalendar(page, context);
 
     await dropTheLaptopsNetwork(page);
 
-    // The real event has fired by the time the real value reads false.
+    // Give the browser time to fire its offline event.
     await page.waitForTimeout(500);
     expect(await page.evaluate(() => navigator.onLine)).toBe(true);
     await expect(page.locator("span.online, span.offline")).toHaveText(
