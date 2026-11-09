@@ -273,6 +273,16 @@ jobs:
           bin/check sorbet rbi_fresh debride fasterer database_consistency
           todo_markers app_zone_dates new_js_files annotations
 
+  # The proofs in proofs/ (docs/proofs.md). bin/dafny-verify downloads
+  # the pinned Dafny release on every run here, which takes a few
+  # seconds.
+  proofs:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v6
+      - run: bin/check dafny
+
   bundle-budget:
     runs-on: ubuntu-26.04
     timeout-minutes: 10

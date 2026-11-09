@@ -75,6 +75,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
     sandbox.fake('node', 'echo v24.21.0')
     sandbox.fake('gitleaks')
     sandbox.fake_script('bin/tapioca')
+    sandbox.fake_script('bin/dafny-verify', "echo 'Dafny program verifier finished with 4 verified, 0 errors'")
     sandbox.fake_script('bin/bundle-budget', "echo 'ok     first load: 180.7 KB gzipped (budget 190 KB)'")
     sandbox.fake_script('bin/npm-audit', "echo 'no vulnerabilities'")
     sandbox.fake_script('bin/visual-coverage', "echo 'Markup branches : 100%'")
@@ -128,6 +129,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
                               '    ✓  TypeScript           no type errors',
                               '    ✓  Sorbet               no type errors',
                               '    ✓  RBI files            up to date',
+                              '    ✓  Dafny proofs         4 verified, 0 errors',
                               '    ✓  Prettier             all formatted',
                               '    ✓  TODO markers         none in money-path code',
                               '    ✓  App-zone dates       none outside Community#today',
@@ -157,7 +159,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
         'ruby -e print RUBY_VERSION', 'curl -sf https://endoflife.date/api/ruby/4.0.json',
         'curl -sf https://endoflife.date/api/nodejs/24.json',
         'bundle exec rubycritic app lib --no-browser --format console --minimum-score 80',
-        'bin/tapioca gem --verify', 'bin/tapioca dsl --verify', 'bin/bundle-budget',
+        'bin/tapioca gem --verify', 'bin/tapioca dsl --verify', 'bin/dafny-verify', 'bin/bundle-budget',
         'gitleaks git . --no-banner --redact', 'bin/visual-coverage', 'bin/test-integration'
       )
       debride = sandbox.calls_to('bundle').find { |call| call.args[1] == 'debride' }
@@ -427,6 +429,31 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
 
       expect(sandbox.call_lines.grep(/tapioca/)).to eq(['bin/tapioca gem --verify'])
       expect(summary_line(result.output, 'RBI files')).to start_with('✗')
+    end
+
+    it 'fails when a proof fails, and shows the end of what Dafny said' do
+      sandbox.fake_script('bin/dafny-verify', <<~BASH)
+        echo 'proofs/Sums.dfy(3,4): Error: a postcondition could not be proved'
+        echo 'Dafny program verifier finished with 3 verified, 1 error'
+        exit 1
+      BASH
+
+      result = run_check
+
+      expect(step_output(result.output, 'Dafny proofs'))
+        .to eq("==> Dafny proofs\n    ✗ Not every proof passed\n" \
+               "proofs/Sums.dfy(3,4): Error: a postcondition could not be proved\n" \
+               "Dafny program verifier finished with 3 verified, 1 error\n\n")
+      expect(summary_line(result.output, 'Dafny proofs')).to eq('✗  Dafny proofs         3 verified, 1 error')
+    end
+
+    it 'fails when Dafny did not run at all' do
+      sandbox.fake_script('bin/dafny-verify',
+                          "echo 'bin/dafny-verify: no Dafny zip is pinned for this machine.'; exit 1")
+
+      result = run_check
+
+      expect(summary_line(result.output, 'Dafny proofs')).to eq('✗  Dafny proofs         did not run')
     end
   end
 

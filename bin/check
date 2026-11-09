@@ -487,6 +487,28 @@ check_rbi_fresh() {
   fi
 }
 
+# The proofs in proofs/ (docs/proofs.md). bin/dafny-verify downloads the
+# pinned Dafny on its first run, and fails a run in which any proof did
+# not run.
+check_dafny() {
+  step "Dafny proofs"
+
+  local output exit_code=0
+  output=$(bin/dafny-verify 2>&1) || exit_code=$?
+
+  local counts
+  counts=$(echo "$output" | grep -oE '[0-9]+ verified, [0-9]+ errors?' | tail -n 1)
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$counts"
+    record "Dafny proofs" "PASS" "$counts"
+  else
+    fail "Not every proof passed"
+    echo "$output" | tail -n 30
+    record "Dafny proofs" "FAIL" "${counts:-did not run}"
+  fi
+}
+
 check_bundle_budget() {
   step "Bundle budget"
 
@@ -974,6 +996,7 @@ main() {
   check_typecheck
   check_sorbet
   check_rbi_fresh
+  check_dafny
   check_prettier
   check_todo_markers
   check_app_zone_dates

@@ -1,0 +1,109 @@
+#!/usr/bin/env bash
+# bin/dafny-verify — check every proof in proofs/ (docs/proofs.md).
+#
+# Runs one Dafny and one Z3 everywhere: the ones in the Dafny 4.11.0
+# release zip for this machine, checked by its SHA-256. A proof can pass
+# on one Z3 version and fail on another, so the dafny on the PATH (from
+# Homebrew, say) is never used. The first run downloads the zip into
+# ~/.cache/comeals (COMEALS_CACHE moves it), and every worktree shares it.
+#
+# The run counts only when every proof ran and passed:
+#   - no file in proofs/ uses assume, {:axiom} or {:verify false}, which
+#     tell Dafny to take a claim without proving it;
+#   - Dafny exits with 0, and a warning counts as a failure;
+#   - its last line says "N verified, 0 errors";
+#   - no line says "Prover error", "internal error" or "SKIPPED". Dafny
+#     4.11.0 can mix up the questions it sends to Z3 when the machine is
+#     busy, and then skip a proof and still exit with 0. If this happens,
+#     run it again.
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+DAFNY_VERSION=4.11.0
+Z3_VERSION=4.14.1
+CACHE="${COMEALS_CACHE:-$HOME/.cache/comeals}"
+HOME_DIR="$CACHE/dafny-$DAFNY_VERSION"
+DAFNY="$HOME_DIR/dafny/dafny"
+Z3="$HOME_DIR/dafny/z3/bin/z3-$Z3_VERSION"
+
+case "$(uname -s) $(uname -m)" in
+  "Darwin arm64")
+    ZIP=dafny-$DAFNY_VERSION-arm64-macos-13.zip
+    SHA256=c90c75e7d5db9c6ccbb7127840dfe43f0ac938b039a7ebed146d8ead383a572f ;;
+  "Linux x86_64")
+    ZIP=dafny-$DAFNY_VERSION-x64-ubuntu-22.04.zip
+    SHA256=a46a9ff7cdd720f7955854c78e95df13f4cfe6b80691b05f8654fe19e8267179 ;;
+  *)
+    echo "bin/dafny-verify: no Dafny zip is pinned for $(uname -s) $(uname -m)." >&2
+    echo "Add its name and SHA-256 from https://github.com/dafny-lang/dafny/releases/tag/v$DAFNY_VERSION" >&2
+    exit 1 ;;
+esac
+
+# Download, check and unpack the zip. Runs under the lock below, so two
+# worktrees never unpack at the same moment. It unpacks into a .partial
+# folder and renames it when done, so a run that was stopped halfway
+# leaves no folder that looks finished.
+install() {
+  [ -x "$DAFNY" ] && return
+  # mv would put the new folder inside this one, not in its place.
+  if [ -e "$HOME_DIR" ]; then
+    echo "bin/dafny-verify: $HOME_DIR is there but has no dafny in it. Delete that folder and run this again." >&2
+    exit 1
+  fi
+  echo "Downloading $ZIP into $CACHE"
+  curl -sSfL -o "$CACHE/$ZIP" "https://github.com/dafny-lang/dafny/releases/download/v$DAFNY_VERSION/$ZIP"
+  if ! echo "$SHA256  $CACHE/$ZIP" | shasum -a 256 -c - > /dev/null; then
+    echo "bin/dafny-verify: $ZIP does not have the pinned SHA-256. Nothing was unpacked." >&2
+    rm -f "$CACHE/$ZIP"
+    exit 1
+  fi
+  unzip -q -o "$CACHE/$ZIP" -d "$HOME_DIR.partial"
+  mv "$HOME_DIR.partial" "$HOME_DIR"
+  rm -f "$CACHE/$ZIP"
+}
+
+if [ "${1:-}" = "--install-under-lock" ]; then
+  install
+  exit 0
+fi
+
+# Words that make Dafny accept a claim without proving it.
+unproven=$(grep -rnE '\bassume\b|\{ *:(axiom|verify +false)' proofs || true)
+if [ -n "$unproven" ]; then
+  echo "bin/dafny-verify: these lines take a claim without proving it:" >&2
+  echo "$unproven" >&2
+  exit 1
+fi
+
+mkdir -p "$CACHE"
+# A kernel lock on a file, let go when its holder dies (as in bin/check's
+# update_advisory_db).
+python3 -c 'import fcntl, subprocess, sys
+lock = open(sys.argv[1], "a")
+fcntl.flock(lock, fcntl.LOCK_EX)
+sys.exit(subprocess.call(sys.argv[2:]))' "$CACHE/dafny.lock" "$0" --install-under-lock
+
+z3_says=$("$Z3" --version)
+if [ "$z3_says" != "Z3 version $Z3_VERSION - 64 bit" ]; then
+  echo "bin/dafny-verify: $Z3 says \"$z3_says\", not Z3 version $Z3_VERSION." >&2
+  exit 1
+fi
+
+output=$("$DAFNY" verify --solver-path "$Z3" --cores 2 proofs/*.dfy 2>&1) && status=0 || status=$?
+echo "$output"
+
+why=()
+[ "$status" -eq 0 ] || why+=("dafny exited with $status")
+echo "$output" | tail -n 1 | grep -qE '^Dafny program verifier finished with [0-9]+ verified, 0 errors$' \
+  || why+=('the last line is not "Dafny program verifier finished with N verified, 0 errors"')
+bad=$(echo "$output" | grep -E 'Prover error|internal error|SKIPPED' | head -n 1 || true)
+[ -z "$bad" ] || why+=("a line says the prover failed or a proof was skipped: $bad")
+
+if [ "${#why[@]}" -gt 0 ]; then
+  echo >&2
+  echo "bin/dafny-verify: this run does not count:" >&2
+  printf -- '- %s\n' "${why[@]}" >&2
+  exit 1
+fi

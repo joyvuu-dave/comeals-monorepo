@@ -25,6 +25,7 @@ class BashCoverage
     'bin/agent-worktree' => 'spec/bin/agent_worktree_spec.rb',
     'bin/agent-worktree-done' => 'spec/bin/agent_worktree_done_spec.rb',
     'bin/check' => 'spec/bin/check_spec.rb',
+    'bin/dafny-verify' => 'spec/bin/dafny_verify_spec.rb',
     'bin/dev' => 'spec/bin/dev_spec.rb',
     'bin/mutant' => 'spec/bin/mutant_spec.rb',
     'bin/prod' => 'spec/bin/prod_spec.rb',

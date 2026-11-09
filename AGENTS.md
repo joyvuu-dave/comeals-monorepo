@@ -18,6 +18,7 @@ bin/prod                   # Builds the production bundle, serves it from Rails 
 bin/check                  # Full health check: tests, linters, security, freshness
 bin/mutant                 # Mutation testing: one class or one stage here; every class is the Mutant workflow on GitHub Actions (not in bin/check; docs/mutation-testing.md)
 bin/storm                  # Real-server concurrency storm: many Puma threads, many clients (not in bin/check; docs/concurrency-testing.md)
+bin/dafny-verify           # Check the Dafny proofs of the money rules in proofs/ (a bin/check step; docs/proofs.md)
 ```
 
 ### Local URLs
