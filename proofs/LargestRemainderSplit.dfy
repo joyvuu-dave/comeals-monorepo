@@ -31,6 +31,7 @@
 module LargestRemainderSplit {
   import opened Sums
   import opened Arithmetic
+  import opened LargestRemainder
 
   // Each exact share rounded down. Dafny's / rounds down for a positive
   // divisor.
@@ -49,26 +50,14 @@ module LargestRemainderSplit {
     seq(|weights|, i requires 0 <= i < |weights| => total * weights[i] % Sum(weights))
   }
 
-  // 1 for a share that dropped something, 0 for one that did not.
-  function DroppedSomething(dropped: seq<int>): seq<int>
-  {
-    seq(|dropped|, i requires 0 <= i < |dropped| => if dropped[i] > 0 then 1 else 0)
-  }
-
-  // Share i comes before share j in the order the leftover units are
-  // handed out: it dropped more, or the same and it is earlier.
-  predicate Before(dropped: seq<int>, i: int, j: int)
-    requires 0 <= i < |dropped| && 0 <= j < |dropped|
-  {
-    dropped[i] > dropped[j] || (dropped[i] == dropped[j] && i < j)
-  }
-
   // The rule, as a test any list of shares passes or fails.
   predicate IsSplit(total: nat, weights: seq<nat>, shares: seq<int>)
     requires Sum(weights) > 0
   {
     var floors := Floors(total, weights);
     var dropped := Dropped(total, weights);
+    // Before is the order in LargestRemainder.dfy: dropped more, or the
+    // same and earlier.
     && |shares| == |weights|
     && Sum(shares) == total
     && (forall i :: 0 <= i < |shares| ==> shares[i] == floors[i] || shares[i] == floors[i] + 1)
@@ -83,15 +72,13 @@ module LargestRemainderSplit {
   // them out to shares that dropped something.
   lemma LeftoverFits(total: nat, weights: seq<nat>)
     requires Sum(weights) > 0
-    ensures 0 <= total - Sum(Floors(total, weights)) <= Sum(DroppedSomething(Dropped(total, weights)))
+    ensures 0 <= total - Sum(Floors(total, weights)) <= Sum(Positive(Dropped(total, weights)))
   {
     var whole := Sum(weights);
     var n := |weights|;
     var floors := Floors(total, weights);
     var dropped := Dropped(total, weights);
-    var some := DroppedSomething(dropped);
     var leftover := total - Sum(floors);
-    var count := Sum(some);
 
     // The exact numerators add up to total * whole ...
     var exact := seq(n, i requires 0 <= i < n => total * weights[i]);
@@ -102,6 +89,7 @@ module LargestRemainderSplit {
     SumOfMultiples(floors, whole, kept);
     forall i | 0 <= i < n
       ensures exact[i] == kept[i] + dropped[i]
+      ensures 0 <= dropped[i] < whole
     {
       DivMod(total * weights[i], whole);
     }
@@ -112,75 +100,19 @@ module LargestRemainderSplit {
     // Nothing dropped is negative, so leftover is not negative.
     var zeros := seq(n, i requires 0 <= i < n => 0);
     SumOfMultiples(dropped, 0, zeros);
-    forall i | 0 <= i < n
-      ensures 0 <= dropped[i] < whole
-    {
-      DivMod(total * weights[i], whole);
-    }
     SumNoLarger(zeros, dropped);
     if leftover < 0 {
       MulNegative(whole, leftover);
     }
 
-    // Each share dropped at most whole - 1, so what was dropped adds up
-    // to at most (whole - 1) times the shares that dropped something.
-    var most := seq(n, i requires 0 <= i < n => (whole - 1) * some[i]);
-    SumOfMultiples(some, whole - 1, most);
-    SumNoLarger(dropped, most);
-    assert whole * leftover <= (whole - 1) * count;
-
-    // And (whole - 1) * count < whole * (count + 1), so leftover <= count.
-    var zeros2 := seq(n, i requires 0 <= i < n => 0);
-    SumOfMultiples(some, 0, zeros2);
-    SumNoLarger(zeros2, some);
-    if leftover > count {
-      MulKeepsOrder(whole, count + 1, leftover);
-      MulOneMore(count, whole);
-      MulOneLess(whole, count);
-      assert false;
-    }
+    // Each share dropped less than whole, so at least leftover shares
+    // dropped something.
+    CountFits(dropped, whole, leftover);
   }
 
-  // If fewer shares got a unit than dropped something, and every share
-  // that got one dropped something, then one that dropped something is
-  // still waiting for one.
-  lemma SomeShareWaits(got: seq<int>, dropped: seq<int>)
-    requires |got| == |dropped|
-    requires forall i :: 0 <= i < |got| ==> got[i] == 0 || got[i] == 1
-    requires forall i :: 0 <= i < |got| && got[i] == 1 ==> dropped[i] > 0
-    requires Sum(got) < Sum(DroppedSomething(dropped))
-    ensures exists u :: 0 <= u < |got| && got[u] == 0 && dropped[u] > 0
-  {
-    if forall u :: 0 <= u < |got| && got[u] == 0 ==> dropped[u] <= 0 {
-      SumNoLarger(DroppedSomething(dropped), got);
-    }
-  }
-
-  // The share that comes first, among those that have not got a unit.
-  method First(got: seq<int>, dropped: seq<int>) returns (best: int)
-    requires |got| == |dropped|
-    requires exists u :: 0 <= u < |got| && got[u] == 0
-    ensures 0 <= best < |got| && got[best] == 0
-    ensures forall j :: 0 <= j < |got| && got[j] == 0 && j != best ==> Before(dropped, best, j)
-  {
-    best := -1;
-    var i := 0;
-    while i < |got|
-      invariant 0 <= i <= |got|
-      invariant best == -1 ==> forall j :: 0 <= j < i ==> got[j] != 0
-      invariant best != -1 ==> 0 <= best < i && got[best] == 0
-      invariant best != -1 ==> forall j :: 0 <= j < i && got[j] == 0 && j != best ==> Before(dropped, best, j)
-    {
-      if got[i] == 0 && (best == -1 || Before(dropped, i, best)) {
-        best := i;
-      }
-      i := i + 1;
-    }
-  }
-
-  // The split. It hands the leftover units out one at a time, each to
-  // the share that comes first among those still waiting. That is the
-  // rule itself; a sort is a faster way to the same answer.
+  // The split: each share rounded down, then the leftover units handed
+  // out by LargestRemainder.HandOut, in the order of what each share
+  // dropped.
   method Split(total: nat, weights: seq<nat>) returns (shares: seq<int>)
     requires Sum(weights) > 0
     ensures IsSplit(total, weights, shares)
@@ -191,30 +123,7 @@ module LargestRemainderSplit {
     var leftover := total - Sum(floors);
     LeftoverFits(total, weights);
 
-    // 1 for a share that has got a leftover unit.
-    var got := seq(n, i => 0);
-    var zeros := seq(n, i requires 0 <= i < n => 0 * got[i]);
-    SumOfMultiples(got, 0, zeros);
-    assert zeros == got;
-
-    var handed := 0;
-    while handed < leftover
-      invariant 0 <= handed <= leftover
-      invariant |got| == n
-      invariant forall i :: 0 <= i < n ==> got[i] == 0 || got[i] == 1
-      invariant Sum(got) == handed
-      invariant forall i :: 0 <= i < n && got[i] == 1 ==> dropped[i] > 0
-      invariant forall i, j :: 0 <= i < n && 0 <= j < n && got[i] == 1 && got[j] == 0 ==> Before(dropped, i, j)
-    {
-      SomeShareWaits(got, dropped);
-      var waiting :| 0 <= waiting < n && got[waiting] == 0 && dropped[waiting] > 0;
-      var best := First(got, dropped);
-      assert best == waiting || Before(dropped, best, waiting);
-      SumAfterChange(got, best, 1);
-      got := got[best := 1];
-      handed := handed + 1;
-    }
-
+    var got := HandOut(dropped, leftover);
     shares := seq(n, i requires 0 <= i < n => floors[i] + got[i]);
     SumOfPairs(floors, got, shares);
   }

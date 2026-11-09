@@ -30,15 +30,17 @@ Only macOS on arm64 and Linux on x86-64 have a pinned zip. On any other machine 
 
 ## What is proven so far
 
-| File                               | What it proves                                                                                                                                                                                                                                                                                                                                                |
-| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `proofs/LargestRemainderSplit.dfy` | For every total and every list of weights: the split's shares sum to the total; each is its exact share rounded down or one unit more, so less than one unit away; a share whose exact share is whole gets no extra unit; the extra units go to the shares that dropped the most, ties to the earlier position. And only one list of shares does all of that. |
-| `proofs/Sums.dfy`                  | Facts about the sum of a list that the other proofs use.                                                                                                                                                                                                                                                                                                      |
-| `proofs/Arithmetic.dfy`            | Small facts about multiplying and dividing that Z3 cannot find on its own inside a larger proof.                                                                                                                                                                                                                                                              |
+| File                               | What it proves                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                     |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `proofs/LargestRemainderSplit.dfy` | For every total and every list of weights: the split's shares sum to the total; each is its exact share rounded down or one unit more, so less than one unit away; a share whose exact share is whole gets no extra unit; the extra units go to the shares that dropped the most, ties to the earlier position. And only one list of shares does all of that.                                                                                                                                                                                                                                                                      |
+| `proofs/CentRounding.dfy`          | For every list of balances that sums to zero: the rounded balances sum to exactly zero; each is a whole number of cents and less than one cent from its exact amount; each is cut toward zero and then either left or moved one cent back toward its exact amount; the cents all move the same way, to the balances that lost the most in the cut, ties to the lowest resident id. Only one list does all of that. And there are always enough balances that lost something on the needed side to take the leftover cents, so the guard `Settlement.assert_candidates_cover_pennies!` can never fire on balances that sum to zero. |
+| `proofs/LargestRemainder.dfy`      | The part both use: handing out k units by the order "largest key first, ties to the earlier position". It proves the units can always be handed out, and that only one hand-out follows the order.                                                                                                                                                                                                                                                                                                                                                                                                                                 |
+| `proofs/Sums.dfy`                  | Facts about the sum of a list that the other proofs use.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                           |
+| `proofs/Arithmetic.dfy`            | Small facts about multiplying and dividing that Z3 cannot find on its own inside a larger proof.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 
-The cent rounding and the lines of a dinner come next (#269, steps 4 and 5).
+The lines of a dinner come next (#269, step 5).
 
-"Only one list" is what links the proof to the Ruby. `spec/services/largest_remainder_split_on_every_small_input_spec.rb` checks that the Ruby follows the same rule on every small input. Since only one list follows the rule, the Ruby gives exactly the proven answer on each of those inputs.
+"Only one list" is what links a proof to the Ruby. The specs `spec/services/largest_remainder_split_on_every_small_input_spec.rb` and `spec/services/settlement_allocate_to_cents_on_every_small_input_spec.rb` check that the Ruby follows the same rules on every small input. Since only one list follows each rule, the Ruby gives exactly the proven answer on each of those inputs.
 
 ## Prove the examples too
 
@@ -49,3 +51,22 @@ So each proof file also proves a few examples worked out by hand from the docs, 
 ## Write the proofs from the rules, not from the code
 
 A Dafny model of `LargestRemainderSplit`, `Settlement.allocate_to_cents` or `MealLedger` must be written from the rules (AGENTS.md, Money Handling Standards; MODELS.md). Never edit it to match the Ruby. It is a separate copy of the rules, like `spec/support/oracle/plain_ledger.rb`, and it is useful only when it can disagree with the Ruby.
+
+## A proof must pass on every solver seed
+
+Z3 makes choices as it searches, and a seed decides them. With the pinned Z3 and the default seed a run gives the same answer every time, so `bin/check` is not flaky. But a proof that passes on one seed and fails on others can break after an unrelated change to the file, which moves the search. On 2026-11-09, four proofs failed on some seeds: one on half of them. Each was fixed by writing out a step that multiplies two unknowns, which Z3 has to guess at.
+
+After changing a proof, run every proof on 20 seeds:
+
+```bash
+D=~/.cache/comeals/dafny-4.11.0/dafny
+$D/dafny measure-complexity --mutations 20 --random-seed 4242 \
+  --solver-path $D/z3/bin/z3-4.14.1 --cores 4 \
+  --log-format "csv;LogFileName=tmp/seeds.csv" proofs/*.dfy
+```
+
+`tmp/seeds.csv` has one row per proof and seed. Every row must say `Passed`. If one does not, the fixes that worked here:
+
+- Name the case. Where a value is one of a few things, compute which one in a `var`, and assert the result for that case.
+- Call the lemma from `proofs/Arithmetic.dfy` for each product, rather than leaving Z3 to find it.
+- Add `{:isolate_assertions}` to a long lemma, so each assertion is its own question. It helped `CentRounding.BuildFollowsTheRule`; it made `LargestRemainder.CountFits` worse.

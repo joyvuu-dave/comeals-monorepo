@@ -6,6 +6,8 @@
 // Sum takes the last element off, not the first, so that adding one
 // element at the end (what a loop does) needs no lemma.
 module Sums {
+  import opened Arithmetic
+
   function Sum(s: seq<int>): int
   {
     if |s| == 0 then 0 else Sum(s[..|s| - 1]) + s[|s| - 1]
@@ -57,7 +59,12 @@ module Sums {
     ensures Sum(b) == k * Sum(a)
   {
     if |b| > 0 {
-      SumOfMultiples(a[..|a| - 1], k, b[..|b| - 1]);
+      var a' := a[..|a| - 1];
+      var b' := b[..|b| - 1];
+      assert forall i :: 0 <= i < |b'| ==> b'[i] == k * a'[i];
+      SumOfMultiples(a', k, b');
+      assert Sum(b) == k * Sum(a') + k * a[|a| - 1];
+      MulAdd(k, Sum(a'), a[|a| - 1]);
     }
   }
 
