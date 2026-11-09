@@ -30,11 +30,21 @@ Only macOS on arm64 and Linux on x86-64 have a pinned zip. On any other machine 
 
 ## What is proven so far
 
-| File              | What it proves                                                                                                           |
-| ----------------- | ------------------------------------------------------------------------------------------------------------------------ |
-| `proofs/Sums.dfy` | The sum of a list, the sum of two lists put together, and the sum after one element changes. The other proofs use these. |
+| File                               | What it proves                                                                                                                                                                                                                                                                                                                                                |
+| ---------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `proofs/LargestRemainderSplit.dfy` | For every total and every list of weights: the split's shares sum to the total; each is its exact share rounded down or one unit more, so less than one unit away; a share whose exact share is whole gets no extra unit; the extra units go to the shares that dropped the most, ties to the earlier position. And only one list of shares does all of that. |
+| `proofs/Sums.dfy`                  | Facts about the sum of a list that the other proofs use.                                                                                                                                                                                                                                                                                                      |
+| `proofs/Arithmetic.dfy`            | Small facts about multiplying and dividing that Z3 cannot find on its own inside a larger proof.                                                                                                                                                                                                                                                              |
 
-The split, the cent rounding and the lines of a dinner come next (#269, steps 3 to 5).
+The cent rounding and the lines of a dinner come next (#269, steps 4 and 5).
+
+"Only one list" is what links the proof to the Ruby. `spec/services/largest_remainder_split_on_every_small_input_spec.rb` checks that the Ruby follows the same rule on every small input. Since only one list follows the rule, the Ruby gives exactly the proven answer on each of those inputs.
+
+## Prove the examples too
+
+A proof shows that the code follows the rule as the proof states it. It cannot show that the rule is stated correctly: a mistake in the rule is made in the code too, and the proof still passes. That happened while writing the split proof. With ties sent to the later position in both the rule and the code, every proof still passed.
+
+So each proof file also proves a few examples worked out by hand from the docs, such as the $60 example in MODELS.md. With ties sent the wrong way, those fail.
 
 ## Write the proofs from the rules, not from the code
 
