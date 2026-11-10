@@ -92,6 +92,12 @@ class SnapshotRead
       .returns(T.type_parameter(:Result))
   end
   def self.call(wait_limit: nil, &blk)
+    # In PostgreSQL a statement timeout of 0 means no limit at all, so a
+    # wait of zero or less would wait for ever instead of not at all.
+    if wait_limit && !wait_limit.positive?
+      raise ArgumentError, "wait_limit must be more than zero, not #{wait_limit.inspect}"
+    end
+
     connection = ActiveRecord::Base.connection
 
     # A transaction is already open. In production this does not happen —
@@ -117,11 +123,12 @@ class SnapshotRead
   # Takes the transaction's snapshot now, with wait_limit as the statement
   # timeout, then puts the old timeout back for the block's reads. SHOW and
   # SET take no snapshot, so the wait happens at the SELECT and nowhere
-  # before it.
+  # before it. The limit is in whole milliseconds, rounded up: in whole
+  # seconds, half a second would become 0, which is no limit.
   sig { params(connection: ActiveRecord::ConnectionAdapters::AbstractAdapter, wait_limit: ActiveSupport::Duration).void }
   def self.take_snapshot(connection, wait_limit)
     statement_limit = connection.select_value('SHOW statement_timeout')
-    connection.execute("SET LOCAL statement_timeout = '#{wait_limit.to_i}s'")
+    connection.execute("SET LOCAL statement_timeout = '#{(wait_limit.to_f * 1000).ceil}ms'")
     connection.execute('SELECT 1')
     connection.execute("SET LOCAL statement_timeout = #{connection.quote(statement_limit)}")
   end

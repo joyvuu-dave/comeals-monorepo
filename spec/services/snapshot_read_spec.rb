@@ -170,6 +170,25 @@ RSpec.describe SnapshotRead do
         expect(count).to eq(0)
       end
 
+      it 'waits part of a second, not no time at all, for a limit under one second' do
+        connection = ActiveRecord::Base.connection
+        allow(connection).to receive(:execute).and_call_original
+
+        described_class.call(wait_limit: 0.5.seconds) { Unit.count }
+        described_class.call(wait_limit: 1.0001.seconds) { Unit.count }
+
+        expect(connection).to have_received(:execute).with("SET LOCAL statement_timeout = '500ms'")
+        expect(connection).to have_received(:execute).with("SET LOCAL statement_timeout = '1001ms'")
+      end
+
+      it 'refuses a limit of zero or less, which PostgreSQL reads as no limit, before it opens a transaction' do
+        [0.seconds, -1.second].each do |limit|
+          expect { described_class.call(wait_limit: limit) { Unit.count } }
+            .to raise_error(ArgumentError, "wait_limit must be more than zero, not #{limit.inspect}")
+        end
+        expect(ActiveRecord::Base.connection.transaction_open?).to be(false)
+      end
+
       it 'keeps the statement timeout for the reads after the wait' do
         expect do
           with_statement_timeout('500ms') do
