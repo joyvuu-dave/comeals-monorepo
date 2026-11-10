@@ -46,6 +46,74 @@ RSpec.describe ResidentMailer do
     end
   end
 
+  # A change of email waits in pending_email until the link is opened
+  # (EmailChange). These two groups are the only examples mutant runs for
+  # the two methods, so each one checks every part of its mail.
+  describe '#email_change_link_email' do
+    let(:mail) do
+      resident.pending_email = 'sarah.new@example.com'
+      described_class.email_change_link_email(resident, 'abc123token')
+    end
+
+    it 'goes to the new address, with its subject' do
+      expect(mail.to).to eq(['sarah.new@example.com'])
+      expect(mail.subject).to eq('Confirm your new email')
+    end
+
+    it 'names the new address and links to the confirm page under the app root, in the text part' do
+      expect(mail.text_part.body.decoded.lines.map(&:chomp)).to include(
+        'Confirm your new Comeals.com email, Sarah Chen',
+        'To make sarah.new@example.com your email, follow this link: ' \
+        'http://localhost:3036/confirm-email#token=abc123token'
+      )
+    end
+
+    it_behaves_like 'an HTML part that is one HTML document'
+
+    it 'keeps the name, the new address and the link in the HTML part' do
+      body = html_body(mail)
+
+      expect(body.text.squish).to eq(
+        'Confirm your new Comeals.com email, Sarah Chen ' \
+        'To make sarah.new@example.com your email, follow this link. ' \
+        'The link works for 24 hours. Until you follow it, sign in with your old email. ' \
+        'If you did not ask for this, you can ignore this email.'
+      )
+      expect(links_in(body)).to eq([['follow this link.', 'http://localhost:3036/confirm-email#token=abc123token']])
+    end
+  end
+
+  describe '#email_change_notice_email' do
+    let(:mail) do
+      resident.pending_email = 'sarah.new@example.com'
+      described_class.email_change_notice_email(resident, 'sarah@example.com')
+    end
+
+    it 'goes to the old address, with its subject' do
+      expect(mail.to).to eq(['sarah@example.com'])
+      expect(mail.subject).to eq('Your Comeals email is being changed')
+    end
+
+    it 'names the resident and the new address in the text part' do
+      expect(mail.text_part.body.decoded.lines.map(&:chomp)).to include(
+        'Your Comeals.com email is being changed, Sarah Chen',
+        'Someone signed in as you asked to change your email to sarah.new@example.com.'
+      )
+    end
+
+    it_behaves_like 'an HTML part that is one HTML document'
+
+    it 'names the resident and the new address in the HTML part' do
+      expect(html_body(mail).text.squish).to eq(
+        'Your Comeals.com email is being changed, Sarah Chen ' \
+        'Someone signed in as you asked to change your email to sarah.new@example.com. ' \
+        'It changes only when the link sent to that address is followed. ' \
+        'If that was you, there is nothing to do here. If it was not, sign in, ' \
+        'open your profile, and put this address back, or ask an admin.'
+      )
+    end
+  end
+
   # A rotation's period is the span of its meals' dates.
   def rotation_with_meals(*dates)
     create(:rotation, community: community).tap do |rotation|

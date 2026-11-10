@@ -1,0 +1,278 @@
+---
+- subject: JwtAuth.still_valid?
+  kind: same-answer
+  why: >-
+    `Time.at` and `Time.zone.at` give the same instant in two zones, and two instants
+    compare the same in any zone.
+  diff: |
+    @@ -1,10 +1,10 @@
+     class << self
+       def still_valid?(claims, login)
+         keys_valid_since = T.must(login.keys_valid_since)
+         made_with = claims["keys_valid_since"]
+         unless made_with.nil?
+           return made_with == microseconds(keys_valid_since)
+         end
+    -    login.is_a?(Resident) && Time.zone.at(claims["iat"].to_f) >= keys_valid_since
+    +    login.is_a?(Resident) && Time.at(claims["iat"].to_f) >= keys_valid_since
+       end
+     end
+- subject: JwtAuth.still_valid?
+  kind: same-answer
+  why: >-
+    A login is a Resident or a CommonHouseLogin, and no class inherits from Resident,
+    so `is_a?(Resident)` and `instance_of?(Resident)` give the same answer.
+  diff: |
+    @@ -1,10 +1,10 @@
+     class << self
+       def still_valid?(claims, login)
+         keys_valid_since = T.must(login.keys_valid_since)
+         made_with = claims["keys_valid_since"]
+         unless made_with.nil?
+           return made_with == microseconds(keys_valid_since)
+         end
+    -    login.is_a?(Resident) && Time.zone.at(claims["iat"].to_f) >= keys_valid_since
+    +    login.instance_of?(Resident) && Time.zone.at(claims["iat"].to_f) >= keys_valid_since
+       end
+     end
+- subject: JwtAuth.microseconds
+  kind: same-answer
+  why: >-
+    `time` is the `keys_valid_since` column, a time. `Integer()` uses `to_i` for an
+    object with no `to_int`, so `Integer(time)` is the same whole number as `time.to_i`.
+  diff: |
+    @@ -1,5 +1,5 @@
+     class << self
+       def microseconds(time)
+    -    (time.to_i * 1000000) + time.usec
+    +    (Integer(time) * 1000000) + time.usec
+       end
+     end
+- subject: JwtAuth.encode
+  kind: same-answer
+  why: >-
+    `JWT.encode` signs with HS256 when no algorithm is named, and ALGORITHM is HS256.
+    If a gem update changed that default, the `.encode` examples would fail, since
+    `decode` accepts only HS256.
+  diff: |
+    @@ -1,7 +1,7 @@
+     class << self
+       def encode(login)
+         id_claim = ID_CLAIMS.fetch(login.class)
+         payload = { id_claim => login.id, iat: Time.current.to_f, iss: ISSUER, keys_valid_since: microseconds(T.must(login.keys_valid_since)) }
+    -    JWT.encode(payload, secret, ALGORITHM)
+    +    JWT.encode(payload, secret)
+       end
+     end
+- subject: JwtAuth.authenticate
+  kind: same-answer
+  why: >-
+    `JWT.decode` refuses nil and a blank string with a `DecodeError`, which `decode`
+    rescues, so the method answers nil for them anyway. The check stays so a request
+    with no token is refused without raising and rescuing an error.
+  diff: |
+    @@ -1,19 +1,19 @@
+     class << self
+       def authenticate(token)
+    -    if token.blank?
+    +    if false
+           return nil
+         end
+         claims = decode(token)
+         unless claims
+           return nil
+         end
+         login = find_login(claims)
+         unless login
+           return nil
+         end
+         unless still_valid?(claims, login)
+           return nil
+         end
+         login
+       end
+     end
+- subject: JwtAuth.authenticate
+  kind: same-answer
+  why: >-
+    `JWT.decode` refuses nil and a blank string with a `DecodeError`, which `decode`
+    rescues, so the method answers nil for them anyway. The check stays so a request
+    with no token is refused without raising and rescuing an error.
+  diff: |
+    @@ -1,19 +1,16 @@
+     class << self
+       def authenticate(token)
+    -    if token.blank?
+    -      return nil
+    -    end
+         claims = decode(token)
+         unless claims
+           return nil
+         end
+         login = find_login(claims)
+         unless login
+           return nil
+         end
+         unless still_valid?(claims, login)
+           return nil
+         end
+         login
+       end
+     end
+- subject: JwtAuth.authenticate
+  kind: same-answer
+  why: >-
+    Without the `return`, a blank token goes on to `JWT.decode`, which refuses it
+    with a `DecodeError` that `decode` rescues, so the method still answers nil.
+  diff: |
+    @@ -1,19 +1,19 @@
+     class << self
+       def authenticate(token)
+         if token.blank?
+    -      return nil
+    +      nil
+         end
+         claims = decode(token)
+         unless claims
+           return nil
+         end
+         login = find_login(claims)
+         unless login
+           return nil
+         end
+         unless still_valid?(claims, login)
+           return nil
+         end
+         login
+       end
+     end
+- subject: JwtAuth.authenticate
+  kind: same-answer
+  why: >-
+    `self` is the JwtAuth module, which is never blank, so this is the same as having
+    no check. `JWT.decode` refuses nil and a blank string with a `DecodeError`, which
+    `decode` rescues, so the method still answers nil for them.
+  diff: |
+    @@ -1,19 +1,19 @@
+     class << self
+       def authenticate(token)
+    -    if token.blank?
+    +    if self.blank?
+           return nil
+         end
+         claims = decode(token)
+         unless claims
+           return nil
+         end
+         login = find_login(claims)
+         unless login
+           return nil
+         end
+         unless still_valid?(claims, login)
+           return nil
+         end
+         login
+       end
+     end
+- subject: JwtAuth.authenticate
+  kind: same-answer
+  why: >-
+    `JWT.decode` refuses nil and a blank string with a `DecodeError`, which `decode`
+    rescues, so the method answers nil for them anyway.
+  diff: |
+    @@ -1,19 +1,17 @@
+     class << self
+       def authenticate(token)
+    -    if token.blank?
+    -      return nil
+    -    end
+    +    nil
+         claims = decode(token)
+         unless claims
+           return nil
+         end
+         login = find_login(claims)
+         unless login
+           return nil
+         end
+         unless still_valid?(claims, login)
+           return nil
+         end
+         login
+       end
+     end
+- subject: JwtAuth.authenticate
+  kind: same-answer
+  why: >-
+    With `if nil` there is no check. `JWT.decode` refuses nil and a blank string with
+    a `DecodeError`, which `decode` rescues, so the method still answers nil for them.
+  diff: |
+    @@ -1,19 +1,19 @@
+     class << self
+       def authenticate(token)
+    -    if token.blank?
+    +    if nil
+           return nil
+         end
+         claims = decode(token)
+         unless claims
+           return nil
+         end
+         login = find_login(claims)
+         unless login
+           return nil
+         end
+         unless still_valid?(claims, login)
+           return nil
+         end
+         login
+       end
+     end
+- subject: JwtAuth.find_login
+  kind: same-answer
+  why: >-
+    `CommonHouseLogin.find_by(id: nil)` is nil, the same as the `if` gives when there
+    is no `common_house_login_id`. The check only saves a query.
+  diff: |
+    @@ -1,16 +1,14 @@
+     class << self
+       def find_login(claims)
+         resident_id = claims["resident_id"]
+         common_house_login_id = claims["common_house_login_id"]
+         if resident_id && common_house_login_id
+           return nil
+         end
+         if resident_id
+           Resident.find_by(id: resident_id)
+         else
+    -      if common_house_login_id
+    -        CommonHouseLogin.find_by(id: common_house_login_id)
+    -      end
+    +      CommonHouseLogin.find_by(id: common_house_login_id)
+         end
+       end
+     end
+- subject: JwtAuth.find_login
+  kind: same-answer
+  why: >-
+    `CommonHouseLogin.find_by(id: nil)` is nil, the same as the `if` gives when there
+    is no `common_house_login_id`. The check only saves a query.
+  diff: |
+    @@ -1,16 +1,16 @@
+     class << self
+       def find_login(claims)
+         resident_id = claims["resident_id"]
+         common_house_login_id = claims["common_house_login_id"]
+         if resident_id && common_house_login_id
+           return nil
+         end
+         if resident_id
+           Resident.find_by(id: resident_id)
+         else
+    -      if common_house_login_id
+    +      if true
+             CommonHouseLogin.find_by(id: common_house_login_id)
+           end
+         end
+       end
+     end

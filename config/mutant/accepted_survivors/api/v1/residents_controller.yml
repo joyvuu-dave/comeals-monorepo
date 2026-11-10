@@ -1,0 +1,343 @@
+---
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    goldiloader (in the Gemfile) loads the meal of every row in a batch with one query
+    the first time the loop asks for a meal. So the loop reads the same meals with
+    or without the `includes`, and the feed is the same.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+       Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+    -  MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+    +  MealResident.where(resident_id: resident.id).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    The route is `/residents/:id/ical`, so `params` always has `:id` here and `fetch`
+    never raises.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+    -  resident = Resident.find(params[:id])
+    +  resident = Resident.find(params.fetch(:id))
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+       Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    `includes(nil)` preloads nothing, the same as no `includes`. goldiloader (in the
+    Gemfile) loads the meal of every row in a batch with one query the first time
+    the loop asks for a meal, so the feed is the same.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+       Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+    -  MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+    +  MealResident.where(resident_id: resident.id).includes(nil).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    Given a record in `where(resident_id: ...)`, Rails uses the record's id, so the
+    SQL is the same as with `resident.id`.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+       Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+    -  MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+    +  MealResident.where(resident_id: resident).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    `includes(nil)` preloads nothing, the same as no `includes`. goldiloader (in the
+    Gemfile) loads the meal of every row in a batch with one query the first time
+    the loop asks for a meal, so the feed is the same.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+    -  Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+    +  Bill.where(resident_id: resident.id).includes(nil).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    Given a record in `where(resident_id: ...)`, Rails uses the record's id, so the
+    SQL is the same as with `resident.id`.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+    -  Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+    +  Bill.where(resident_id: resident).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    goldiloader (in the Gemfile) loads the meal of every row in a batch with one query
+    the first time the loop asks for a meal. So the loop reads the same meals with
+    or without the `includes`, and the feed is the same.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+       cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+    -  Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+    +  Bill.where(resident_id: resident.id).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    Given a record in `where(resident_id: ...)`, Rails uses the record's id, so the
+    SQL is the same as with `resident.id`.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+    -  cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+    +  cook_dates = Bill.joins(:meal).where(resident_id: resident).pluck("meals.date").to_set
+       Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#ical
+  kind: same-answer
+  why: >-
+    `cook_dates` is only asked `include?`, and an Array gives the same answer to `include?`
+    as a Set. The Set only makes each look-up faster.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def ical
+       resident = Resident.find(params[:id])
+       community = T.must(resident.community)
+       feed = MealIcalFeed.new(community, calendar_name: "My #{community.name}", feed: "resident-#{resident.id}")
+    -  cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date").to_set
+    +  cook_dates = Bill.joins(:meal).where(resident_id: resident.id).pluck("meals.date")
+       Bill.where(resident_id: resident.id).includes(:meal).find_each { |bill|
+         meal = T.must(bill.meal)
+         feed.add_meal(meal, summary: "Cook Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       MealResident.where(resident_id: resident.id).includes(:meal).find_each { |mr|
+         meal = T.must(mr.meal)
+         if cook_dates.include?(meal.date)
+           next
+         end
+         feed.add_meal(meal, summary: "Attend Common Dinner", description: "#{meal.description}\n\n\n\nView here: #{root_url}/meals/#{meal.id}/edit")
+       }
+       render(plain: feed.to_ical, content_type: "text/calendar")
+     end
+- subject: Api::V1::ResidentsController#common_house_token
+  kind: same-answer
+  why: >-
+    `password` is `params[:password]`. Text in a request is a plain String, never
+    an object of a subclass of String, so `is_a?(String)` and `instance_of?(String)`
+    give the same answer.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def common_house_token
+       login = CommonHouseLogin.first
+       if login.nil?
+         return render(json: { message: COMMON_HOUSE_NOT_SET_UP }, status: :bad_request)
+       end
+       password = params[:password]
+    -  unless password.is_a?(String) && login.authenticate(password)
+    +  unless password.instance_of?(String) && login.authenticate(password)
+         return render(json: { message: "Incorrect password" }, status: :bad_request)
+       end
+       community = Community.instance
+       render(json: { token: JwtAuth.encode(login), community_id: community.id, timezone: community.timezone, username: CommonHouseLogin::NAME, common_house: true })
+     end
+- subject: Api::V1::ResidentsController#token
+  kind: same-answer
+  why: >-
+    This line runs after the first line of the method answered "Email required." for
+    a blank `params[:email]`, so the key is there and `fetch` never raises.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def token
+       if params[:email].blank?
+         render(json: { message: "Email required." }, status: :bad_request) and return
+       end
+       email = params[:email].to_s.strip.downcase
+       if email == CommonHouseLogin::EMAIL
+         return common_house_token
+       end
+       resident = Resident.find_by(email:)
+       if resident.nil?
+    -    return render(json: { message: "No resident with email #{params[:email]}" }, status: :bad_request)
+    +    return render(json: { message: "No resident with email #{params.fetch(:email)}" }, status: :bad_request)
+       end
+       if resident.authenticate(params[:password])
+         community = T.must(resident.community)
+         render(json: { token: JwtAuth.encode(resident), community_id: community.id, resident_id: resident.id, username: ResidentNameShortener.short(resident.name), timezone: community.timezone })
+       else
+         render(json: { message: "Incorrect password" }, status: :bad_request)
+       end
+     end
+- subject: Api::V1::ResidentsController#token
+  kind: same-answer
+  why: >-
+    The line before answered "Email required." for a blank `params[:email]`, so the
+    key is there and `fetch` never raises.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def token
+       if params[:email].blank?
+         render(json: { message: "Email required." }, status: :bad_request) and return
+       end
+    -  email = params[:email].to_s.strip.downcase
+    +  email = params.fetch(:email).to_s.strip.downcase
+       if email == CommonHouseLogin::EMAIL
+         return common_house_token
+       end
+       resident = Resident.find_by(email:)
+       if resident.nil?
+         return render(json: { message: "No resident with email #{params[:email]}" }, status: :bad_request)
+       end
+       if resident.authenticate(params[:password])
+         community = T.must(resident.community)
+         render(json: { token: JwtAuth.encode(resident), community_id: community.id, resident_id: resident.id, username: ResidentNameShortener.short(resident.name), timezone: community.timezone })
+       else
+         render(json: { message: "Incorrect password" }, status: :bad_request)
+       end
+     end
+- subject: Api::V1::ResidentsController#password_reset
+  kind: same-answer
+  why: >-
+    The line before answered "Email required." for a blank `params[:email]`, so the
+    key is there and `fetch` never raises.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def password_reset
+       if params[:email].blank?
+         render(json: { message: "Email required." }, status: :bad_request) and return
+       end
+    -  email = params[:email].to_s.strip.downcase
+    +  email = params.fetch(:email).to_s.strip.downcase
+       if email == CommonHouseLogin::EMAIL
+         return render(json: { message: COMMON_HOUSE_PASSWORD_BY_ADMIN }, status: :bad_request)
+       end
+       resident = Resident.find_by(email:)
+       if resident.nil?
+         return render(json: { message: "No resident with that email address." }, status: :bad_request)
+       end
+       case PasswordReset.request(resident)
+       when :sent
+         render(json: { message: "Check your email." })
+       when :mail_failed
+         render(json: { message: "Password reset saved but email could not be sent. Please contact an administrator." }, status: :service_unavailable)
+       else
+         refuse_for_the_row(resident, "No reset link was sent:")
+       end
+     end

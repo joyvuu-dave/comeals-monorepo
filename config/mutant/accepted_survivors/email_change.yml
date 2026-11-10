@@ -1,0 +1,81 @@
+---
+- subject: EmailChange.confirm
+  kind: same-answer
+  why: An `if` with no `else` gives nil when its test fails, the same as `else nil`.
+  diff: |
+    @@ -1,33 +1,31 @@
+     def self.confirm(token)
+       resident = if token.is_a?(String)
+         Resident.find_by(email_change_token_digest: digest(token))
+    -  else
+    -    nil
+       end
+       if resident.nil?
+         return Outcome.new(changed: false, message: UNKNOWN)
+       end
+       sent_at = T.must(resident.email_change_sent_at)
+       if sent_at < LIFETIME.ago
+         cancel(resident)
+         resident.save!(validate: false)
+         return Outcome.new(changed: false, message: EXPIRED)
+       end
+       new_email = T.must(resident.pending_email)
+       resident.email=new_email
+       cancel(resident)
+       if save_new_email(resident)
+         return Outcome.new(changed: true, message: "Your email is now #{new_email}.")
+       end
+       reasons = resident.errors.full_messages_for(:email)
+       if reasons.empty?
+         reasons = resident.errors.full_messages
+       end
+       if reasons.empty?
+         reasons = ["Email has already been taken"]
+       end
+       refused = Resident.find(T.must(resident.id))
+       cancel(refused)
+       refused.save!(validate: false)
+       Outcome.new(changed: false, message: "Your email was not changed to #{new_email}:\n#{reasons.join("\n")}")
+     end
+- subject: EmailChange.confirm
+  kind: same-answer
+  why: >-
+    The one caller passes `params[:email_token]`. Text in a request is a plain String,
+    never an object of a subclass of String, so `is_a?(String)` and `instance_of?(String)`
+    give the same answer.
+  diff: |
+    @@ -1,33 +1,33 @@
+     def self.confirm(token)
+    -  resident = if token.is_a?(String)
+    +  resident = if token.instance_of?(String)
+         Resident.find_by(email_change_token_digest: digest(token))
+       else
+         nil
+       end
+       if resident.nil?
+         return Outcome.new(changed: false, message: UNKNOWN)
+       end
+       sent_at = T.must(resident.email_change_sent_at)
+       if sent_at < LIFETIME.ago
+         cancel(resident)
+         resident.save!(validate: false)
+         return Outcome.new(changed: false, message: EXPIRED)
+       end
+       new_email = T.must(resident.pending_email)
+       resident.email=new_email
+       cancel(resident)
+       if save_new_email(resident)
+         return Outcome.new(changed: true, message: "Your email is now #{new_email}.")
+       end
+       reasons = resident.errors.full_messages_for(:email)
+       if reasons.empty?
+         reasons = resident.errors.full_messages
+       end
+       if reasons.empty?
+         reasons = ["Email has already been taken"]
+       end
+       refused = Resident.find(T.must(resident.id))
+       cancel(refused)
+       refused.save!(validate: false)
+       Outcome.new(changed: false, message: "Your email was not changed to #{new_email}:\n#{reasons.join("\n")}")
+     end

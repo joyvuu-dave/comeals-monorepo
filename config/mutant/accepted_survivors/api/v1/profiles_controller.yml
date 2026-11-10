@@ -1,0 +1,143 @@
+---
+- subject: Api::V1::ProfilesController#update
+  kind: same-answer
+  why: >-
+    `outcome` is what `ProfileUpdate.save` returns: a `ProfileUpdate::Saved`, or a
+    message. Every message is a plain String: a constant, or `join` on Strings. None
+    is an object of a subclass of String, so `is_a?(String)` and `instance_of?(String)`
+    give the same answer.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def update
+       resident = current_resident_api
+       if resident.nil?
+         return not_a_resident_api
+       end
+       fields = ProfileUpdate.read(params)
+       if fields.is_a?(String)
+         return render(json: { message: fields }, status: :bad_request)
+       end
+       outcome = RetryOnConflict.call {
+         ProfileUpdate.save(T.must(resident.id), fields)
+       }
+    -  if outcome.is_a?(String)
+    +  if outcome.instance_of?(String)
+         return render(json: { message: outcome }, status: :bad_request)
+       end
+       render_saved(outcome)
+     end
+- subject: Api::V1::ProfilesController#update
+  kind: same-answer
+  why: >-
+    `fields` is what `ProfileUpdate.read` returns: a `ProfileUpdate::Fields`, or a
+    message made by `join` on plain Strings. None is an object of a subclass of String,
+    so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def update
+       resident = current_resident_api
+       if resident.nil?
+         return not_a_resident_api
+       end
+       fields = ProfileUpdate.read(params)
+    -  if fields.is_a?(String)
+    +  if fields.instance_of?(String)
+         return render(json: { message: fields }, status: :bad_request)
+       end
+       outcome = RetryOnConflict.call {
+         ProfileUpdate.save(T.must(resident.id), fields)
+       }
+       if outcome.is_a?(String)
+         return render(json: { message: outcome }, status: :bad_request)
+       end
+       render_saved(outcome)
+     end
+- subject: Api::V1::ProfilesController#confirm_email
+  kind: same-answer
+  why: "`render` with `status: nil` answers 200, the same as `status: :ok`."
+  diff: |
+    @@ -1,12 +1,12 @@
+     def confirm_email
+       outcome = RetryOnConflict.call {
+         Resident.transaction {
+           EmailChange.confirm(params[:email_token])
+         }
+       }
+       render(json: { message: outcome.message }, status: if outcome.changed
+    -    :ok
+    +    nil
+       else
+         :bad_request
+       end)
+     end
+- subject: Api::V1::ProfilesController#confirm_email
+  kind: same-answer
+  why: >-
+    When the change worked, the `unless` gives nil, and `render` with `status: nil`
+    answers 200, the same as `:ok`. When it did not, both give `:bad_request`.
+  diff: |
+    @@ -1,12 +1,10 @@
+     def confirm_email
+       outcome = RetryOnConflict.call {
+         Resident.transaction {
+           EmailChange.confirm(params[:email_token])
+         }
+       }
+    -  render(json: { message: outcome.message }, status: if outcome.changed
+    -    :ok
+    -  else
+    +  render(json: { message: outcome.message }, status: unless outcome.changed
+         :bad_request
+       end)
+     end
+- subject: Api::V1::ProfilesController#render_saved
+  kind: same-answer
+  why: >-
+    `until_then` is only put inside a string with `#{}`, and `"#{nil}"` is an empty
+    string, the same as `""`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def render_saved(saved)
+       token = saved.email_token
+       if token.nil?
+         return render(json: { message: "Your profile has been saved.", profile: saved.profile })
+       end
+       pending = saved.resident.pending_email
+       old_email = saved.old_email
+       if EmailChange.send_emails(saved.resident, token, old_email) == :sent
+         until_then = if old_email.nil?
+    -      ""
+    +      nil
+         else
+           " Until then, sign in with #{old_email}."
+         end
+         return render(json: { message: "Your profile has been saved. To change your email, open the link " "we sent to #{pending}.#{until_then}", profile: saved.profile })
+       end
+       render(json: { message: "Your profile has been saved, but the email to #{pending} could not be sent. " "Use \"Send the link again\" on your profile, or ask an admin.", profile: saved.profile }, status: :service_unavailable)
+     end
+- subject: Api::V1::ProfilesController#render_saved
+  kind: same-answer
+  why: >-
+    With no `else`, the `unless` gives nil when there is no old address, and `until_then`
+    is only put inside a string with `#{}`, where nil gives an empty string, the same
+    as `""`.
+  diff: |
+    @@ -1,17 +1,15 @@
+     def render_saved(saved)
+       token = saved.email_token
+       if token.nil?
+         return render(json: { message: "Your profile has been saved.", profile: saved.profile })
+       end
+       pending = saved.resident.pending_email
+       old_email = saved.old_email
+       if EmailChange.send_emails(saved.resident, token, old_email) == :sent
+    -    until_then = if old_email.nil?
+    -      ""
+    -    else
+    +    until_then = unless old_email.nil?
+           " Until then, sign in with #{old_email}."
+         end
+         return render(json: { message: "Your profile has been saved. To change your email, open the link " "we sent to #{pending}.#{until_then}", profile: saved.profile })
+       end
+       render(json: { message: "Your profile has been saved, but the email to #{pending} could not be sent. " "Use \"Send the link again\" on your profile, or ask an admin.", profile: saved.profile }, status: :service_unavailable)
+     end

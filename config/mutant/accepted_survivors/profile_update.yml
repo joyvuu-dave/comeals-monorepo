@@ -1,0 +1,406 @@
+---
+- subject: ProfileUpdate.email_problem
+  kind: same-answer
+  why: >-
+    With no `else`, the `unless` gives nil when `reasons` is empty, the same as the
+    `nil` the original gives.
+  diff: |
+    @@ -1,13 +1,11 @@
+     def self.email_problem(resident, email)
+       stored = resident.email
+       resident.email=email
+       resident.validate
+       reasons = resident.errors.full_messages_for(:email)
+       resident.email=stored
+       resident.errors.clear
+    -  if reasons.empty?
+    -    nil
+    -  else
+    +  unless reasons.empty?
+         reasons.join("\n")
+       end
+     end
+- subject: ProfileUpdate.save_all
+  kind: same-answer
+  why: >-
+    With no `else`, the `unless` gives nil when `reasons` is empty, the same as the
+    `nil` the original gives.
+  diff: |
+    @@ -1,21 +1,19 @@
+     def self.save_all(resident, children)
+       reasons = if resident.save
+         []
+       else
+         resident.errors.full_messages
+       end
+       children.each { |child|
+         if child.save
+           next
+         end
+         before = child.attribute_in_database(:name)
+         reasons.concat(child.errors.full_messages.map { |reason|
+           "#{before}: #{reason}"
+         })
+       }
+    -  if reasons.empty?
+    -    nil
+    -  else
+    +  unless reasons.empty?
+         reasons.join("\n")
+       end
+     end
+- subject: ProfileUpdate.save_all
+  kind: same-answer
+  why: >-
+    After a save that worked, `child.errors` is empty, so the lines after the `next`
+    add nothing to `reasons`. Reading `attribute_in_database` changes nothing.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.save_all(resident, children)
+       reasons = if resident.save
+         []
+       else
+         resident.errors.full_messages
+       end
+       children.each { |child|
+         if child.save
+    -      next
+    +      nil
+         end
+         before = child.attribute_in_database(:name)
+         reasons.concat(child.errors.full_messages.map { |reason|
+           "#{before}: #{reason}"
+         })
+       }
+       if reasons.empty?
+         nil
+       else
+         reasons.join("\n")
+       end
+     end
+- subject: ProfileUpdate.read
+  kind: same-answer
+  why: >-
+    A JSON value in a request that is text is a plain String, never an object of a
+    subclass of String, so `is_a?(String)` and `instance_of?(String)` give the same
+    answer.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.read(params)
+       problems = []
+    -  unless params[:name].is_a?(String)
+    +  unless params[:name].instance_of?(String)
+         problems << "Name must be text."
+       end
+       unless params[:email].is_a?(String)
+         problems << "Email must be text."
+       end
+       vegetarian = TrueOrFalse.read(params[:vegetarian])
+       if vegetarian.nil?
+         problems << "#{TrueOrFalse.refusal(:vegetarian)}."
+       end
+       children = read_children(params[:children])
+       if children.is_a?(String)
+         problems << children
+       end
+       if problems.any?
+         return problems.join("\n")
+       end
+       Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+     end
+- subject: ProfileUpdate.read
+  kind: same-answer
+  why: >-
+    A JSON value in a request that is text is a plain String, never an object of a
+    subclass of String, so `is_a?(String)` and `instance_of?(String)` give the same
+    answer.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.read(params)
+       problems = []
+       unless params[:name].is_a?(String)
+         problems << "Name must be text."
+       end
+    -  unless params[:email].is_a?(String)
+    +  unless params[:email].instance_of?(String)
+         problems << "Email must be text."
+       end
+       vegetarian = TrueOrFalse.read(params[:vegetarian])
+       if vegetarian.nil?
+         problems << "#{TrueOrFalse.refusal(:vegetarian)}."
+       end
+       children = read_children(params[:children])
+       if children.is_a?(String)
+         problems << children
+       end
+       if problems.any?
+         return problems.join("\n")
+       end
+       Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+     end
+- subject: ProfileUpdate.read
+  kind: same-answer
+  why: >-
+    This line runs only when `params[:name]` was a String (the first check in the
+    method), so the key is there and `fetch` never raises.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.read(params)
+       problems = []
+       unless params[:name].is_a?(String)
+         problems << "Name must be text."
+       end
+       unless params[:email].is_a?(String)
+         problems << "Email must be text."
+       end
+       vegetarian = TrueOrFalse.read(params[:vegetarian])
+       if vegetarian.nil?
+         problems << "#{TrueOrFalse.refusal(:vegetarian)}."
+       end
+       children = read_children(params[:children])
+       if children.is_a?(String)
+         problems << children
+       end
+       if problems.any?
+         return problems.join("\n")
+       end
+    -  Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+    +  Fields.new(name: params.fetch(:name), vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+     end
+- subject: ProfileUpdate.read
+  kind: same-answer
+  why: >-
+    This line runs only when `params[:email]` was a String (the second check in the
+    method), so the key is there and `fetch` never raises.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.read(params)
+       problems = []
+       unless params[:name].is_a?(String)
+         problems << "Name must be text."
+       end
+       unless params[:email].is_a?(String)
+         problems << "Email must be text."
+       end
+       vegetarian = TrueOrFalse.read(params[:vegetarian])
+       if vegetarian.nil?
+         problems << "#{TrueOrFalse.refusal(:vegetarian)}."
+       end
+       children = read_children(params[:children])
+       if children.is_a?(String)
+         problems << children
+       end
+       if problems.any?
+         return problems.join("\n")
+       end
+    -  Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+    +  Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params.fetch(:email), children: T.cast(children, T::Array[Child]))
+     end
+- subject: ProfileUpdate.read
+  kind: same-answer
+  why: >-
+    `T.cast` does not check the type when the code runs. It only tells Sorbet the
+    type, so the type given to it changes nothing.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.read(params)
+       problems = []
+       unless params[:name].is_a?(String)
+         problems << "Name must be text."
+       end
+       unless params[:email].is_a?(String)
+         problems << "Email must be text."
+       end
+       vegetarian = TrueOrFalse.read(params[:vegetarian])
+       if vegetarian.nil?
+         problems << "#{TrueOrFalse.refusal(:vegetarian)}."
+       end
+       children = read_children(params[:children])
+       if children.is_a?(String)
+         problems << children
+       end
+       if problems.any?
+         return problems.join("\n")
+       end
+    -  Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+    +  Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[nil]))
+     end
+- subject: ProfileUpdate.read
+  kind: same-answer
+  why: >-
+    `children` is what `read_children` returns: an Array, or one of its message literals,
+    which are plain Strings. So `is_a?(String)` and `instance_of?(String)` give the
+    same answer.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def self.read(params)
+       problems = []
+       unless params[:name].is_a?(String)
+         problems << "Name must be text."
+       end
+       unless params[:email].is_a?(String)
+         problems << "Email must be text."
+       end
+       vegetarian = TrueOrFalse.read(params[:vegetarian])
+       if vegetarian.nil?
+         problems << "#{TrueOrFalse.refusal(:vegetarian)}."
+       end
+       children = read_children(params[:children])
+    -  if children.is_a?(String)
+    +  if children.instance_of?(String)
+         problems << children
+       end
+       if problems.any?
+         return problems.join("\n")
+       end
+       Fields.new(name: params[:name], vegetarian: T.must(vegetarian), email: params[:email], children: T.cast(children, T::Array[Child]))
+     end
+- subject: ProfileUpdate.read_children
+  kind: same-answer
+  why: >-
+    Rails turns each JSON object in a request into an `ActionController::Parameters`,
+    never an object of a subclass of it, so `is_a?` and `instance_of?` give the same
+    answer.
+  diff: |
+    @@ -1,24 +1,24 @@
+     def self.read_children(raw)
+       if raw.nil?
+         return []
+       end
+       unless raw.is_a?(Array)
+         return "Children must be a list."
+       end
+       children = raw.map { |child|
+    -    unless child.is_a?(ActionController::Parameters)
+    +    unless child.instance_of?(ActionController::Parameters)
+           return "Each child must have an id, a name and a vegetarian setting."
+         end
+         id = whole_number(child[:id])
+         vegetarian = TrueOrFalse.read(child[:vegetarian])
+         name = child[:name]
+         if id.nil? || vegetarian.nil? || !name.is_a?(String)
+           return "Each child must have an id, a name and a vegetarian setting."
+         end
+         Child.new(id:, name:, vegetarian:)
+       }
+       if children.map(&:id).uniq.size < children.size
+         return "Each child can be sent only once."
+       end
+       children
+     end
+- subject: ProfileUpdate.read_children
+  kind: same-answer
+  why: >-
+    A JSON value in a request that is text is a plain String, never an object of a
+    subclass of String, so `is_a?(String)` and `instance_of?(String)` give the same
+    answer.
+  diff: |
+    @@ -1,24 +1,24 @@
+     def self.read_children(raw)
+       if raw.nil?
+         return []
+       end
+       unless raw.is_a?(Array)
+         return "Children must be a list."
+       end
+       children = raw.map { |child|
+         unless child.is_a?(ActionController::Parameters)
+           return "Each child must have an id, a name and a vegetarian setting."
+         end
+         id = whole_number(child[:id])
+         vegetarian = TrueOrFalse.read(child[:vegetarian])
+         name = child[:name]
+    -    if id.nil? || vegetarian.nil? || !name.is_a?(String)
+    +    if id.nil? || vegetarian.nil? || !name.instance_of?(String)
+           return "Each child must have an id, a name and a vegetarian setting."
+         end
+         Child.new(id:, name:, vegetarian:)
+       }
+       if children.map(&:id).uniq.size < children.size
+         return "Each child can be sent only once."
+       end
+       children
+     end
+- subject: ProfileUpdate.read_children
+  kind: same-answer
+  why: >-
+    Rails turns a JSON list in a request into a plain Array, never an object of a
+    subclass of Array, so `is_a?(Array)` and `instance_of?(Array)` give the same answer.
+  diff: |
+    @@ -1,24 +1,24 @@
+     def self.read_children(raw)
+       if raw.nil?
+         return []
+       end
+    -  unless raw.is_a?(Array)
+    +  unless raw.instance_of?(Array)
+         return "Children must be a list."
+       end
+       children = raw.map { |child|
+         unless child.is_a?(ActionController::Parameters)
+           return "Each child must have an id, a name and a vegetarian setting."
+         end
+         id = whole_number(child[:id])
+         vegetarian = TrueOrFalse.read(child[:vegetarian])
+         name = child[:name]
+         if id.nil? || vegetarian.nil? || !name.is_a?(String)
+           return "Each child must have an id, a name and a vegetarian setting."
+         end
+         Child.new(id:, name:, vegetarian:)
+       }
+       if children.map(&:id).uniq.size < children.size
+         return "Each child can be sent only once."
+       end
+       children
+     end
+- subject: ProfileUpdate.whole_number
+  kind: same-answer
+  why: >-
+    When its test fails, the `return ... if` line above gives nil, and it is then
+    the last line of the method. So the method gives nil without the last `nil` too.
+  diff: |
+    @@ -1,9 +1,8 @@
+     def self.whole_number(raw)
+       if raw.is_a?(Integer)
+         return raw
+       end
+       if raw.is_a?(String) && raw.match?(/\A\d+\z/)
+         return raw.to_i
+       end
+    -  nil
+     end
+- subject: ProfileUpdate.whole_number
+  kind: same-answer
+  why: >-
+    A JSON value in a request that is text is a plain String, never an object of a
+    subclass of String, so `is_a?(String)` and `instance_of?(String)` give the same
+    answer.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.whole_number(raw)
+       if raw.is_a?(Integer)
+         return raw
+       end
+    -  if raw.is_a?(String) && raw.match?(/\A\d+\z/)
+    +  if raw.instance_of?(String) && raw.match?(/\A\d+\z/)
+         return raw.to_i
+       end
+       nil
+     end
+- subject: ProfileUpdate.whole_number
+  kind: same-answer
+  why: >-
+    No class inherits from Integer, so `is_a?(Integer)` and `instance_of?(Integer)`
+    give the same answer.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.whole_number(raw)
+    -  if raw.is_a?(Integer)
+    +  if raw.instance_of?(Integer)
+         return raw
+       end
+       if raw.is_a?(String) && raw.match?(/\A\d+\z/)
+         return raw.to_i
+       end
+       nil
+     end

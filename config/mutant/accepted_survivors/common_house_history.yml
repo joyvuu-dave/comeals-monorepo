@@ -1,0 +1,55 @@
+---
+- subject: CommonHouseHistory.relabel
+  kind: same-answer
+  why: >-
+    `rows` is a relation that is not loaded, so `size` runs the same COUNT query as
+    `count`, and gives the same number.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.relabel(resident_id:, before:, write:)
+       login = CommonHouseLogin.first
+       if login.nil?
+         raise(Refused, "There is no Common House login yet. An admin makes it first.")
+       end
+       unless Resident.exists?(resident_id)
+         raise(Refused, "No resident has id #{resident_id}.")
+       end
+       made = T.must(login.created_at)
+       if made < before
+         raise(Refused, "The cutoff must not be after the Common House login was made (#{made.getutc.iso8601}).")
+       end
+       rows = Audited::Audit.where(user_type: "Resident", user_id: resident_id, created_at: ...before)
+       if write
+         rows.update_all(user_type: "CommonHouseLogin", user_id: login.id)
+       else
+    -    rows.count
+    +    rows.size
+       end
+     end
+- subject: CommonHouseHistory.relabel
+  kind: same-answer
+  why: >-
+    `rows` is a relation that is not loaded. `length` loads the rows and counts them,
+    in the same transaction, so it gives the same number as `count`.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.relabel(resident_id:, before:, write:)
+       login = CommonHouseLogin.first
+       if login.nil?
+         raise(Refused, "There is no Common House login yet. An admin makes it first.")
+       end
+       unless Resident.exists?(resident_id)
+         raise(Refused, "No resident has id #{resident_id}.")
+       end
+       made = T.must(login.created_at)
+       if made < before
+         raise(Refused, "The cutoff must not be after the Common House login was made (#{made.getutc.iso8601}).")
+       end
+       rows = Audited::Audit.where(user_type: "Resident", user_id: resident_id, created_at: ...before)
+       if write
+         rows.update_all(user_type: "CommonHouseLogin", user_id: login.id)
+       else
+    -    rows.count
+    +    rows.length
+       end
+     end
