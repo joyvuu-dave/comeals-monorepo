@@ -153,3 +153,74 @@
        write_settling_setting("")
        correction
      end
+- subject: SettlementCorrecting#keep_old_ledger!
+  kind: same-answer
+  why: "Nothing reads comeals.settling after this step today: clear_ledger! only deletes, the triggers that read the setting check inserts only, and write_ledger! and record_lines! each set it before they insert and clear it after. A failed step rolls the setting back with its savepoint. The line stays so a later step that inserts without setting it first cannot see a value left from this one."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def keep_old_ledger!(reason, include_earlier_differences, earlier)
+       write_settling_setting(T.must(reconciliation.id).to_s)
+       correction = reconciliation.settlement_corrections.create!(reason:, include_earlier_differences:, earlier_differences: earlier)
+       binds = { correction: correction.id, at: correction.created_at, reconciliation: reconciliation.id }
+       Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC.squish, binds]))
+     INSERT INTO settlement_correction_charges
+       (settlement_correction_id, meal_charge_id, meal_id, resident_id, kind, amount, multiplier, unit_cost,
+        bill_amount, charged_at, created_at, updated_at)
+     SELECT :correction, meal_charges.id, meal_charges.meal_id, meal_charges.resident_id, meal_charges.kind,
+            meal_charges.amount, meal_charges.multiplier, meal_charges.unit_cost, meal_charges.bill_amount,
+            meal_charges.created_at, :at, :at
+     FROM meal_charges JOIN meals ON meals.id = meal_charges.meal_id
+     WHERE meals.reconciliation_id = :reconciliation
+     ORDER BY meal_charges.id
+     HEREDOC
+    -  write_settling_setting("")
+    +  nil
+       correction
+     end
+- subject: SettlementCorrecting#keep_old_ledger!
+  kind: same-answer
+  why: "Nothing reads comeals.settling after this step today: clear_ledger! only deletes, the triggers that read the setting check inserts only, and write_ledger! and record_lines! each set it before they insert and clear it after. A failed step rolls the setting back with its savepoint. The line stays so a later step that inserts without setting it first cannot see a value left from this one."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def keep_old_ledger!(reason, include_earlier_differences, earlier)
+       write_settling_setting(T.must(reconciliation.id).to_s)
+       correction = reconciliation.settlement_corrections.create!(reason:, include_earlier_differences:, earlier_differences: earlier)
+       binds = { correction: correction.id, at: correction.created_at, reconciliation: reconciliation.id }
+       Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC.squish, binds]))
+     INSERT INTO settlement_correction_charges
+       (settlement_correction_id, meal_charge_id, meal_id, resident_id, kind, amount, multiplier, unit_cost,
+        bill_amount, charged_at, created_at, updated_at)
+     SELECT :correction, meal_charges.id, meal_charges.meal_id, meal_charges.resident_id, meal_charges.kind,
+            meal_charges.amount, meal_charges.multiplier, meal_charges.unit_cost, meal_charges.bill_amount,
+            meal_charges.created_at, :at, :at
+     FROM meal_charges JOIN meals ON meals.id = meal_charges.meal_id
+     WHERE meals.reconciliation_id = :reconciliation
+     ORDER BY meal_charges.id
+     HEREDOC
+    -  write_settling_setting("")
+    +  ""
+       correction
+     end
+- subject: SettlementCorrecting#keep_old_ledger!
+  kind: same-answer
+  why: "Nothing reads comeals.settling after this step today: clear_ledger! only deletes, the triggers that read the setting check inserts only, and write_ledger! and record_lines! each set it before they insert and clear it after. A failed step rolls the setting back with its savepoint. The line stays so a later step that inserts without setting it first cannot see a value left from this one."
+  diff: |
+    @@ -1,18 +1,17 @@
+     def keep_old_ledger!(reason, include_earlier_differences, earlier)
+       write_settling_setting(T.must(reconciliation.id).to_s)
+       correction = reconciliation.settlement_corrections.create!(reason:, include_earlier_differences:, earlier_differences: earlier)
+       binds = { correction: correction.id, at: correction.created_at, reconciliation: reconciliation.id }
+       Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC.squish, binds]))
+     INSERT INTO settlement_correction_charges
+       (settlement_correction_id, meal_charge_id, meal_id, resident_id, kind, amount, multiplier, unit_cost,
+        bill_amount, charged_at, created_at, updated_at)
+     SELECT :correction, meal_charges.id, meal_charges.meal_id, meal_charges.resident_id, meal_charges.kind,
+            meal_charges.amount, meal_charges.multiplier, meal_charges.unit_cost, meal_charges.bill_amount,
+            meal_charges.created_at, :at, :at
+     FROM meal_charges JOIN meals ON meals.id = meal_charges.meal_id
+     WHERE meals.reconciliation_id = :reconciliation
+     ORDER BY meal_charges.id
+     HEREDOC
+    -  write_settling_setting("")
+       correction
+     end

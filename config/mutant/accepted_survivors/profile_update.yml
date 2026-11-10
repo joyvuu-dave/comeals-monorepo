@@ -404,3 +404,59 @@
        end
        nil
      end
+- subject: ProfileUpdate.email_problem
+  kind: same-answer
+  why: "The errors cleared here are about an address the person does not end up with, and no caller reads them: when there is no problem, save_all saves the resident, which checks it again and clears them; when there is a problem, the method answers its message and nothing reads the record again. The line stays so the method leaves the record the way it found it, as its comment says."
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.email_problem(resident, email)
+       stored = resident.email
+       resident.email=email
+       resident.validate
+       reasons = resident.errors.full_messages_for(:email)
+       resident.email=stored
+    -  resident.errors.clear
+    +  nil
+       if reasons.empty?
+         nil
+       else
+         reasons.join("\n")
+       end
+     end
+- subject: ProfileUpdate.email_problem
+  kind: same-answer
+  why: "The errors cleared here are about an address the person does not end up with, and no caller reads them: when there is no problem, save_all saves the resident, which checks it again and clears them; when there is a problem, the method answers its message and nothing reads the record again. The line stays so the method leaves the record the way it found it, as its comment says."
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.email_problem(resident, email)
+       stored = resident.email
+       resident.email=email
+       resident.validate
+       reasons = resident.errors.full_messages_for(:email)
+       resident.email=stored
+    -  resident.errors.clear
+    +  resident.errors
+       if reasons.empty?
+         nil
+       else
+         reasons.join("\n")
+       end
+     end
+- subject: ProfileUpdate.email_problem
+  kind: same-answer
+  why: "The errors cleared here are about an address the person does not end up with, and no caller reads them: when there is no problem, save_all saves the resident, which checks it again and clears them; when there is a problem, the method answers its message and nothing reads the record again. The line stays so the method leaves the record the way it found it, as its comment says."
+  diff: |
+    @@ -1,13 +1,12 @@
+     def self.email_problem(resident, email)
+       stored = resident.email
+       resident.email=email
+       resident.validate
+       reasons = resident.errors.full_messages_for(:email)
+       resident.email=stored
+    -  resident.errors.clear
+       if reasons.empty?
+         nil
+       else
+         reasons.join("\n")
+       end
+     end

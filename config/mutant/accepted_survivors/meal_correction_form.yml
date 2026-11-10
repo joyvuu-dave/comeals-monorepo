@@ -41,3 +41,422 @@
        end
        found
      end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,22 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    -      next
+    -    end
+    +    nil
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if nil
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if nil && no_cost == bill.no_cost
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if nil == bill.amount && no_cost == bill.no_cost
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == nil && no_cost == bill.no_cost
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == bill && no_cost == bill.no_cost
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == bill.amount && nil
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == bill.amount && nil == bill.no_cost
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == bill.amount && bill.no_cost
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == bill.amount && no_cost == nil
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if amount == bill.amount && no_cost == bill
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    +    if false
+           next
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,24 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+         if amount == bill.amount && no_cost == bill.no_cost
+    -      next
+    +      nil
+         end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
+- subject: MealCorrectionForm#read_cooks
+  kind: same-answer
+  why: "Without the skip, an unchanged cook becomes a step that MealCorrecting::Edits#cost applies with no change: the bill has no saved_changes, so nothing is written or recorded, and a save with only such steps is refused with NothingChanged, the same as with the skip. The only difference is one Bill.find_by for each unchanged cook. The line stays because it says in the form that an unchanged cook is not an edit."
+  diff: |
+    @@ -1,24 +1,21 @@
+     def read_cooks
+       sent = section("cooks")
+       refuse_unknown(sent, @bills.map(&:resident_id))
+       @bills.each { |bill|
+         row = sent[bill.resident_id.to_s]
+         unless row.is_a?(Hash)
+           next
+         end
+         cook = T.must(bill.resident)
+         if checked?(row["remove"])
+           @steps << ->(edits) {
+             edits.remove_cook(cook)
+           }
+           next
+         end
+         (amount, no_cost) = cost(row, cook)
+    -    if amount == bill.amount && no_cost == bill.no_cost
+    -      next
+    -    end
+         @steps << ->(edits) {
+           edits.cost(cook, amount:, no_cost:)
+         }
+       }
+     end
