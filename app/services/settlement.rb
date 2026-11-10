@@ -332,6 +332,11 @@ class Settlement
   # 3. Award residual pennies to entries whose truncation discarded the most,
   #    tie-breaking by lowest resident_id for deterministic, auditable results.
   #
+  # proofs/CentRounding.dfy proves this rule for every list of balances
+  # that sums to zero, and that only one rounding follows it.
+  # spec/services/settlement_allocate_to_cents_against_the_proofs_spec.rb
+  # checks that this method gives the same rounding (docs/proofs.md).
+  #
   # A class method because Reconciliation#settlement_balances (the read side,
   # used by ledger:verify) rounds the same way.
   sig do
@@ -405,9 +410,11 @@ class Settlement
   # Second defensive layer behind the zero-sum input guard. With an input
   # that sums to exactly zero there are always enough remainders of the
   # needed sign to absorb the leftover pennies (each remainder is less than
-  # a cent, so the ones of that sign outnumber the pennies). This is what
-  # runs if the first guard is ever loosened: fail with a diagnostic instead
-  # of indexing past the end of the candidate list.
+  # a cent, so the ones of that sign outnumber the pennies), so this cannot
+  # fire: proofs/CentRounding.dfy proves it for every such input
+  # (EnoughRemainders). This is what runs if the first guard is ever
+  # loosened: fail with a diagnostic instead of indexing past the end of
+  # the candidate list.
   sig do
     params(candidates: T::Array[[Integer, BigDecimal]], pennies_needed: Integer, reconciliation_id: ReconciliationRef)
       .void

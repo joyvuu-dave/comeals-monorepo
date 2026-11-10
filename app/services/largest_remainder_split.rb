@@ -24,6 +24,11 @@
 # zero, or whose exact share is a whole number, never gets a leftover unit:
 # the leftover is the sum of the fractions dropped in step 1, and only a
 # share that dropped a fraction can be among the largest.
+#
+# proofs/LargestRemainderSplit.dfy proves all of this for every input, and
+# that only one list of shares follows the rule (docs/proofs.md).
+# spec/services/largest_remainder_split_against_the_proofs_spec.rb checks
+# that this class gives the same shares as the proven code.
 class LargestRemainderSplit
   extend T::Sig
 

@@ -96,6 +96,14 @@ compare it to `MealLedger` exactly, with no tolerance.
   under a second.
 - Money rule 3 no longer says "use BigDecimal division with explicit
   scale." A division on the money path is now a mistake to look for.
+- The rules this decision sets are proven for every input in `proofs/`
+  (added 2026-11-10, #269, `docs/proofs.md`): the split's shares sum to
+  the total and each is less than one unit from its exact share
+  (`proofs/LargestRemainderSplit.dfy`); a meal's credits and debits sum to
+  exactly zero, on every branch (`proofs/MealLines.dfy`); the cent
+  rounding sums to exactly zero and moves no balance by a cent or more
+  (`proofs/CentRounding.dfy`). Specs compare the Ruby with Python made
+  from those proofs.
 - The "still open" question in `docs/money-path-observability.md` about
   changing the arithmetic on purpose was answered for this change by
   checking the data, not by a version stamp. A later change that moves a

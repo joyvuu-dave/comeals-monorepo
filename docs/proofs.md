@@ -1,6 +1,6 @@
 # Proofs
 
-`proofs/` holds proofs, written in [Dafny](https://dafny.org), that the money rules hold for every input. Tests try some inputs; a proof covers all of them. Issue #269 is the plan, and challenge 27 ("Prove the money math") is why.
+`proofs/` holds proofs, written in [Dafny](https://dafny.org), that the money rules hold for every input. Tests try some inputs; a proof covers all of them. Issue #269 was the plan, and challenge 27 ("Prove the money math") is why.
 
 ## Running them
 

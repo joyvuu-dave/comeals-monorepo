@@ -4806,3 +4806,28 @@ unencrypted_password.nil?`: SCrypt answers false for nil, so with the
 `ID_CLAIMS.fetch(login.class)`: 46 mutations, 45 killed. Left (1): the
 algorithm left out of `JWT.encode`, which signs with HS256 anyway (the
 "2026-10-16, how a request is signed in" entry above).
+
+### 2026-11-10, the money rules after the proofs (#269)
+
+Run here, after the specs that compare the Ruby with Python made from
+the Dafny proofs (`docs/proofs.md`) were added: `LargestRemainderSplit*`,
+`MealLedger*` and the five `Settlement` methods of the cent rounding
+(`allocate_to_cents`, `truncate_toward_zero`, `adjust!`,
+`assert_balanced_input!`, `assert_candidates_cover_pennies!`). 1,204
+mutations, 1,184 killed, 20 alive, no timeouts, 98.33%.
+
+Every one of the 20 is noise of a kind listed before: in `MealLedger`,
+`units` (4), the left-out nilable fields of `credit_lines` and
+`debit_lines` (3), `instance_of?` and the ranks in `kind_rank` (4) and
+the `T.let` line of `initialize` (1); in `Settlement`, a sum's start
+value in `allocate_to_cents` and `assert_balanced_input!` (2),
+`.to_int` or `Integer()` for `.to_i` (2), the `pennies.negative?` test
+made always true or dropped (3), which changes nothing when no penny
+moves, and `raw > 0` for `raw >= 0` in `truncate_toward_zero` (1).
+`LargestRemainderSplit` had no survivor.
+
+So the new specs change no result. Before them, every mutation that
+changed an amount was already killed. The four Linux-only survivors in
+`LargestRemainderSplit.call` (2026-10-16) stay: on Linux, Ruby's sort
+already keeps tied items in the order given, so dropping the tie-break
+gives the same shares, and no spec can tell the two apart.

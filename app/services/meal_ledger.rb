@@ -23,6 +23,14 @@
 # rules by someone who had not read this class, so that it disagrees when
 # this class is wrong. Do not edit it to match this class.
 #
+# proofs/MealLines.dfy is a third copy, in Dafny, with proofs that hold for
+# every meal: the credits and the debits sum to the same amount on every
+# branch of financials_for, a cancelled meal and one with nobody to charge
+# move no money, and no cook is credited more than they spent.
+# proofs/TieOrder.dfy proves the sort into the tie-break order that
+# #eaters and #cooks do. spec/services/meal_ledger_against_the_proofs_spec.rb
+# checks that this class gives the same lines (docs/proofs.md).
+#
 # == This class runs no queries
 #
 # It reads `bills`, `meal_residents` and `guests` off the meals it is handed,

@@ -341,7 +341,8 @@ weights, it is allocated by largest remainder at the grain:
    guest lines of the same host, the lower guest id comes first.
 
 So the lines of a split sum to exactly the amount that was split, and each
-line is within one unit of its exact share.
+line is within one unit of its exact share. `proofs/` proves this, and the
+rest of this section, for every input (`docs/proofs.md`).
 
 Two splits happen on a meal:
 
