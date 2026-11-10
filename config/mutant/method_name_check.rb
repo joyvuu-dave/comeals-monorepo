@@ -15,7 +15,8 @@
 # piece of the full run (runs 42892140239 and 42913028051), since each
 # piece is a new process with new random names.
 #
-# The fix: text that does not parse is not a method name.
+# The fix: text that does not parse is not a method name. Reported to
+# mutant on 2026-11-10: https://github.com/mbj/mutant/issues/1690
 # spec/config/mutant_method_name_check_spec.rb checks it, and fails when
 # mutant is not 0.17.1, so an upgrade is checked again: remove this file
 # if the new version answers false itself.
