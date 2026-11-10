@@ -364,10 +364,12 @@ class ApiController < ActionController::API
   end
 
   # The Common House login belongs to no community row, so the zone comes
-  # from the one community, which every login belongs to.
+  # from the one community, which every login belongs to. A request whose
+  # token signs no one in gets the zone too: it is answered 401, or it is
+  # a public action that shows no time in Time.zone.
   def set_community_timezone(&)
     if bearer_token_from_header || token_param
-      tz = (Community.first if current_login)&.timezone.presence
+      tz = Community.first&.timezone.presence
       return Time.use_zone(tz, &) if tz && ActiveSupport::TimeZone[tz]
     end
     yield
