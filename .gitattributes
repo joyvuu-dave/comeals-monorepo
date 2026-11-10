@@ -5,3 +5,6 @@ db/schema.rb linguist-generated
 
 # Mark any vendored files as having been vendored.
 vendor/* linguist-vendored
+
+# Python that Dafny makes from proofs/ (bin/dafny-verify --write-python).
+proofs/generated-py/** linguist-generated

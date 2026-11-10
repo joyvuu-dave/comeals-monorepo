@@ -1,0 +1,26 @@
+file_format_version = "1.0"
+dafny_version = "4.11.0.0"
+[options_by_module.Arithmetic]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.Sums]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.LargestRemainder]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.CentRounding]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.TieOrder]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.LargestRemainderSplit]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.MealLines]
+legacy-module-names = false
+rust-sync = false
+[options_by_module.EntryPoints]
+legacy-module-names = false
+rust-sync = false

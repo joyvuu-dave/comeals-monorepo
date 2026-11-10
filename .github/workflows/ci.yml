@@ -275,13 +275,16 @@ jobs:
 
   # The proofs in proofs/ (docs/proofs.md). bin/dafny-verify downloads
   # the pinned Dafny release on every run here, which takes a few
-  # seconds.
+  # seconds. The second step checks every proof again on 20 solver seeds,
+  # so a proof that passes only on some seeds fails in the change that
+  # made it so ("A proof must pass on every solver seed").
   proofs:
     runs-on: ubuntu-26.04
-    timeout-minutes: 10
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v6
       - run: bin/check dafny
+      - run: bin/dafny-verify --seeds 20
 
   bundle-budget:
     runs-on: ubuntu-26.04

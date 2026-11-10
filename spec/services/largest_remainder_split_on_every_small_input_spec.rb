@@ -17,13 +17,8 @@ require 'rails_helper'
 #
 # Rule 2 is "less than one unit from the exact share", said exactly.
 #
-# Why the totals below are enough: for one list of weights with sum W,
-# the total t and the total t + W drop the same fractions, so the same
-# shares get the extra units. So every total 0 to W - 1 covers every way
-# the extra units can fall for that list. The sweep runs 0 to 2W - 1,
-# and the same totals again above 10^13 (more than 100,000 dollars, in
-# units of 10^-8 dollars), so a mistake that shows only on large numbers
-# is caught too.
+# The inputs, and why the totals are enough, are in
+# spec/support/money_sweep.rb.
 #
 # The checks are written from the rule in the class comment, not from
 # the code: they never sort, and never compute a share the way the
@@ -32,18 +27,6 @@ require 'rails_helper'
 # MONEY_SWEEP=full runs the full size (spec/support/money_sweep.rb).
 RSpec.describe LargestRemainderSplit do
   describe 'on every small input' do
-    def large = 10**13
-
-    # Weights as large as what cooks spend, in units, for the second example.
-    def few_large(size)
-      { small: [1, 7, 1000, 12_345_678_901], full: [1, 2, 3, 7, 1000, 99_999_999, 12_345_678_901] }.fetch(size)
-    end
-
-    # small: 340 lists of weights 0 to 3, about 7,500 splits.
-    # full: 19,530 lists of weights 0 to 4, about 900,000 splits.
-    def lengths(size) = { small: 1..4, full: 1..6 }.fetch(size)
-    def weights(size) = { small: 0..3, full: 0..4 }.fetch(size)
-
     # What the rule says about one split, as a list of what is wrong.
     def problems(total, weights, shares)
       return ["#{shares.size} shares for #{weights.size} weights"] unless shares.size == weights.size
@@ -92,44 +75,29 @@ RSpec.describe LargestRemainderSplit do
       end
     end
 
-    def totals_for(weights)
-      small = (0...(2 * weights.sum)).to_a
-      small + small.map { |total| large + total }
-    end
-
     it 'follows the rule for every list of small weights and every total' do
       failures = MoneySweep::Failures.new
       splits = 0
-      size = MoneySweep.size
 
-      MoneySweep.each_list(lengths(size), weights(size)) do |weights|
-        next if weights.sum.zero?
-
-        totals_for(weights).each do |total|
-          check(failures, total, weights)
-          splits += 1
-        end
+      MoneySweep.each_split(MoneySweep.size) do |total, weights|
+        check(failures, total, weights)
+        splits += 1
       end
 
       expect(failures.count).to eq(0), failures.to_s
       expect(splits).to be > 7_000
     end
 
-    # The totals cannot cover every remainder of weights this large, so
-    # this tries a fixed few.
     it 'follows the rule for short lists of large and small weights' do
       failures = MoneySweep::Failures.new
-      totals = (0..30).to_a + [999_999_999, large, large + 1]
 
-      MoneySweep.each_list(1..3, few_large(MoneySweep.size)) do |weights|
-        totals.each { |total| check(failures, total, weights) }
-      end
+      MoneySweep.each_large_split(MoneySweep.size) { |total, weights| check(failures, total, weights) }
 
       expect(failures.count).to eq(0), failures.to_s
     end
 
     it 'refuses every list of weights that are all zero' do
-      lengths(MoneySweep.size).each do |length|
+      MoneySweep.split_lengths(MoneySweep.size).each do |length|
         expect { described_class.call(5, Array.new(length, 0)) }
           .to raise_error(ArgumentError, 'cannot split when every weight is zero')
       end

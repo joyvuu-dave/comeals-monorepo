@@ -69,3 +69,5 @@ latest.dump
 
 # Mutant session data (bin/mutant); read by `mutant session`, remade on each run.
 /.mutant/
+# Python writes these when proofs/run_proven.py runs without -B.
+/proofs/generated-py/**/__pycache__/

@@ -130,7 +130,7 @@ module LargestRemainder {
   {
     var n := |key|;
     got := seq(n, i => 0);
-    var zeros := seq(n, i requires 0 <= i < n => 0 * got[i]);
+    ghost var zeros := seq(n, i requires 0 <= i < n => 0 * got[i]);
     SumOfMultiples(got, 0, zeros);
     assert zeros == got;
 
@@ -144,7 +144,7 @@ module LargestRemainder {
       invariant forall i, j :: 0 <= i < n && 0 <= j < n && got[i] == 1 && got[j] == 0 ==> Before(key, i, j)
     {
       SomeEntryWaits(got, key);
-      var waiting :| 0 <= waiting < n && got[waiting] == 0 && key[waiting] > 0;
+      ghost var waiting :| 0 <= waiting < n && got[waiting] == 0 && key[waiting] > 0;
       var best := First(got, key);
       assert best == waiting || Before(key, best, waiting);
       SumAfterChange(got, best, 1);

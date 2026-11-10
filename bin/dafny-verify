@@ -1,6 +1,14 @@
 #!/usr/bin/env bash
 # bin/dafny-verify — check every proof in proofs/ (docs/proofs.md).
 #
+#   bin/dafny-verify                 check the proofs, and that
+#                                    proofs/generated-py is what Dafny makes
+#                                    from them
+#   bin/dafny-verify --seeds N       the same, then check every proof on N
+#                                    solver seeds (the CI proofs job uses 20)
+#   bin/dafny-verify --write-python  make proofs/generated-py again from the
+#                                    proofs, after changing a proof
+#
 # Runs one Dafny and one Z3 everywhere: the ones in the Dafny 4.11.0
 # release zip for this machine, checked by its SHA-256. A proof can pass
 # on one Z3 version and fail on another, so the dafny on the PATH (from
@@ -64,13 +72,28 @@ install() {
   rm -f "$CACHE/$ZIP"
 }
 
+mode=verify
+seeds=0
 if [ "${1:-}" = "--install-under-lock" ]; then
   install
   exit 0
+elif [ "${1:-}" = "--write-python" ]; then
+  mode=write
+elif [ "${1:-}" = "--seeds" ]; then
+  seeds="${2:-}"
+  if ! [[ "$seeds" =~ ^[1-9][0-9]*$ ]]; then
+    echo "bin/dafny-verify: --seeds takes a whole number above 0, like 20." >&2
+    exit 1
+  fi
+elif [ "$#" -gt 0 ]; then
+  echo "usage: bin/dafny-verify [--seeds N | --write-python]" >&2
+  exit 1
 fi
 
-# Words that make Dafny accept a claim without proving it.
-unproven=$(grep -rnE '\bassume\b|\{ *:(axiom|verify +false)' proofs || true)
+# Words that make Dafny accept a claim without proving it. Only the .dfy
+# files: the Python runtime in proofs/generated-py uses the word in a
+# comment.
+unproven=$(grep -HnE '\bassume\b|\{ *:(axiom|verify +false)' proofs/*.dfy || true)
 if [ -n "$unproven" ]; then
   echo "bin/dafny-verify: these lines take a claim without proving it:" >&2
   echo "$unproven" >&2
@@ -84,6 +107,23 @@ python3 -c 'import fcntl, subprocess, sys
 lock = open(sys.argv[1], "a")
 fcntl.flock(lock, fcntl.LOCK_EX)
 sys.exit(subprocess.call(sys.argv[2:]))' "$CACHE/dafny.lock" "$0" --install-under-lock
+
+# The Python Dafny makes from every proof, with its runtime, into folder
+# $1-py.
+translate() {
+  local said
+  if ! said=$("$DAFNY" translate py --no-verify --include-runtime --output "$1" proofs/*.dfy 2>&1); then
+    echo "$said" >&2
+    echo "bin/dafny-verify: Dafny could not make Python from proofs/." >&2
+    exit 1
+  fi
+}
+
+if [ "$mode" = write ]; then
+  translate proofs/generated
+  echo "Wrote proofs/generated-py. Run bin/dafny-verify to check it, then commit it."
+  exit 0
+fi
 
 z3_says=$("$Z3" --version)
 if [ "$z3_says" != "Z3 version $Z3_VERSION - 64 bit" ]; then
@@ -107,3 +147,46 @@ if [ "${#why[@]}" -gt 0 ]; then
   printf -- '- %s\n' "${why[@]}" >&2
   exit 1
 fi
+
+# The Python the Ruby is compared with (spec/support/proven.rb) must be
+# what Dafny makes from these proofs, or the comparison tests something
+# that was never proven.
+fresh=$(mktemp -d)
+trap 'rm -r "$fresh"' EXIT
+translate "$fresh/generated"
+if ! difference=$(diff -r -x __pycache__ proofs/generated-py "$fresh/generated-py"); then
+  echo "$difference" | head -n 20 >&2
+  echo "bin/dafny-verify: proofs/generated-py is not what Dafny makes from proofs/*.dfy." >&2
+  echo "Run bin/dafny-verify --write-python and commit what it changes." >&2
+  exit 1
+fi
+echo "proofs/generated-py is what Dafny makes from proofs/*.dfy."
+
+[ "$seeds" -gt 0 ] || exit 0
+
+# Every proof again on $seeds seeds (docs/proofs.md, "A proof must pass
+# on every solver seed"). The CSV has one row per proof and seed:
+# name,outcome,duration,resource count,seed.
+csv="$fresh/seeds.csv"
+"$DAFNY" measure-complexity --mutations "$seeds" --random-seed 4242 --solver-path "$Z3" --cores 2 \
+  --log-format "csv;LogFileName=$csv" proofs/*.dfy > /dev/null 2>&1 && status=0 || status=$?
+why=()
+[ "$status" -eq 0 ] || why+=("dafny measure-complexity exited with $status")
+if [ -f "$csv" ]; then
+  results=$(tail -n +2 "$csv" | grep -v '^$' || true)
+  failed=$(echo "$results" | awk -F, 'NF && $2 != "Passed" { print $1 " on seed " $5 ": " $2 }')
+  [ -z "$failed" ] || why+=("$failed")
+  short=$(echo "$results" | awk -F, -v n="$seeds" 'NF { runs[$1]++ } END { for (p in runs) if (runs[p] != n) print p " ran " runs[p] " times" }')
+  [ -z "$short" ] || why+=("$short")
+  runs=$(echo "$results" | grep -c . || true)
+  [ "$runs" -gt 0 ] || why+=("no proof ran")
+else
+  why+=("dafny measure-complexity wrote no results")
+fi
+
+if [ "${#why[@]}" -gt 0 ]; then
+  echo "bin/dafny-verify: not every proof passed on $seeds seeds:" >&2
+  printf -- '- %s\n' "${why[@]}" >&2
+  exit 1
+fi
+echo "Every proof passed on $seeds seeds ($runs runs)."

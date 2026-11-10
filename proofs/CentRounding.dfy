@@ -43,21 +43,29 @@ module CentRounding {
     if x < 0 then -x else x
   }
 
-  // Each balance cut toward zero, as a number of cents. Dafny's / rounds
+  // One balance cut toward zero, as a number of cents. Dafny's / rounds
   // down for a positive divisor, so a negative balance is cut as the
   // negative of its size cut down.
+  function CutCent(cent: int, balance: int): int
+    requires cent > 0
+  {
+    if balance >= 0 then balance / cent else -((-balance) / cent)
+  }
+
+  // Each balance cut toward zero, as a number of cents. The lists below
+  // are built from one balance at a time, so that the Python made from
+  // them (EntryPoints.dfy) does not build a whole list for each entry.
   function CutCents(cent: int, balances: seq<int>): seq<int>
     requires cent > 0
   {
-    seq(|balances|, i requires 0 <= i < |balances| =>
-      if balances[i] >= 0 then balances[i] / cent else -((-balances[i]) / cent))
+    seq(|balances|, i requires 0 <= i < |balances| => CutCent(cent, balances[i]))
   }
 
   // Each balance cut toward zero, in units.
   function Cuts(cent: int, balances: seq<int>): seq<int>
     requires cent > 0
   {
-    seq(|balances|, i requires 0 <= i < |balances| => cent * CutCents(cent, balances)[i])
+    seq(|balances|, i requires 0 <= i < |balances| => cent * CutCent(cent, balances[i]))
   }
 
   // What the cut lost from each balance: positive when a positive balance
@@ -65,7 +73,7 @@ module CentRounding {
   function Lost(cent: int, balances: seq<int>): seq<int>
     requires cent > 0
   {
-    seq(|balances|, i requires 0 <= i < |balances| => balances[i] - Cuts(cent, balances)[i])
+    seq(|balances|, i requires 0 <= i < |balances| => balances[i] - cent * CutCent(cent, balances[i]))
   }
 
   // The rule, as a test any list of rounded balances passes or fails.
@@ -112,7 +120,8 @@ module CentRounding {
   function Key(cent: int, balances: seq<int>): seq<int>
     requires cent > 0
   {
-    seq(|balances|, i requires 0 <= i < |balances| => Direction(cent, balances) * Lost(cent, balances)[i])
+    var direction := Direction(cent, balances);
+    seq(|balances|, i requires 0 <= i < |balances| => direction * (balances[i] - cent * CutCent(cent, balances[i])))
   }
 
   // Facts about one balance: its cut is within one cent of it, on the
@@ -192,10 +201,11 @@ module CentRounding {
   function Build(cent: int, balances: seq<int>, got: seq<int>): seq<int>
     requires cent > 0 && |got| == |balances|
   {
+    var direction := Direction(cent, balances);
     seq(|got|, i requires 0 <= i < |got| =>
-      if got[i] == 0 then Cuts(cent, balances)[i]
-      else if Direction(cent, balances) == -1 then Cuts(cent, balances)[i] - cent
-      else Cuts(cent, balances)[i] + cent)
+      if got[i] == 0 then cent * CutCent(cent, balances[i])
+      else if direction == -1 then cent * CutCent(cent, balances[i]) - cent
+      else cent * CutCent(cent, balances[i]) + cent)
   }
 
   lemma {:isolate_assertions} BuildFollowsTheRule(cent: int, balances: seq<int>, got: seq<int>)

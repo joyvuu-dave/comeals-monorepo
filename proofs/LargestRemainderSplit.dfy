@@ -38,7 +38,8 @@ module LargestRemainderSplit {
   function Floors(total: nat, weights: seq<nat>): seq<int>
     requires Sum(weights) > 0
   {
-    seq(|weights|, i requires 0 <= i < |weights| => total * weights[i] / Sum(weights))
+    var whole := Sum(weights);
+    seq(|weights|, i requires 0 <= i < |weights| => total * weights[i] / whole)
   }
 
   // What rounding down dropped from each exact share, as a numerator over
@@ -47,7 +48,8 @@ module LargestRemainderSplit {
   function Dropped(total: nat, weights: seq<nat>): seq<int>
     requires Sum(weights) > 0
   {
-    seq(|weights|, i requires 0 <= i < |weights| => total * weights[i] % Sum(weights))
+    var whole := Sum(weights);
+    seq(|weights|, i requires 0 <= i < |weights| => total * weights[i] % whole)
   }
 
   // The rule, as a test any list of shares passes or fails.

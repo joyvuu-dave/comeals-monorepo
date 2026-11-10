@@ -8,9 +8,25 @@
 module Sums {
   import opened Arithmetic
 
+  // The loop after "by method" is what the Python made from this runs:
+  // the definition copies a shorter list at every step. Dafny proves the
+  // loop gives the same number.
   function Sum(s: seq<int>): int
   {
     if |s| == 0 then 0 else Sum(s[..|s| - 1]) + s[|s| - 1]
+  } by method {
+    var total := 0;
+    var i := 0;
+    while i < |s|
+      invariant 0 <= i <= |s|
+      invariant total == Sum(s[..i])
+    {
+      assert s[..i + 1][..i] == s[..i];
+      total := total + s[i];
+      i := i + 1;
+    }
+    assert s[..|s|] == s;
+    return total;
   }
 
   // The sum of two lists put together is the sum of each.

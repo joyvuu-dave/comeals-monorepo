@@ -2,12 +2,10 @@
 
 require 'rails_helper'
 
-# Every small input, not random ones (issue #269, step 1). This tries
-# every list of balances up to a size, each balance taken from a set of
-# amounts just above, at, and just below a whole cent, on both sides of
-# zero. The last balance in each list is whatever makes the list sum to
-# zero, since allocate_to_cents refuses any other input. On each list it
-# checks the rule (AGENTS.md, Money Handling Standards, rule 5):
+# Every small input, not random ones (issue #269, step 1): every list of
+# balances in MoneySweep.each_rounding (spec/support/money_sweep.rb), each
+# in two orders. On each list it checks the rule (AGENTS.md, Money
+# Handling Standards, rule 5):
 #
 #   1. every rounded balance is whole cents;
 #   2. the rounded balances sum to exactly zero;
@@ -17,29 +15,13 @@ require 'rails_helper'
 #   5. the cents all move the same way, and go to the balances that lost
 #      the most in the cut, and on a tie to the lowest resident id.
 #
-# Each list runs twice: once with the ids in rising order, and once with
-# the hash built in the other order, so a tie goes to the lowest id and
-# not to whichever came first in the hash.
-#
 # The checks are written from the rule, not from the code: they work in
 # whole units of 10^-8 dollars, and never sort.
 #
 # MONEY_SWEEP=full runs the full size (spec/support/money_sweep.rb).
 RSpec.describe Settlement do
   describe 'allocate_to_cents on every small input' do
-    # One cent, in units of 10^-8 dollars.
-    def cent = 1_000_000
-
-    def near_a_cent = [0, 1, 500_000, 999_999, 1_000_001]
-
-    # small: 820 lists of up to 4 balances.
-    # full: about 810,000 lists of up to 6 balances, some of them large.
-    def free_lengths(size) = { small: 0..3, full: 0..5 }.fetch(size)
-
-    def amounts(size)
-      positive = { small: near_a_cent, full: near_a_cent + [1_500_000, 2_999_999, 1_234_567_000_001] }.fetch(size)
-      positive + positive.drop(1).map(&:-@)
-    end
+    def cent = MoneySweep::CENT
 
     def dollars(units) = MealLedger::UNIT * units
 
@@ -106,19 +88,15 @@ RSpec.describe Settlement do
 
     it 'follows the rule for every list of balances near a whole cent' do
       failures = MoneySweep::Failures.new
-      lists = 0
-      size = MoneySweep.size
+      roundings = 0
 
-      MoneySweep.each_list(free_lengths(size), amounts(size)) do |free|
-        amounts = free + [-free.sum]
-        ids = Array.new(amounts.size) { |index| 10 * (index + 1) }
-        check(failures, ids.zip(amounts).to_h)
-        check(failures, ids.zip(amounts).reverse.to_h)
-        lists += 1
+      MoneySweep.each_rounding(MoneySweep.size) do |exact|
+        check(failures, exact)
+        roundings += 1
       end
 
       expect(failures.count).to eq(0), failures.to_s
-      expect(lists).to be >= 820
+      expect(roundings).to be >= 1640
     end
   end
 end
