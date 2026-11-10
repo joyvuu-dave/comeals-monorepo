@@ -30,6 +30,20 @@ RSpec.describe RecurringJob do
     expect(Healthcheck).to have_received(:ping).with('billing-recalculate', state: 'fail')
   end
 
+  # The run record keeps the error's message, not its to_s. Most errors
+  # give the same text for both, but an error class may add to its
+  # message, and the record must keep what the error says.
+  it 'records the message of the error, even when it differs from its to_s' do
+    allow(Healthcheck).to receive(:ping)
+    wordy = Class.new(StandardError) { def message = "#{super} (and more)" }
+    stub_const('WordyError', wordy)
+    allow(BalanceRecalculation).to receive(:call).and_raise(wordy, 'the first words')
+
+    expect { RefreshBalancesJob.perform_now }.to raise_error(wordy)
+
+    expect(JobRun.last.error).to eq('WordyError: the first words (and more)')
+  end
+
   # These two errors are not StandardErrors, so a plain rescue would let
   # them through with no row and no ping.
   it 'records a failed run and pings fail when a subclass forgets to define run' do

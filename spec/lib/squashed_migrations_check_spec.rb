@@ -57,6 +57,11 @@ RSpec.describe SquashedMigrationsCheck do
       expect(described_class.recorded_versions(structure)).to eq([20_261_023_140_000, 20_170_515_164_827])
     end
 
+    it 'reads each version in base 10' do
+      expect(described_class.recorded_versions("INSERT INTO \"schema_migrations\" (version) VALUES\n('0010');\n"))
+        .to eq([10])
+    end
+
     it 'refuses a file with no list' do
       expect { described_class.recorded_versions("CREATE TABLE a ();\n") }
         .to raise_error(ArgumentError, 'db/structure.sql has no INSERT INTO schema_migrations list')

@@ -94,6 +94,17 @@ RSpec.describe SchemaBootCheck do
       FileUtils.remove_entry(other)
     end
 
+    # A version is read in base 10, as Rails reads it: a file numbered
+    # 0010 is version 10, not 8.
+    it 'reads a version with leading zeros in base 10' do
+      File.write(File.join(dir, '0010_old_numbering.rb'), "class OldNumbering < ActiveRecord::Migration[8.1]; end\n")
+
+      versions = "10, #{PRODUCTION_SCHEMA_VERSION + 1}"
+      expect { described_class.verify!('The web process') }.to raise_error(
+        described_class::DatabaseBehind, %r{has not run 2 migrations that are in db/migrate/: #{versions}\.}
+      )
+    end
+
     # The integration and admin browser suites start web with the clock
     # stopped at a day in the past (config/initializers/integration_fake_time.rb).
     # Rails refuses to read a migration file dated after "now", so reading

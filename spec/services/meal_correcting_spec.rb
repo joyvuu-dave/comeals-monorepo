@@ -467,6 +467,15 @@ RSpec.describe MealCorrecting do
       described_class::Result.new(edits: edits, changes: amounts).fingerprint
     end
 
+    # The exact text, so the code does not change between two releases:
+    # a preview made before a deploy can still be saved after it.
+    it 'is the SHA-256 of the edits as JSON, a bar, and each change as id:amount, by id, joined by commas' do
+      edits_json = '[{"what":"cost","resident_id":1,"from":{"amount":"30.0","no_cost":false},' \
+                   '"to":{"amount":"20.0","no_cost":false}}]'
+
+      expect(code({ 2 => '-12.5', 1 => '12.5' })).to eq(Digest::SHA256.hexdigest("#{edits_json}|1:12.5,2:-12.5"))
+    end
+
     it 'is short, and the same for the same changes in any order' do
       expect(code({ 1 => '5', 2 => '-5' })).to match(/\A\h{64}\z/)
       expect(code({ 2 => '-5', 1 => '5' })).to eq(code({ 1 => '5', 2 => '-5' }))

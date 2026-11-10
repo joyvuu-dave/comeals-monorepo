@@ -35,6 +35,19 @@ RSpec.describe EnsureRotationsJob do
     expect(community.meals.where(date: (last_date + 1)..)).to exist
   end
 
+  # The log line says how many rotations a run made. A run that made none
+  # writes no line, because that is the normal outcome every night.
+  it 'logs how many rotations it made, and logs nothing when it made none' do
+    allow(Rails.logger).to receive(:info).and_call_original
+
+    described_class.perform_now
+    made = Rotation.count
+    described_class.perform_now
+
+    expect(Rails.logger).to have_received(:info).with(/\Aensure_rotations:/).once
+    expect(Rails.logger).to have_received(:info).with("ensure_rotations: #{made} rotation(s) created")
+  end
+
   it 'does nothing on a second run' do
     described_class.perform_now
 

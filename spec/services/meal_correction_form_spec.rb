@@ -205,6 +205,21 @@ RSpec.describe MealCorrectionForm do
       expect(refusal(cooks.merge(seen: ' '))).to eq(described_class::STALE)
     end
 
+    # The exact text, so the code does not change between two releases:
+    # a form opened before a deploy can still be saved after it. Cooks by
+    # name, each with the cost as decimal text.
+    it 'is the SHA-256 of the cooks, the eaters and the guests as JSON, with each cost as decimal text' do
+      with_repair_bypass do
+        Guest.insert_all!([{ meal_id: meal.id, resident_id: eater.id, multiplier: Multiplier::FULL }])
+      end
+      price = MealResident.find_by!(meal: meal).multiplier
+      guest = Guest.find_by!(meal: meal)
+      rows = "[[[#{amy.id},\"0.0\",true],[#{zed.id},\"30.0\",false]],[[#{eater.id},#{price}]]," \
+             "[[#{guest.id},#{eater.id},#{Multiplier::FULL}]]]"
+
+      expect(described_class::Rows.of(meal).seen).to eq(Digest::SHA256.hexdigest(rows))
+    end
+
     # The code the form had when it was opened, before another admin's
     # correction changed Zed's cost.
     it 'refuses a form opened before the dinner changed' do
