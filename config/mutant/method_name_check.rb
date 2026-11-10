@@ -22,12 +22,14 @@
 module MutantMethodNameCheck
   VERSION = '0.17.1'
 
+  # const_get because Sorbet has no types for the mutant gem.
   def self.apply
-    unless Mutant::VERSION == VERSION
-      raise "mutant is #{Mutant::VERSION}, not #{VERSION}: read config/mutant/method_name_check.rb"
+    mutant = Object.const_get(:Mutant)
+    unless mutant::VERSION == VERSION
+      raise "mutant is #{mutant::VERSION}, not #{VERSION}: read config/mutant/method_name_check.rb"
     end
 
-    Mutant::Expression::Method.singleton_class.prepend(self)
+    mutant::Expression::Method.singleton_class.prepend(self)
   end
 
   private
