@@ -1,0 +1,15 @@
+---
+- subject: Api::V1::RotationsController#set_resource
+  kind: same-answer
+  why: >-
+    The route (/:id, /:id/update, /:id/delete) always has :id in its path, and a path value is always in params,
+    so fetch never raises.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def set_resource
+    -  @rotation = Rotation.find_by(id: params[:id])
+    +  @rotation = Rotation.find_by(id: params.fetch(:id))
+       if @rotation.blank?
+         not_found_api
+       end
+     end

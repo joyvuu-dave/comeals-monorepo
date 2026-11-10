@@ -477,6 +477,19 @@ RSpec.describe 'Meals API' do
       expect(meal_resident.reload).to have_attributes(late: true, vegetarian: true)
     end
 
+    # A page from before attendance_version sends no version. Then
+    # set_meal_resident looks for the sign-up before the action reads the
+    # flags, so a change to a sign-up that does not exist is a 404, even
+    # when its flag would be refused.
+    it 'answers 404 for a change to a sign-up that does not exist, before it reads the flags' do
+      other = create(:resident, community: community, unit: unit)
+
+      patch "/api/v1/meals/#{meal.id}/residents/#{other.id}", params: { token: token, late: 'no' }
+
+      expect(response).to have_http_status(:not_found)
+      expect(response.parsed_body['message']).to eq(ApiController::NOT_FOUND)
+    end
+
     it 'takes 1 and 0, as JSON numbers and as text, and JSON true and false' do
       [[{ late: 1, vegetarian: 0 }, [true, false]], [{ late: '0', vegetarian: '1' }, [false, true]],
        [{ late: true, vegetarian: false }, [true, false]]].each do |flags, (late, vegetarian)|

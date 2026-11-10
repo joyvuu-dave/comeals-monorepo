@@ -1,0 +1,194 @@
+---
+- subject: Api::V1::MealsController#update_meal_resident
+  kind: same-answer
+  why: >-
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass
+    of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def update_meal_resident
+       flags = TrueOrFalse.from_params(params, [:late, :vegetarian], required: false)
+    -  if flags.is_a?(String)
+    +  if flags.instance_of?(String)
+         return render_refused(flags)
+       end
+       attendance_write { |row|
+         if row.nil?
+           next not_found_rendering
+         end
+         row.update!(flags)
+         { json: { message: "MealResident updated.", attendance_version: attendance_version_now } }
+       }
+     end
+- subject: Api::V1::MealsController#update_description
+  kind: same-answer
+  why: >-
+    params[:description] comes from the JSON parser or Rack's form parser, which give a plain String, never a subclass,
+    so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def update_description
+       description = params[:description]
+    -  unless description.is_a?(String)
+    +  unless description.instance_of?(String)
+         return render_refused("Send the description as text.")
+       end
+       render_write_under_lock {
+         meal.update!(description:)
+         { json: { message: "Description updated." } }
+       }
+     end
+- subject: Api::V1::MealsController#update_max
+  kind: same-answer
+  why: update_max returns early unless params.key?(:max), so the key is there and fetch never raises.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def update_max
+       unless params.key?(:max)
+         return render_refused("Send max: a number, or null to remove the cap.")
+       end
+       render_write_under_lock {
+         if !meal.closed? && params[:max].present?
+           { json: { message: "Meal is open. A cap can only be set on a closed meal." }, status: :bad_request }
+         else
+    -      meal.update!(max: params[:max])
+    +      meal.update!(max: params.fetch(:max))
+           { json: { message: "Meal max value updated." } }
+         end
+       }
+     end
+- subject: Api::V1::MealsController#update_max
+  kind: same-answer
+  why: update_max returns early unless params.key?(:max), so the key is there and fetch never raises.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def update_max
+       unless params.key?(:max)
+         return render_refused("Send max: a number, or null to remove the cap.")
+       end
+       render_write_under_lock {
+    -    if !meal.closed? && params[:max].present?
+    +    if !meal.closed? && params.fetch(:max).present?
+           { json: { message: "Meal is open. A cap can only be set on a closed meal." }, status: :bad_request }
+         else
+           meal.update!(max: params[:max])
+           { json: { message: "Meal max value updated." } }
+         end
+       }
+     end
+- subject: Api::V1::MealsController#update_bills
+  kind: same-answer
+  why: >-
+    e is an ActiveRecord::RecordNotFound. ActiveSupport writes an exception to JSON as its to_s, and RecordNotFound
+    does not change message or to_s, so the JSON text is the same.
+  diff: |
+    @@ -1,27 +1,27 @@
+     def update_bills
+       payload = bills_payload
+       if payload.outdated?
+         return refuse_outdated_bills(payload)
+       end
+       header = bills_key_header
+       key = header.key
+       if key.nil?
+         return render(json: { message: header.error }, status: :bad_request)
+       end
+       unless payload.valid?
+         return render(json: { message: payload.error }, status: :bad_request)
+       end
+       render(**T.must(with_meal_lock(before_settled_check: ->() {
+         seen_bills_key_answer
+       }) {
+         save_bills(payload, key)
+       }))
+     rescue ActiveRecord::RecordNotFound => e
+    -  render(json: { message: e.message }, status: :bad_request)
+    +  render(json: { message: e }, status: :bad_request)
+     rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
+       render(json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request)
+     rescue ActiveRecord::InvalidForeignKey
+       render(json: { message: "Invalid cook assignment." }, status: :bad_request)
+     rescue ActiveRecord::RangeError
+       render(json: { message: "Invalid amount. Amounts are whole cents, 0 to 9999.99." }, status: :bad_request)
+     end
+- subject: Api::V1::MealsController#seen_bills_key_answer
+  kind: same-answer
+  why: Rails reads a record given for an id in a where hash as its id, so the query is the same.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def seen_bills_key_answer
+       key = bills_key_header.key
+       if key.nil? || !bills_payload.valid?
+         return nil
+       end
+    -  seen = BillsSaveKey.find_by(meal_id: meal.id, key:)
+    +  seen = BillsSaveKey.find_by(meal_id: meal, key:)
+       if seen
+         answer_seen_key(seen, bills_payload)
+       end
+     end
+- subject: Api::V1::MealsController#verify_resident_exists
+  kind: same-answer
+  why: >-
+    The routes to create_meal_resident and create_guest have :resident_id in their path, and a path value is always
+    in params, so fetch never raises.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def verify_resident_exists
+    -  if Resident.exists?(id: params[:resident_id])
+    +  if Resident.exists?(id: params.fetch(:resident_id))
+         return
+       end
+       render(json: { message: "Resident not found." }, status: :bad_request)
+     end
+- subject: Api::V1::MealsController#set_meal
+  kind: same-answer
+  why: >-
+    not_found_api has already rendered the 404. Without the return, note_live_update_sender also sets Current.socket_id
+    and Current.push_token, and nothing reads them in a request that wrote nothing. PushToken.read never raises.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def set_meal
+       @meal = T.let(Meal.includes(:bills, :meal_residents, :guests).find_by(id: params[:meal_id]), T.nilable(Meal))
+       if @meal.nil?
+    -    return not_found_api
+    +    not_found_api
+       end
+       note_live_update_sender
+     end
+- subject: Api::V1::MealsController#create_meal_resident
+  kind: same-answer
+  why: >-
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass
+    of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def create_meal_resident
+       flags = TrueOrFalse.from_params(params, [:late, :vegetarian], required: true)
+    -  if flags.is_a?(String)
+    +  if flags.instance_of?(String)
+         return render_refused(flags)
+       end
+       attendance_write {
+         meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
+         meal_resident.update!(flags)
+         { json: MealResidentSerializer.new(meal_resident, params: { attendance_version: attendance_version_now }) }
+       }
+     end
+- subject: Api::V1::MealsController#create_meal_resident
+  kind: same-answer
+  why: The route POST /meals/:meal_id/residents/:resident_id has :resident_id in its path, so fetch never raises.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def create_meal_resident
+       flags = TrueOrFalse.from_params(params, [:late, :vegetarian], required: true)
+       if flags.is_a?(String)
+         return render_refused(flags)
+       end
+       attendance_write {
+    -    meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params[:resident_id])
+    +    meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params.fetch(:resident_id))
+         meal_resident.update!(flags)
+         { json: MealResidentSerializer.new(meal_resident, params: { attendance_version: attendance_version_now }) }
+       }
+     end

@@ -1,0 +1,235 @@
+---
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    where(meals: ...) on a relation that includes :meal makes Rails join the meals table (references), so the same
+    rows come back with or without joins(:meal).
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes(:meal, { resident: :unit }).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes(:meal).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    where(meals: ...) on a relation that includes :meal makes Rails join the meals table (references), so the same
+    rows come back with or without joins(:meal).
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes(:meal, { resident: :unit }).joins(nil).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query. joins(:meal)
+    stays, so where(meals: ...) still has the meals table.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query. joins(:meal)
+    stays, so where(meals: ...) still has the meals table.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes(nil, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query. joins(:meal)
+    stays, so where(meals: ...) still has the meals table.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes({ resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes(:meal, nil).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#bills_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def bills_in_range(community)
+    -  community.bills.includes(:meal, { resident: :unit }).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+    +  community.bills.includes(:meal, {}).joins(:meal).where(meals: { date: start_date.. }).where(meals: { date: ..end_date }).order("bills.id")
+     end
+- subject: CalendarSerializer#rotations_in_range
+  kind: same-answer
+  why: A repeated id in WHERE id IN (...) finds the same rows once each, so the Rotations are the same.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def rotations_in_range(community)
+    -  rotation_ids = meals_in_range(community).pluck(:rotation_id).uniq
+    +  rotation_ids = meals_in_range(community).pluck(:rotation_id)
+       Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
+     end
+- subject: CalendarSerializer#rotations_in_range
+  kind: same-answer
+  why: >-
+    The serializer reads the rotations with each, which a Relation and an Array do the same way, and the Relation
+    loads them in the same place, inside CalendarSerializer#to_h in the RetryOnConflict block.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def rotations_in_range(community)
+       rotation_ids = meals_in_range(community).pluck(:rotation_id).uniq
+    -  Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
+    +  Rotation.where(id: rotation_ids).order(:id).preload(:meals)
+     end
+- subject: CalendarSerializer#rotations_in_range
+  kind: same-answer
+  why: "Relation#to_ary is the same as Relation#to_a: both load the records and give the Array."
+  diff: |
+    @@ -1,4 +1,4 @@
+     def rotations_in_range(community)
+       rotation_ids = meals_in_range(community).pluck(:rotation_id).uniq
+    -  Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_a
+    +  Rotation.where(id: rotation_ids).order(:id).preload(:meals).to_ary
+     end
+- subject: CalendarSerializer#common_house_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def common_house_reservations_in_range(community)
+    -  community.common_house_reservations.includes({ resident: :unit }).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+    +  community.common_house_reservations.includes({}).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+     end
+- subject: CalendarSerializer#common_house_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def common_house_reservations_in_range(community)
+    -  community.common_house_reservations.includes({ resident: :unit }).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+    +  community.common_house_reservations.where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+     end
+- subject: CalendarSerializer#common_house_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def common_house_reservations_in_range(community)
+    -  community.common_house_reservations.includes({ resident: :unit }).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+    +  community.common_house_reservations.includes(nil).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+     end
+- subject: CalendarSerializer#common_house_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def common_house_reservations_in_range(community)
+    -  community.common_house_reservations.includes({ resident: :unit }).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+    +  community.common_house_reservations.includes({ resident: nil }).where(start_date: ..window_end).where(end_date: window_start..).order(:id)
+     end
+- subject: CalendarSerializer#guest_room_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def guest_room_reservations_in_range(community)
+    -  community.guest_room_reservations.includes({ resident: :unit }).where(date: start_date..).where(date: ..end_date).order(:id)
+    +  community.guest_room_reservations.includes({}).where(date: start_date..).where(date: ..end_date).order(:id)
+     end
+- subject: CalendarSerializer#guest_room_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def guest_room_reservations_in_range(community)
+    -  community.guest_room_reservations.includes({ resident: :unit }).where(date: start_date..).where(date: ..end_date).order(:id)
+    +  community.guest_room_reservations.includes({ resident: nil }).where(date: start_date..).where(date: ..end_date).order(:id)
+     end
+- subject: CalendarSerializer#guest_room_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def guest_room_reservations_in_range(community)
+    -  community.guest_room_reservations.includes({ resident: :unit }).where(date: start_date..).where(date: ..end_date).order(:id)
+    +  community.guest_room_reservations.where(date: start_date..).where(date: ..end_date).order(:id)
+     end
+- subject: CalendarSerializer#guest_room_reservations_in_range
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def guest_room_reservations_in_range(community)
+    -  community.guest_room_reservations.includes({ resident: :unit }).where(date: start_date..).where(date: ..end_date).order(:id)
+    +  community.guest_room_reservations.includes(nil).where(date: start_date..).where(date: ..end_date).order(:id)
+     end
+- subject: CalendarSerializer#events_in_range
+  kind: same-answer
+  why: >-
+    An event that starts exactly at window_start also matches the first clause (start_date from window_start to
+    window_end), so adding it to the third clause finds no new row.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def events_in_range(community)
+    -  community.events.where(start_date: window_start..).where(start_date: ..window_end).or(community.events.where(end_date: window_start..).where(end_date: ..window_end)).or(community.events.where(start_date: ...window_start).where("end_date > ?", window_end)).order(:id)
+    +  community.events.where(start_date: window_start..).where(start_date: ..window_end).or(community.events.where(end_date: window_start..).where(end_date: ..window_end)).or(community.events.where(start_date: ..window_start).where("end_date > ?", window_end)).order(:id)
+     end
+- subject: CalendarSerializer#window_start
+  kind: same-answer
+  why: >-
+    start_date is YYYY-MM-DD, and Time.zone.parse of a date with no time gives that day's first instant, which is
+    what beginning_of_day gives. The 2026-10-16 round in docs/mutation-testing.md checked this for every zone Rails
+    lists, every day from 1970 to 2039.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def window_start
+    -  Time.zone.parse(start_date).beginning_of_day
+    +  Time.zone.parse(start_date)
+     end

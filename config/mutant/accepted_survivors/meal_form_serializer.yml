@@ -1,0 +1,23 @@
+---
+- subject: MealFormSerializer#residents
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def residents(meal)
+    -  Resident.where(active: true).or(Resident.where(id: meal.meal_residents.map(&:resident_id))).or(Resident.where(id: meal.bills.map(&:resident_id))).or(Resident.where(id: meal.guests.map(&:resident_id))).includes(:unit).order(:id)
+    +  Resident.where(active: true).or(Resident.where(id: meal.meal_residents.map(&:resident_id))).or(Resident.where(id: meal.bills.map(&:resident_id))).or(Resident.where(id: meal.guests.map(&:resident_id))).order(:id)
+     end
+- subject: MealFormSerializer#residents
+  kind: same-answer
+  why: >-
+    goldiloader (Gemfile) loads each association for all the rows of the list at once on first read, so the same
+    rows load in the same number of queries without the preload, and prosopite sees no repeated query.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def residents(meal)
+    -  Resident.where(active: true).or(Resident.where(id: meal.meal_residents.map(&:resident_id))).or(Resident.where(id: meal.bills.map(&:resident_id))).or(Resident.where(id: meal.guests.map(&:resident_id))).includes(:unit).order(:id)
+    +  Resident.where(active: true).or(Resident.where(id: meal.meal_residents.map(&:resident_id))).or(Resident.where(id: meal.bills.map(&:resident_id))).or(Resident.where(id: meal.guests.map(&:resident_id))).includes(nil).order(:id)
+     end

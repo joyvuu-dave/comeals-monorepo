@@ -1,0 +1,453 @@
+---
+- subject: ApiController#parse_start_end_params
+  kind: same-answer
+  why: >-
+    parse_start_end_params answers a plain Hash or one of the two message constants INVALID_DATE and PICK_BOTH_TIMES,
+    which are plain Strings. Neither is a subclass of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def parse_start_end_params(allday: false)
+       times = start_end_times(allday)
+    -  if times.is_a?(String)
+    +  if times.instance_of?(String)
+         return times
+       end
+       unless times.values.compact.all? { |time|
+         StorableTime.timestamp?(time)
+       }
+         return INVALID_DATE
+       end
+       times
+     end
+- subject: ApiController#updated_start_end
+  kind: same-answer
+  why: >-
+    Both callers (the event and common house update actions) pass the answer as **times, and Ruby 3.4 and later
+    read **nil as no keywords, the same as **{}. The String check before that is false for both.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def updated_start_end(record, allday: false, more_keys: [])
+       if (START_END_KEYS + more_keys).none? { |key|
+         params.key?(key)
+       }
+    -    return {}
+    +    return nil
+       end
+       times = parse_start_end_params(allday:)
+       if times.is_a?(String)
+         return times
+       end
+       stored_times_if_shown(record, times)
+     end
+- subject: ApiController#updated_start_end
+  kind: same-answer
+  why: >-
+    parse_start_end_params answers a plain Hash or one of the two message constants INVALID_DATE and PICK_BOTH_TIMES,
+    which are plain Strings. Neither is a subclass of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def updated_start_end(record, allday: false, more_keys: [])
+       if (START_END_KEYS + more_keys).none? { |key|
+         params.key?(key)
+       }
+         return {}
+       end
+       times = parse_start_end_params(allday:)
+    -  if times.is_a?(String)
+    +  if times.instance_of?(String)
+         return times
+       end
+       stored_times_if_shown(record, times)
+     end
+- subject: ApiController#sent_fields
+  kind: same-answer
+  why: keys.select keeps only the keys for which params.key? is true, so fetch never raises.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def sent_fields(*keys)
+       keys.select { |key|
+         params.key?(key)
+       }.index_with { |key|
+    -    params[key]
+    +    params.fetch(key)
+       }
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a month of 0 or 13, and any month above 12, the same as whole_number_param
+    refusing it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+    -  month = whole_number_param(:start_month, 1..12)
+    +  month = whole_number_param(:start_month, 0..12)
+       day = whole_number_param(:start_day, 1..31)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a day of 0 and any day above 31, the same as whole_number_param refusing
+    it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+       month = whole_number_param(:start_month, 1..12)
+    -  day = whole_number_param(:start_day, 1..31)
+    +  day = whole_number_param(:start_day, 1..167)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a day of 0 and any day above 31, the same as whole_number_param refusing
+    it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+       month = whole_number_param(:start_month, 1..12)
+    -  day = whole_number_param(:start_day, 1..31)
+    +  day = whole_number_param(:start_day, 1..32)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a day of 0 and any day above 31, the same as whole_number_param refusing
+    it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+       month = whole_number_param(:start_month, 1..12)
+    -  day = whole_number_param(:start_day, 1..31)
+    +  day = whole_number_param(:start_day, 1..nil)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a day of 0 and any day above 31, the same as whole_number_param refusing
+    it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+       month = whole_number_param(:start_month, 1..12)
+    -  day = whole_number_param(:start_day, 1..31)
+    +  day = whole_number_param(:start_day, 0..31)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a month of 0 or 13, and any month above 12, the same as whole_number_param
+    refusing it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+    -  month = whole_number_param(:start_month, 1..12)
+    +  month = whole_number_param(:start_month, 1..167)
+       day = whole_number_param(:start_day, 1..31)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a month of 0 or 13, and any month above 12, the same as whole_number_param
+    refusing it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+    -  month = whole_number_param(:start_month, 1..12)
+    +  month = whole_number_param(:start_month, 1..13)
+       day = whole_number_param(:start_day, 1..31)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#start_end_times
+  kind: same-answer
+  why: >-
+    Date.valid_date? on the next line refuses a month of 0 or 13, and any month above 12, the same as whole_number_param
+    refusing it (nil). Both answer INVALID_DATE.
+  diff: |
+    @@ -1,21 +1,21 @@
+     def start_end_times(allday)
+       year = whole_number_param(:start_year)
+    -  month = whole_number_param(:start_month, 1..12)
+    +  month = whole_number_param(:start_month, 1..nil)
+       day = whole_number_param(:start_day, 1..31)
+       unless Date.valid_date?(year, month, day, Date::GREGORIAN)
+         return INVALID_DATE
+       end
+       midnight = Time.zone.local(year, month, day)
+       if allday
+         return { start_date: midnight, end_date: nil }
+       end
+       start_empty = empty_time?(:start_hours, :start_minutes)
+       end_empty = empty_time?(:end_hours, :end_minutes)
+       if start_empty && end_empty
+         return { start_date: midnight, end_date: midnight }
+       end
+       if start_empty || end_empty
+         return PICK_BOTH_TIMES
+       end
+       timed_start_end(year, month, day)
+     end
+- subject: ApiController#resolve_current_session
+  kind: same-answer
+  why: >-
+    The guard on the first line lets this code run once per controller, so @current_api_key has not been set before
+    this line, and Ruby reads an unset instance variable as nil.
+  diff: |
+    @@ -1,19 +1,18 @@
+     def resolve_current_session
+       if defined?(@session_resolved)
+         return
+       end
+       @session_resolved = true
+       token = bearer_token_from_header || token_param
+       if (login = JwtAuth.authenticate(token))
+    -    @current_api_key = nil
+         @current_login = T.let(login, T.nilable(JwtAuth::Login))
+         return
+       end
+       key = if token
+         Key.find_by(token:)
+       else
+         nil
+       end
+       @current_api_key = key
+       @current_login = key&.identity
+     end
+- subject: ApiController#resolve_current_session
+  kind: same-answer
+  why: defined?(@session_resolved) and instance_variable_defined?(:@session_resolved) give the same answer.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def resolve_current_session
+    -  if defined?(@session_resolved)
+    +  if instance_variable_defined?(:@session_resolved)
+         return
+       end
+       @session_resolved = true
+       token = bearer_token_from_header || token_param
+       if (login = JwtAuth.authenticate(token))
+         @current_api_key = nil
+         @current_login = T.let(login, T.nilable(JwtAuth::Login))
+         return
+       end
+       key = if token
+         Key.find_by(token:)
+       else
+         nil
+       end
+       @current_api_key = key
+       @current_login = key&.identity
+     end
+- subject: ApiController#resolve_current_session
+  kind: same-answer
+  why: defined?(@session_resolved) is true once the variable is set, even to false, so the guard works the same.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def resolve_current_session
+       if defined?(@session_resolved)
+         return
+       end
+    -  @session_resolved = true
+    +  @session_resolved = false
+       token = bearer_token_from_header || token_param
+       if (login = JwtAuth.authenticate(token))
+         @current_api_key = nil
+         @current_login = T.let(login, T.nilable(JwtAuth::Login))
+         return
+       end
+       key = if token
+         Key.find_by(token:)
+       else
+         nil
+       end
+       @current_api_key = key
+       @current_login = key&.identity
+     end
+- subject: ApiController#resolve_current_session
+  kind: same-answer
+  why: A ternary with no nil branch, `if token` with no else, gives nil when token is nil, the same value.
+  diff: |
+    @@ -1,19 +1,17 @@
+     def resolve_current_session
+       if defined?(@session_resolved)
+         return
+       end
+       @session_resolved = true
+       token = bearer_token_from_header || token_param
+       if (login = JwtAuth.authenticate(token))
+         @current_api_key = nil
+         @current_login = T.let(login, T.nilable(JwtAuth::Login))
+         return
+       end
+       key = if token
+         Key.find_by(token:)
+    -  else
+    -    nil
+       end
+       @current_api_key = key
+       @current_login = key&.identity
+     end
+- subject: ApiController#token_param
+  kind: same-answer
+  why: >-
+    params[:token] comes from Rack's query parser or the JSON parser, which give a plain String, never a subclass,
+    so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def token_param
+       token = params[:token]
+    -  if token.is_a?(String)
+    +  if token.instance_of?(String)
+         token.presence
+       end
+     end
+- subject: ApiController#set_community_timezone
+  kind: same-answer
+  why: >-
+    ActiveSupport::TimeZone[''] is nil, so an empty timezone column fails the check on the next line with or without
+    .presence, and the request runs in the app zone either way.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def set_community_timezone(&)
+       if bearer_token_from_header || token_param
+         tz = (if current_login
+           Community.first
+    -    end)&.timezone.presence
+    +    end)&.timezone
+         if tz && ActiveSupport::TimeZone[tz]
+           return Time.use_zone(tz, &)
+         end
+       end
+       yield
+     end
+- subject: ApiController#current_resident_api
+  kind: same-answer
+  why: >-
+    current_login answers a Resident, a CommonHouseLogin or nil. Nothing in app/ or lib/ subclasses Resident, so
+    instance_of? and is_a? agree.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def current_resident_api
+       login = current_login
+    -  if login.is_a?(Resident)
+    +  if login.instance_of?(Resident)
+         login
+       end
+     end

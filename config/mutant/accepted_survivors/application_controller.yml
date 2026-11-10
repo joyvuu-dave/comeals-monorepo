@@ -1,0 +1,113 @@
+---
+- subject: ApplicationController#use_community_timezone
+  kind: same-answer
+  why: >-
+    Time.use_zone(nil) keeps the zone that is current, so with no community zone the block runs in the app zone
+    with or without the early return.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def use_community_timezone(&)
+       zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+    -  if zone.nil?
+    +  if self.nil?
+         return yield
+       end
+       Time.use_zone(zone, &)
+     end
+- subject: ApplicationController#use_community_timezone
+  kind: same-answer
+  why: >-
+    Time.use_zone(nil) keeps the zone that is current, so with no community zone the block runs in the app zone
+    with or without the early return.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def use_community_timezone(&)
+       zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+    -  if zone.nil?
+    +  if false
+         return yield
+       end
+       Time.use_zone(zone, &)
+     end
+- subject: ApplicationController#use_community_timezone
+  kind: same-answer
+  why: >-
+    Time.use_zone(nil) keeps the zone that is current, so with no community zone the block runs in the app zone
+    with or without the early return.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def use_community_timezone(&)
+       zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+    -  if zone.nil?
+    +  if nil
+         return yield
+       end
+       Time.use_zone(zone, &)
+     end
+- subject: ApplicationController#use_community_timezone
+  kind: same-answer
+  why: >-
+    This runs only when zone is nil. The next line, Time.use_zone(nil, &), then runs the block in the zone that
+    is current, the same as yield.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def use_community_timezone(&)
+       zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+       if zone.nil?
+    -    return yield
+    +    nil
+       end
+       Time.use_zone(zone, &)
+     end
+- subject: ApplicationController#use_community_timezone
+  kind: same-answer
+  why: >-
+    Time.use_zone(nil) keeps the zone that is current, so with no community zone the block runs in the app zone
+    with or without the early return.
+  diff: |
+    @@ -1,7 +1,4 @@
+     def use_community_timezone(&)
+       zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+    -  if zone.nil?
+    -    return yield
+    -  end
+       Time.use_zone(zone, &)
+     end
+- subject: ApplicationController#use_community_timezone
+  kind: same-answer
+  why: >-
+    Time.use_zone(nil) keeps the zone that is current, so with no community zone the block runs in the app zone
+    with or without the early return.
+  diff: |
+    @@ -1,7 +1,5 @@
+     def use_community_timezone(&)
+       zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
+    -  if zone.nil?
+    -    return yield
+    -  end
+    +  nil
+       Time.use_zone(zone, &)
+     end
+- subject: ApplicationController#current_admin_user_custom
+  kind: same-answer
+  why: >-
+    ENV values are Strings, so .to_s changes nothing when READ_ONLY_ADMIN_ID is set. When it is not set, AdminUser.find(nil)
+    and AdminUser.find('') both raise RecordNotFound.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def current_admin_user_custom
+       if read_only_admin_token?
+    -    return AdminUser.find(ENV.fetch("READ_ONLY_ADMIN_ID", nil).to_s)
+    +    return AdminUser.find(ENV.fetch("READ_ONLY_ADMIN_ID", nil))
+       end
+       current_admin_user
+     end
+- subject: ApplicationController#read_only_admin_token?
+  kind: same-answer
+  why: This runs only after params[:token].present? is true, so the key is there and fetch never raises.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def read_only_admin_token?
+    -  params[:token].present? && params[:token] == ENV["READ_ONLY_ADMIN_TOKEN"]
+    +  params[:token].present? && params.fetch(:token) == ENV["READ_ONLY_ADMIN_TOKEN"]
+     end

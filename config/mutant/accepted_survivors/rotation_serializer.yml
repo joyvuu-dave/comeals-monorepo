@@ -1,0 +1,17 @@
+---
+- subject: RotationSerializer#end
+  kind: same-answer
+  why: >-
+    last_date is a Date from the meals.date column, and Date + 1 and Date + 1.day are the same next Date, so the
+    instant after 1.minute is taken off is the same.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def end(rotation)
+       last_date = if rotation.meals.loaded?
+         rotation.meals.max_by(&:date)&.date
+       else
+         rotation.meals.maximum(:date)
+       end
+    -  last_date && (last_date + 1.day - 1.minute)
+    +  last_date && (last_date + 1 - 1.minute)
+     end

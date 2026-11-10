@@ -1,0 +1,211 @@
+---
+- subject: Api::V1::EventsController#create
+  kind: same-answer
+  why: >-
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass
+    of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def create
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+    -  if flags.is_a?(String)
+    +  if flags.instance_of?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, false)
+       times = parse_start_end_params(allday:)
+       if times.is_a?(String)
+         return render_refused(times)
+       end
+       event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title], description: params[:description] || "", allday:)
+       render_retrying_on_conflict {
+         if event.save
+           { json: { message: "Event has been created" } }
+         else
+           { json: { message: event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#create
+  kind: same-answer
+  why: >-
+    parse_start_end_params gives a Hash only from start_end_times, and each Hash there (all day, both menus empty,
+    or timed_start_end) has both :start_date and :end_date, so fetch never raises.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def create
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+       if flags.is_a?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, false)
+       times = parse_start_end_params(allday:)
+       if times.is_a?(String)
+         return render_refused(times)
+       end
+    -  event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title], description: params[:description] || "", allday:)
+    +  event = Event.new(start_date: times[:start_date], end_date: times.fetch(:end_date), title: params[:title], description: params[:description] || "", allday:)
+       render_retrying_on_conflict {
+         if event.save
+           { json: { message: "Event has been created" } }
+         else
+           { json: { message: event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#create
+  kind: same-answer
+  why: >-
+    parse_start_end_params gives a Hash only from start_end_times, and each Hash there (all day, both menus empty,
+    or timed_start_end) has both :start_date and :end_date, so fetch never raises.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def create
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+       if flags.is_a?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, false)
+       times = parse_start_end_params(allday:)
+       if times.is_a?(String)
+         return render_refused(times)
+       end
+    -  event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title], description: params[:description] || "", allday:)
+    +  event = Event.new(start_date: times.fetch(:start_date), end_date: times[:end_date], title: params[:title], description: params[:description] || "", allday:)
+       render_retrying_on_conflict {
+         if event.save
+           { json: { message: "Event has been created" } }
+         else
+           { json: { message: event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#create
+  kind: same-answer
+  why: >-
+    parse_start_end_params answers a plain Hash or one of the two message constants INVALID_DATE and PICK_BOTH_TIMES,
+    which are plain Strings. Neither is a subclass of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def create
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+       if flags.is_a?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, false)
+       times = parse_start_end_params(allday:)
+    -  if times.is_a?(String)
+    +  if times.instance_of?(String)
+         return render_refused(times)
+       end
+       event = Event.new(start_date: times[:start_date], end_date: times[:end_date], title: params[:title], description: params[:description] || "", allday:)
+       render_retrying_on_conflict {
+         if event.save
+           { json: { message: "Event has been created" } }
+         else
+           { json: { message: event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#update
+  kind: same-answer
+  why: >-
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass
+    of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def update
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+    -  if flags.is_a?(String)
+    +  if flags.instance_of?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, @event.allday)
+       times = updated_start_end(@event, allday:, more_keys: [:all_day])
+       if times.is_a?(String)
+         return render_refused(times)
+       end
+       render_retrying_on_conflict {
+         fields = sent_fields(:title, :description)
+         if fields.key?(:description) && fields[:description].nil?
+           fields[:description] = ""
+         end
+         if @event.update(**times, allday:, **fields)
+           { json: { message: "Event has been updated" } }
+         else
+           { json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#update
+  kind: same-answer
+  why: This runs only after fields.key?(:description) is true, so fetch never raises.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def update
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+       if flags.is_a?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, @event.allday)
+       times = updated_start_end(@event, allday:, more_keys: [:all_day])
+       if times.is_a?(String)
+         return render_refused(times)
+       end
+       render_retrying_on_conflict {
+         fields = sent_fields(:title, :description)
+    -    if fields.key?(:description) && fields[:description].nil?
+    +    if fields.key?(:description) && fields.fetch(:description).nil?
+           fields[:description] = ""
+         end
+         if @event.update(**times, allday:, **fields)
+           { json: { message: "Event has been updated" } }
+         else
+           { json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#update
+  kind: same-answer
+  why: >-
+    parse_start_end_params answers a plain Hash or one of the two message constants INVALID_DATE and PICK_BOTH_TIMES,
+    which are plain Strings. Neither is a subclass of String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def update
+       flags = TrueOrFalse.from_params(params, [:all_day], required: false)
+       if flags.is_a?(String)
+         return render_refused(flags)
+       end
+       allday = flags.fetch(:all_day, @event.allday)
+       times = updated_start_end(@event, allday:, more_keys: [:all_day])
+    -  if times.is_a?(String)
+    +  if times.instance_of?(String)
+         return render_refused(times)
+       end
+       render_retrying_on_conflict {
+         fields = sent_fields(:title, :description)
+         if fields.key?(:description) && fields[:description].nil?
+           fields[:description] = ""
+         end
+         if @event.update(**times, allday:, **fields)
+           { json: { message: "Event has been updated" } }
+         else
+           { json: { message: @event.errors.full_messages.join("\n") }, status: :bad_request }
+         end
+       }
+     end
+- subject: Api::V1::EventsController#set_resource
+  kind: same-answer
+  why: >-
+    The route (/:id, /:id/update, /:id/delete) always has :id in its path, and a path value is always in params,
+    so fetch never raises.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def set_resource
+    -  @event = Event.find_by(id: params[:id])
+    +  @event = Event.find_by(id: params.fetch(:id))
+       if @event.blank?
+         not_found_api
+       end
+     end

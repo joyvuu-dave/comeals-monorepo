@@ -1,0 +1,107 @@
+---
+- subject: AttendanceVersionCheck#attendance_write
+  kind: same-answer
+  why: >-
+    stored and expected are both Integers here (AttendanceVersion.of and AttendanceVersionParam). Two equal Integers
+    below 2**62 are the same object, and a stored version is a count of writes to one row, far below that. A larger
+    expected is not equal to stored either way.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def attendance_write(&blk)
+       expected = AttendanceVersionParam.from_params(params)
+       if expected.is_a?(String)
+         return render_refused(expected)
+       end
+       render_write_under_lock {
+         if expected.nil?
+           next yield(@meal_resident)
+         end
+         stored = attendance_version_now
+    -    if stored != expected
+    +    if !stored.equal?(expected)
+           next stale_attendance_rejection(stored)
+         end
+         yield(meal.meal_residents.find_by(resident_id: params[:resident_id]))
+       }
+     end
+- subject: AttendanceVersionCheck#attendance_write
+  kind: same-answer
+  why: stored and expected are both Integers here, and Integer#eql? is the same as Integer#== for two Integers.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def attendance_write(&blk)
+       expected = AttendanceVersionParam.from_params(params)
+       if expected.is_a?(String)
+         return render_refused(expected)
+       end
+       render_write_under_lock {
+         if expected.nil?
+           next yield(@meal_resident)
+         end
+         stored = attendance_version_now
+    -    if stored != expected
+    +    if !stored.eql?(expected)
+           next stale_attendance_rejection(stored)
+         end
+         yield(meal.meal_residents.find_by(resident_id: params[:resident_id]))
+       }
+     end
+- subject: AttendanceVersionCheck#attendance_write
+  kind: same-answer
+  why: >-
+    All three attendance routes have :resident_id in their path, and a path value is always in params, so fetch
+    never raises.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def attendance_write(&blk)
+       expected = AttendanceVersionParam.from_params(params)
+       if expected.is_a?(String)
+         return render_refused(expected)
+       end
+       render_write_under_lock {
+         if expected.nil?
+           next yield(@meal_resident)
+         end
+         stored = attendance_version_now
+         if stored != expected
+           next stale_attendance_rejection(stored)
+         end
+    -    yield(meal.meal_residents.find_by(resident_id: params[:resident_id]))
+    +    yield(meal.meal_residents.find_by(resident_id: params.fetch(:resident_id)))
+       }
+     end
+- subject: AttendanceVersionCheck#attendance_write
+  kind: same-answer
+  why: >-
+    AttendanceVersionParam.from_params answers nil, an Integer, or its REFUSAL constant, a plain String, never a
+    subclass, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def attendance_write(&blk)
+       expected = AttendanceVersionParam.from_params(params)
+    -  if expected.is_a?(String)
+    +  if expected.instance_of?(String)
+         return render_refused(expected)
+       end
+       render_write_under_lock {
+         if expected.nil?
+           next yield(@meal_resident)
+         end
+         stored = attendance_version_now
+         if stored != expected
+           next stale_attendance_rejection(stored)
+         end
+         yield(meal.meal_residents.find_by(resident_id: params[:resident_id]))
+       }
+     end
+- subject: AttendanceVersionCheck#attendance_version_now
+  kind: same-answer
+  why: >-
+    All three attendance routes have :resident_id in their path, and a path value is always in params, so fetch
+    never raises.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def attendance_version_now
+    -  AttendanceVersion.of(meal, params[:resident_id].to_i)
+    +  AttendanceVersion.of(meal, params.fetch(:resident_id).to_i)
+     end

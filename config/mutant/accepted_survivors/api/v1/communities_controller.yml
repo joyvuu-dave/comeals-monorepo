@@ -1,0 +1,449 @@
+---
+- subject: Api::V1::CommunitiesController#cached_month
+  kind: same-answer
+  why: The one caller, calendar, always passes month, year, start_date and end_date, so fetch never raises.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def cached_month(community, **serializer_params)
+    -  key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
+    +  key = community.calendar_cache_key(serializer_params[:year], serializer_params.fetch(:month))
+       RetryOnConflict.call {
+         version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+         Rails.cache.fetch(key, version:, expires_in: 1.hour) {
+           CalendarSerializer.new(community, params: serializer_params).to_h
+         }
+       }
+     end
+- subject: Api::V1::CommunitiesController#cached_month
+  kind: same-answer
+  why: The one caller, calendar, always passes month, year, start_date and end_date, so fetch never raises.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def cached_month(community, **serializer_params)
+    -  key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
+    +  key = community.calendar_cache_key(serializer_params.fetch(:year), serializer_params[:month])
+       RetryOnConflict.call {
+         version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+         Rails.cache.fetch(key, version:, expires_in: 1.hour) {
+           CalendarSerializer.new(community, params: serializer_params).to_h
+         }
+       }
+     end
+- subject: Api::V1::CommunitiesController#cached_month
+  kind: same-answer
+  why: >-
+    Community#calendar_cache_version reads the start with Time.zone.parse(start_date.to_s). The Hash's text is {month:
+    11, year: 2026, start_date: "2026-10-25", ...}, and Time.zone.parse finds the first date in it, which is start_date
+    (checked with rails runner for two months). The day is the same.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def cached_month(community, **serializer_params)
+       key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
+       RetryOnConflict.call {
+    -    version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+    +    version = community.calendar_cache_version(serializer_params, serializer_params[:end_date])
+         Rails.cache.fetch(key, version:, expires_in: 1.hour) {
+           CalendarSerializer.new(community, params: serializer_params).to_h
+         }
+       }
+     end
+- subject: Api::V1::CommunitiesController#cached_month
+  kind: same-answer
+  why: The one caller, calendar, always passes month, year, start_date and end_date, so fetch never raises.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def cached_month(community, **serializer_params)
+       key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
+       RetryOnConflict.call {
+    -    version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+    +    version = community.calendar_cache_version(serializer_params.fetch(:start_date), serializer_params[:end_date])
+         Rails.cache.fetch(key, version:, expires_in: 1.hour) {
+           CalendarSerializer.new(community, params: serializer_params).to_h
+         }
+       }
+     end
+- subject: Api::V1::CommunitiesController#cached_month
+  kind: same-answer
+  why: The one caller, calendar, always passes month, year, start_date and end_date, so fetch never raises.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def cached_month(community, **serializer_params)
+       key = community.calendar_cache_key(serializer_params[:year], serializer_params[:month])
+       RetryOnConflict.call {
+    -    version = community.calendar_cache_version(serializer_params[:start_date], serializer_params[:end_date])
+    +    version = community.calendar_cache_version(serializer_params[:start_date], serializer_params.fetch(:end_date))
+         Rails.cache.fetch(key, version:, expires_in: 1.hour) {
+           CalendarSerializer.new(community, params: serializer_params).to_h
+         }
+       }
+     end
+- subject: Api::V1::CommunitiesController#birthdays
+  kind: same-answer
+  why: This runs only inside `params[:start] ?`, so the key is there and fetch never raises.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def birthdays
+       begin
+         day = if params[:start]
+    -      YearMonthDay.parse(params[:start]) + 2.weeks
+    +      YearMonthDay.parse(params.fetch(:start)) + 2.weeks
+         else
+           Community.instance.today
+         end
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       days = day.all_month
+       residents = Community.instance.residents.active.with_birthday_chip_on(days)
+       render(json: ResidentBirthdaySerializer.new(residents, params: { days: }))
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    start_date is the Sunday on or before the 1st, so it is 0 to 6 days before the 1st. Then start_date plus 19,
+    20 or 21 days is the 13th to the 22nd of the same month, in the same year.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+    -  month = (start_date + 20.days).month
+    +  month = (start_date + 19.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    Rack::ETag and Rack::ConditionalGet are in this app's middleware. Without the stale? call they set an ETag from
+    the body and answer the same 304 with the same private, max-age=0 Cache-Control, so a client sees the same status
+    and body. The spec 'sets an ETag and returns 304' passes either way. result is already built, so the call saves
+    no work either.
+  diff: |
+    @@ -1,17 +1,15 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+    -  if stale?(etag: result, public: false)
+    -    render(json: result)
+    -  end
+    +  render(json: result)
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    Rack::ETag and Rack::ConditionalGet are in this app's middleware. With a nil ETag, stale? is always true, and
+    they set an ETag from the body and answer the same 304 with the same private, max-age=0 Cache-Control, so a
+    client sees the same status and body. The spec 'sets an ETag and returns 304' passes either way. result is already
+    built, so the call saves no work either.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+    -  if stale?(etag: result, public: false)
+    +  if stale?(etag: nil, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: "public: false is the default of stale?, so leaving it out sends the same Cache-Control."
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+    -  if stale?(etag: result, public: false)
+    +  if stale?(etag: result)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    Rack::ETag and Rack::ConditionalGet are in this app's middleware. Without the stale? call they set an ETag from
+    the body and answer the same 304 with the same private, max-age=0 Cache-Control, so a client sees the same status
+    and body. The spec 'sets an ETag and returns 304' passes either way. result is already built, so the call saves
+    no work either.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+    -  if stale?(etag: result, public: false)
+    +  if true
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    Rack::ETag and Rack::ConditionalGet are in this app's middleware. With no ETag, stale? is always true, and they
+    set an ETag from the body and answer the same 304 with the same private, max-age=0 Cache-Control, so a client
+    sees the same status and body. The spec 'sets an ETag and returns 304' passes either way. result is already
+    built, so the call saves no work either.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+    -  if stale?(etag: result, public: false)
+    +  if stale?(public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    Rack::ETag and Rack::ConditionalGet are in this app's middleware. With no arguments, stale? is always true,
+    and they set an ETag from the body and answer the same 304 with the same private, max-age=0 Cache-Control, so
+    a client sees the same status and body. The spec 'sets an ETag and returns 304' passes either way. result is
+    already built, so the call saves no work either.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+    -  if stale?(etag: result, public: false)
+    +  if stale?
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    start_date is the Sunday on or before the 1st, so it is 0 to 6 days before the 1st. Then start_date plus 19,
+    20 or 21 days is the 13th to the 22nd of the same month, in the same year.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+    -  year = (start_date + 20.days).year
+    +  year = (start_date + 19.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    start_date is the Sunday on or before the 1st, so it is 0 to 6 days before the 1st. Then start_date plus 19,
+    20 or 21 days is the 13th to the 22nd of the same month, in the same year.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+    -  year = (start_date + 20.days).year
+    +  year = (start_date + 21.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: start_date is a Date, and a Date plus an Integer adds that many days, the same as plus N.days.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+    -  year = (start_date + 20.days).year
+    +  year = (start_date + 20).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: >-
+    start_date is the Sunday on or before the 1st, so it is 0 to 6 days before the 1st. Then start_date plus 19,
+    20 or 21 days is the 13th to the 22nd of the same month, in the same year.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+    -  month = (start_date + 20.days).month
+    +  month = (start_date + 21.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: start_date is a Date, and a Date plus an Integer adds that many days, the same as plus N.days.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+    -  month = (start_date + 20.days).month
+    +  month = (start_date + 20).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: start_date is a Date, and a Date plus an Integer adds that many days, the same as plus N.days.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+         date = YearMonthDay.parse(params[:date])
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+    -  end_date = start_date + 41.days
+    +  end_date = start_date + 41
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end
+- subject: Api::V1::CommunitiesController#calendar
+  kind: same-answer
+  why: The route /communities/:id/calendar/:date always has :date in its path, so fetch never raises.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def calendar
+       begin
+    -    date = YearMonthDay.parse(params[:date])
+    +    date = YearMonthDay.parse(params.fetch(:date))
+       rescue Date::Error
+         return render(json: { message: "Invalid date" }, status: :bad_request)
+       end
+       start_date = date.beginning_of_month.beginning_of_week(:sunday)
+       end_date = start_date + 41.days
+       month = (start_date + 20.days).month
+       year = (start_date + 20.days).year
+       start_date = start_date.to_s
+       end_date = end_date.to_s
+       result = cached_month(Community.instance, month:, year:, start_date:, end_date:)
+       if stale?(etag: result, public: false)
+         render(json: result)
+       end
+     end

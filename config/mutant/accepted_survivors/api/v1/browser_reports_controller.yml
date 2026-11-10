@@ -1,0 +1,102 @@
+---
+- subject: Api::V1::BrowserReportsController#create
+  kind: same-answer
+  why: >-
+    An ApiController action that renders nothing answers 204 No Content with no body (ActionController::API's implicit
+    render calls head :no_content), so the answer is the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def create
+       if body_too_large?
+         return head(:content_too_large)
+       end
+       if from_another_site?
+         return head(:forbidden)
+       end
+       report = BrowserReport.new(ActionController::Parameters.new(request.query_parameters), request.user_agent)
+       unless report.browser.bot?
+         queue(report)
+       end
+    -  head(:no_content)
+    +  nil
+     rescue BrowserReport::Invalid => e
+       render(json: { message: "This is not a browser check report: #{e.message}." }, status: :bad_request)
+     end
+- subject: Api::V1::BrowserReportsController#create
+  kind: same-answer
+  why: >-
+    An ApiController action that renders nothing answers 204 No Content with no body (ActionController::API's implicit
+    render calls head :no_content), so the answer is the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def create
+       if body_too_large?
+         return head(:content_too_large)
+       end
+       if from_another_site?
+         return head(:forbidden)
+       end
+       report = BrowserReport.new(ActionController::Parameters.new(request.query_parameters), request.user_agent)
+       unless report.browser.bot?
+         queue(report)
+       end
+    -  head(:no_content)
+    +  :no_content
+     rescue BrowserReport::Invalid => e
+       render(json: { message: "This is not a browser check report: #{e.message}." }, status: :bad_request)
+     end
+- subject: Api::V1::BrowserReportsController#create
+  kind: same-answer
+  why: >-
+    An ApiController action that renders nothing answers 204 No Content with no body (ActionController::API's implicit
+    render calls head :no_content), so the answer is the same.
+  diff: |
+    @@ -1,15 +1,14 @@
+     def create
+       if body_too_large?
+         return head(:content_too_large)
+       end
+       if from_another_site?
+         return head(:forbidden)
+       end
+       report = BrowserReport.new(ActionController::Parameters.new(request.query_parameters), request.user_agent)
+       unless report.browser.bot?
+         queue(report)
+       end
+    -  head(:no_content)
+     rescue BrowserReport::Invalid => e
+       render(json: { message: "This is not a browser check report: #{e.message}." }, status: :bad_request)
+     end
+- subject: Api::V1::BrowserReportsController#create
+  kind: same-answer
+  why: >-
+    BrowserReport::Invalid is a plain StandardError subclass that does not change message or to_s, so "#{e}" and
+    "#{e.message}" are the same text.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def create
+       if body_too_large?
+         return head(:content_too_large)
+       end
+       if from_another_site?
+         return head(:forbidden)
+       end
+       report = BrowserReport.new(ActionController::Parameters.new(request.query_parameters), request.user_agent)
+       unless report.browser.bot?
+         queue(report)
+       end
+       head(:no_content)
+     rescue BrowserReport::Invalid => e
+    -  render(json: { message: "This is not a browser check report: #{e.message}." }, status: :bad_request)
+    +  render(json: { message: "This is not a browser check report: #{e}." }, status: :bad_request)
+     end
+- subject: Api::V1::BrowserReportsController#from_another_site?
+  kind: same-answer
+  why: site is a String from a request header, and String#eql? is the same as String#== for two Strings.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def from_another_site?
+       site = request.headers["Sec-Fetch-Site"]
+    -  site.present? && site != "same-origin"
+    +  site.present? && !site.eql?("same-origin")
+     end

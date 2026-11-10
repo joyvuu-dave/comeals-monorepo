@@ -1,0 +1,26 @@
+---
+- subject: AuditSerializer#user_name
+  kind: same-answer
+  why: >-
+    audit.user_as_model is a Resident, a CommonHouseLogin, an AdminUser or nil. Nothing subclasses CommonHouseLogin,
+    so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def user_name(audit)
+       person = audit.user_as_model
+    -  if person.is_a?(CommonHouseLogin)
+    +  if person.instance_of?(CommonHouseLogin)
+         return CommonHouseLogin::NAME
+       end
+       unless person.nil?
+         return ResidentNameShortener.short(person.name)
+       end
+       if audit.username.present?
+         return audit.username
+       end
+       if audit.comment.to_s.start_with?(AUTOMATIC_FIX)
+         AUTOMATIC_FIX
+       else
+         ""
+       end
+     end

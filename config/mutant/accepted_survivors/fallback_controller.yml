@@ -1,0 +1,11 @@
+---
+- subject: FallbackController#index
+  kind: same-answer
+  why: ENV.to_hash and ENV.to_h give the same Hash of Strings.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def index
+    -  page = PageSettings.fill(Rails.public_path.join("index.html").read, PageSettings.values(vars: ENV.to_h, env: Rails.env))
+    +  page = PageSettings.fill(Rails.public_path.join("index.html").read, PageSettings.values(vars: ENV.to_hash, env: Rails.env))
+       send_data(page, type: "text/html", disposition: "inline")
+     end
