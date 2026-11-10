@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 # typed: false
 
-# Loaded by mutant from .mutant.yml. Five jobs.
+# Loaded by mutant from .mutant.yml. Six jobs.
 #
 # 1. Load every class before mutant looks for subjects. The test
 #    environment autoloads, so `Settlement*` would match nothing until
@@ -108,3 +108,10 @@ hooks.register(:mutation_insert_pre) do |mutation:| # rubocop:disable Lint/Unuse
   Object.const_get(:NonTransactionalCleanup).call
   connection.execute("SET lock_timeout = '10s'")
 end
+
+# 6. Do not stop on a module whose `name` is not a name. Faker's classes
+#    answer `name` with a random fake value, and mutant 0.17.1 raises on
+#    some of them (config/mutant/method_name_check.rb says how). This runs
+#    when mutant loads this file, before it reads any module's name.
+require_relative 'method_name_check'
+MutantMethodNameCheck.apply
