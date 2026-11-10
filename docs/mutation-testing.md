@@ -13,17 +13,28 @@ public open-source projects; this repository is public under MIT).
 
 ## Running it
 
-The whole run belongs on GitHub: Actions, **Mutant**, Run workflow
-(`.github/workflows/mutant.yml`). It splits the subjects into pieces that
-run at the same time, 36 by default, each taking every 36th subject, and
-adds them up at the end: the totals and each survivor are in the run's
-summary and in its `mutant-report` artifact, and each piece's log and
-mutant session are in its own artifact. A piece whose machine was
-stopped leaves no artifact at all; the report names it ("Left nothing"),
-and its subjects need a run of their own. The `subjects` input narrows it
-to some expressions, the same ones `bin/mutant` takes. The repository is
-public, so the machines cost nothing; GitHub Pro runs 40 jobs at once,
-and a job may run 6 hours.
+The whole run belongs on GitHub (`.github/workflows/mutant.yml`). It
+runs every Saturday at 09:00 UTC, and by hand from Actions, **Mutant**,
+Run workflow. It splits the subjects into pieces that run at the same
+time, 36 by default, each taking every 36th subject, and adds them up at
+the end (`bin/mutant-report`): the totals, each survivor that is not on
+the accepted list, and each entry on the list that no longer survives
+are in the run's summary and in its `mutant-report` artifact, and each
+piece's log and mutant session are in its own artifact. The run passes
+only when every survivor is on the list, every entry still survives,
+and every piece left a result ("Accepted survivors", below). A piece
+whose machine was stopped leaves no artifact at all; the report names it
+("Left nothing"), and its subjects need a run of their own. The
+`subjects` input narrows it to some expressions, the same ones
+`bin/mutant` takes. The repository is public, so the machines cost
+nothing; GitHub Pro runs 40 jobs at once, and a job may run 6 hours.
+
+CI also runs mutant on every push to `main` and every pull request, on
+the methods that changed (the `mutant-changed` job in
+`.github/workflows/ci.yml`, with mutant's `--since`). It is part of CI,
+so the deploy's green gate waits for it. It cannot see a spec made
+weaker while the code stayed the same, because then no method changed
+and nothing is mutated. The Saturday run catches that.
 
 On one laptop the whole run no longer fits in a night. On 2026-10-15 it
 was 768 subjects and 35,121 mutations, and a laptop with six workers did
@@ -195,8 +206,61 @@ A survivor on the money path is never "fine as it is": every method
 there is on the path to a number on a settlement statement. Elsewhere
 the same three kinds apply, and the third — noise — is more common:
 a serializer's attribute order, a log line's wording, a `count` for a
-`size`. Say which kind it is, in the results below, before ignoring
-anything.
+`size`. A survivor of the third kind goes on the accepted list, with its
+reason (below).
+
+## Accepted survivors
+
+`config/mutant/accepted_survivors/` lists every mutation that no
+example can kill, each with the reason. There is one YAML file for each
+class, named for it in snake case, with a folder for each namespace
+(`Api::V1::MealsController` is `api/v1/meals_controller.yml`). Each
+entry has `subject` (the method, as mutant names it), `kind`, `why` (why
+no example can tell the two apart) and `diff` (the method before and
+after, exactly as mutant shows it). After a run, `bin/mutant` (by
+way of `bin/mutant-survivors`) and the Mutant workflow (by way of
+`bin/mutant-report`) read every mutation from the session file mutant
+wrote, and fail when:
+
+- a survivor is not on the list. Kill it with an example, or add its
+  entry. The report prints each one as an entry ready to paste, with
+  `why` left empty; `spec/config/mutant_accepted_survivors_spec.rb`
+  refuses an empty `why`, so the entry cannot be added without a reason.
+- an entry for a subject that ran no longer survives. An example kills
+  it now, or the method changed. Remove the entry. If the method
+  changed, its new survivors are listed too.
+- on a run of every subject (`bin/mutant` with no expression, or the
+  workflow with no `subjects`), an entry names a subject that did not
+  run: the method was renamed or removed.
+
+An entry matches a survivor by its subject and its diff. Mutant's diff
+holds the whole method, before and after, so any edit to the method
+makes its entries stop matching, and someone reads its survivors again.
+That is on purpose: a reason written for the old method may not hold for
+the new one. A line number is not part of the match, so code moving
+above the method changes nothing. Spaces at the end of a line are
+ignored.
+
+Each entry has a `kind`:
+
+- `same-answer`: no caller can see the change. The method gives the same
+  answer for every input it can be given, for the reason in `why`.
+- `never-ends`: the change makes a loop that never ends, so every
+  example that reaches it hangs until the timeout or the memory limit
+  stops it ("Reading a survivor", above).
+
+A missing assertion never goes on the list: write the example. Dead
+code never goes on the list either: remove it.
+
+`only_on: linux` marks a mutation that survives only on Linux, like the
+four in `LargestRemainderSplit.call` where Ruby's sort already keeps
+tied items in order there. A run on macOS kills those, and does not call
+the entry stale. A run on GitHub is on Linux, so there it must survive.
+
+A survivor whose examples fail on the code as written ("the examples
+fail on the code as written", a neutral failure in mutant's words) is
+never accepted, even with an entry: the run is broken, not the method.
+Run the subject alone; if it fails again, the examples need fixing.
 
 ## Results
 

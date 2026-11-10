@@ -6,16 +6,28 @@ name: Mutant
 # `mutant environment subject list`, so the slow classes' methods spread
 # across all the pieces, and the run takes hours.
 #
-# A piece fails when its subjects have a survivor; the others keep
-# going (fail-fast is off). The last job adds every piece up: the totals
-# and each survivor, in the run's summary and in the mutant-report
-# artifact. Each piece's own log and mutant session are its artifact.
+# A piece fails when one of its survivors is not in
+# config/mutant/accepted_survivors/, or an entry for one of its
+# subjects no longer survives; the others keep going (fail-fast is off).
+# The last job adds every piece up: the totals, each survivor not on the
+# list and each entry that no longer survives, in the run's summary and
+# in the mutant-report artifact. It fails the run when there is one, or
+# when a piece left no result. Each piece's own log and mutant session
+# are its artifact.
+#
+# It runs every Saturday, and by hand. The weekly run catches what the
+# mutant-changed job in ci.yml cannot: a spec made weaker while the code
+# it tests stayed the same, and an entry for a method that was removed.
 #
 # The repository is public, so GitHub's standard machines cost nothing.
 # GitHub Pro runs 40 jobs at once; the default of 36 pieces leaves room
 # for CI on a pull request. A job may run 6 hours at most.
 
 on:
+  # Saturday 09:00 UTC. GitHub can start a scheduled run late, or skip it
+  # when it is busy; a run a few hours late changes nothing here.
+  schedule:
+    - cron: "0 9 * * 6"
   workflow_dispatch:
     inputs:
       pieces:
@@ -52,7 +64,7 @@ jobs:
     steps:
       - id: plan
         env:
-          PIECES: ${{ inputs.pieces }}
+          PIECES: ${{ inputs.pieces || 36 }}
         run: |
           echo "pieces=$(python3 -c 'import json, os; print(json.dumps(list(range(int(os.environ["PIECES"])))))')" >> "$GITHUB_OUTPUT"
 
@@ -78,6 +90,7 @@ jobs:
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
+    # A scheduled run has no inputs, so each one has its default again here.
     # The inputs reach the shell as variables, never pasted into a script.
     # The PG* variables are for createdb and dropdb, which bin/mutant runs
     # to give each worker its own copy of the test database.
@@ -88,9 +101,9 @@ jobs:
       PGUSER: postgres
       PGPASSWORD: postgres
       PIECE: ${{ matrix.piece }}
-      PIECES: ${{ inputs.pieces }}
+      PIECES: ${{ inputs.pieces || 36 }}
       SUBJECTS: ${{ inputs.subjects }}
-      WORKERS: ${{ inputs.workers }}
+      WORKERS: ${{ inputs.workers || 4 }}
     steps:
       - uses: actions/checkout@v6
       - uses: ruby/setup-ruby@v1
@@ -149,12 +162,19 @@ jobs:
           pattern: mutant-piece-*
           path: pieces
       # The number of pieces started, so a piece whose machine was stopped
-      # (no artifact at all) is named in the report.
+      # (no artifact at all) is named in the report. With no subjects
+      # given, the run had every subject, so --full: an entry whose subject
+      # did not run names a method that is gone.
       - name: Add the pieces up
         env:
-          PIECES: ${{ inputs.pieces }}
-        run: ruby bin/mutant-report pieces mutant-report.md "$PIECES" >> "$GITHUB_STEP_SUMMARY"
+          PIECES: ${{ inputs.pieces || 36 }}
+          SUBJECTS: ${{ inputs.subjects }}
+        run: |
+          full=()
+          if [ -z "$SUBJECTS" ]; then full=(--full); fi
+          ruby bin/mutant-report "${full[@]+"${full[@]}"}" --pieces "$PIECES" pieces mutant-report.md >> "$GITHUB_STEP_SUMMARY"
       - uses: actions/upload-artifact@v7
+        if: always()
         with:
           name: mutant-report
           path: mutant-report.md

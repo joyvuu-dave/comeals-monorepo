@@ -1,112 +1,69 @@
 #!/usr/bin/env ruby
 # frozen_string_literal: true
 
-# Adds up the pieces of a Mutant workflow run (.github/workflows/mutant.yml).
-# Each piece left a directory with subjects.txt and mutant.log. Prints a
-# Markdown report, for the run's summary, and writes the same to a file:
-# the totals, each piece, and each survivor with the first change mutant
-# showed for it. A piece with no log stopped before mutating anything,
-# and the report says so. Given the number of pieces the run started, it
-# also names each piece that left no directory at all: a machine that
-# was stopped, as two were on 2026-10-16, uploads nothing, so without
-# the number the report cannot tell that a piece is missing.
+# Adds up the pieces of a Mutant workflow run (.github/workflows/mutant.yml)
+# and checks every survivor against config/mutant/accepted_survivors.yml.
+# Each piece left a directory with subjects.txt and the session file mutant
+# wrote (.mutant/results/<session>.json.gz), which holds every mutation and
+# its result. Prints a Markdown report, for the run's summary, and writes
+# the same to a file: the totals, each piece, each survivor that is not on
+# the list (as an entry ready to fill in), and each entry that no longer
+# survives.
 #
-# Usage: bin/mutant-report <directory of pieces> <report file> [<pieces started>]
+# A piece with no session file did not finish: its machine was stopped, or
+# mutant itself failed. Given the number of pieces the run started, the
+# report also names each piece that left no directory at all: a machine
+# that was stopped, as two were on 2026-10-16, uploads nothing.
+#
+# --full says the run had every subject in .mutant.yml, so an entry whose
+# subject did not run names a method that was renamed or removed.
+#
+# Exits 1 when a survivor is not on the list, an entry no longer survives,
+# or a piece has no result; 0 otherwise.
+#
+# Usage: bin/mutant-report [--full] [--pieces N] <directory of pieces> <report file>
 #
 # Ruby's standard library only: the workflow's last job runs it without
 # the bundle.
 
-SUMMARY = /\A(Mutations|Kills|Alive|Timeouts|Runtime):\s+(\S+)/
-# "evil:Settlement#settle!:/home/runner/work/x/x/app/services/settlement.rb:278:4e5c4"
-# The id is always 5 hex digits (Mutant::Mutation::CODE_RANGE). The line
-# may go on after it: the workflow writes mutant's stderr into the same
-# log, and "Uncovered mutations detected, exiting nonzero!" once landed
-# right after an id, with no line break between them (#181).
-EVIL = %r{\Aevil:(?<subject>.+):(?<path>/[^:]+):(?<line>\d+):\h{5}}
-# "(2 more alive mutation(s), use `mutant session subject Foo#bar` to see all details)"
-MORE = /\A\((?<count>\d+) more alive mutation\(s\), use `mutant session subject (?<subject>[^`]+)`/
-RULE = '-----------------------'
+require 'optparse'
+require_relative 'lib/mutant_survivors'
 
-Piece = Struct.new(:name, :subjects, :summary, :survivors, :missing) do
-  def ran? = !summary.nil?
-  # Only asked of a piece that ran.
-  def number(key) = summary.fetch(key, '0').to_f
-end
-
-Survivor = Struct.new(:subject, :place, :alive, :first_change)
-
-# One piece's log, line by line: the totals at its end, and each
-# survivor, counted and with the first change shown for it.
-class Log
-  def initialize(lines)
-    @lines = lines
-    @summary = {}
-    @survivors = {}
-  end
-
-  def read
-    @lines.each_with_index { |line, index| read_line(line, index) }
-    [@summary, @survivors.values]
-  end
-
-  private
-
-  def read_line(line, index)
-    if (total = line.match(SUMMARY))
-      @summary[total[1]] = total[2]
-    elsif (evil = line.match(EVIL))
-      survivor = @survivors[evil[:subject]] ||= Survivor.new(evil[:subject], place(evil), 0, nil)
-      survivor.alive += 1
-      survivor.first_change ||= change_after(index)
-    elsif (more = line.match(MORE))
-      @survivors[more[:subject]]&.alive += more[:count].to_i
-    end
-  end
-
-  # "app/services/settlement.rb:278", whatever directory the run was in.
-  def place(evil)
-    path = evil[:path][%r{/((?:app|lib|config)/.+)\z}, 1] || evil[:path]
-    "#{path}:#{evil[:line]}"
-  end
-
-  # The diff between the two rules after an evil: line.
-  def change_after(index)
-    start = rule_after(index)
-    return nil unless start
-
-    finish = rule_after(start) || @lines.size
-    @lines[(start + 1)...finish].join("\n")
-  end
-
-  def rule_after(index)
-    ((index + 1)...@lines.size).find { |at| @lines[at] == RULE }
-  end
+Piece = Struct.new(:name, :subjects, :mutations, :runtime, :missing, keyword_init: true) do
+  def ran? = !mutations.nil?
 end
 
 def read_piece(dir)
   subjects_path = File.join(dir, 'subjects.txt')
   subjects = File.exist?(subjects_path) ? File.readlines(subjects_path).size : 0
-  log_path = File.join(dir, 'mutant.log')
-  return Piece.new(File.basename(dir), subjects, nil, []) unless File.exist?(log_path)
+  sessions = Dir.glob(File.join(dir, '.mutant', 'results', '*.json.gz'))
+  return Piece.new(name: File.basename(dir), subjects: subjects) if sessions.empty?
 
-  Piece.new(File.basename(dir), subjects, *Log.new(File.readlines(log_path, chomp: true)).read)
+  mutations = sessions.flat_map { |path| MutantSurvivors.read_session(path) }
+  runtime = sessions.sum { |path| JSON.parse(Zlib::GzipReader.open(path, &:read)).fetch('runtime') }
+  Piece.new(name: File.basename(dir), subjects: subjects, mutations: mutations, runtime: runtime)
 end
 
-def totals(pieces)
-  ran = pieces.select(&:ran?)
-  counts = %w[Mutations Kills Alive Timeouts].to_h { |key| [key, ran.sum { |piece| piece.number(key) }.to_i] } # rubocop:disable Rails/IndexWith -- plain Ruby here, no ActiveSupport
-  killed = counts['Mutations'].zero? ? 0 : 100.0 * counts['Kills'] / counts['Mutations']
-  ["#{counts['Mutations']} mutations, #{counts['Kills']} killed, #{counts['Alive']} alive, " \
-   "#{counts['Timeouts']} timed out: #{format('%.2f', killed)}% killed.", *pieces_without_results(pieces)]
+# A piece the run started that left no directory.
+def missing_pieces(found, started)
+  names = (0...started).map { |number| "mutant-piece-#{number}" } - found.map(&:name)
+  names.map { |name| Piece.new(name: name, subjects: '', missing: true) }
 end
 
-# A line for the pieces that stopped before mutating, and one for the
-# pieces that left nothing at all.
+def totals(mutations, pieces)
+  alive = mutations.count(&:alive)
+  killed = mutations.size - alive
+  timed_out = mutations.count { |mutation| mutation.alive && mutation.timeout }
+  share = mutations.empty? ? 0 : 100.0 * killed / mutations.size
+  ["#{mutations.size} mutations, #{killed} killed, #{alive} alive, #{timed_out} timed out: " \
+   "#{format('%.2f', share)}% killed.", *pieces_without_results(pieces)]
+end
+
 def pieces_without_results(pieces)
   stopped = pieces.reject { |piece| piece.ran? || piece.missing }.map(&:name).sort.join(', ')
   missing = pieces.select(&:missing).map(&:name).join(', ')
   lines = []
-  lines << "Stopped before mutating: #{stopped}." unless stopped.empty?
+  lines << "Did not finish, so their subjects have no result: #{stopped}." unless stopped.empty?
   lines << "Left nothing, so their subjects have no result: #{missing}." unless missing.empty?
   lines
 end
@@ -114,46 +71,46 @@ end
 def pieces_table(pieces)
   rows = pieces.sort_by { |piece| piece.name[/\d+\z/].to_i }.map do |piece|
     cells = if piece.ran?
-              [piece.summary.fetch('Mutations', '0'), piece.summary.fetch('Alive', '0'),
-               "#{(piece.number('Runtime') / 60).round} min"]
+              [piece.mutations.size, piece.mutations.count(&:alive), "#{(piece.runtime / 60).round} min"]
             elsif piece.missing
               ['left nothing', '', '']
             else
-              ['stopped', '', '']
+              ['did not finish', '', '']
             end
     "| #{piece.name} | #{piece.subjects} | #{cells.join(' | ')} |"
   end
   ['## Pieces', '', '| Piece | Subjects | Mutations | Alive | Runtime |', '| --- | ---: | ---: | ---: | ---: |', *rows]
 end
 
-def survivors_section(pieces)
-  survivors = pieces.flat_map(&:survivors).sort_by { |survivor| [survivor.place, survivor.subject] }
-  lines = ["## Survivors (#{survivors.size} subjects)"]
-  survivors.each do |survivor|
-    lines += ['', "### #{survivor.subject} (#{survivor.alive} alive), #{survivor.place}"]
-    lines += ['', '```diff', survivor.first_change, '```'] if survivor.first_change
-  end
-  lines
+full = false
+started = nil
+parser = OptionParser.new do |options|
+  options.banner = 'Usage: bin/mutant-report [--full] [--pieces N] <directory of pieces> <report file>'
+  options.on('--full') { full = true }
+  options.on('--pieces N', /\A\d+\z/) { |number| started = Integer(number, 10) }
 end
-
-def report(pieces)
-  "#{['# Mutant run', '', *totals(pieces), '', *pieces_table(pieces), '', *survivors_section(pieces)].join("\n")}\n"
+begin
+  parser.parse!
+rescue OptionParser::ParseError => e
+  warn e.message, parser.banner
+  exit 2
 end
-
-# A piece the run started that left no directory.
-def missing_pieces(found, started)
-  names = (0...started).map { |number| "mutant-piece-#{number}" } - found.map(&:name)
-  names.map { |name| Piece.new(name, '', nil, [], true) }
-end
-
-unless [2, 3].include?(ARGV.size) && (ARGV.size == 2 || ARGV[2].match?(/\A\d+\z/))
-  warn 'Usage: bin/mutant-report <directory of pieces> <report file> [<pieces started>]'
+unless ARGV.size == 2
+  warn parser.banner
   exit 2
 end
 
 dirs = Dir.children(ARGV[0]).map { |child| File.join(ARGV[0], child) }.select { |path| File.directory?(path) }
 pieces = dirs.map { |dir| read_piece(dir) }
-pieces += missing_pieces(pieces, Integer(ARGV[2], 10)) if ARGV[2]
-text = report(pieces)
+pieces += missing_pieces(pieces, started) if started
+mutations = pieces.select(&:ran?).flat_map(&:mutations)
+complete = pieces.all?(&:ran?)
+# An entry whose subject was in a piece that did not finish is not stale,
+# so only a run where every piece finished counts as full.
+comparison = MutantSurvivors.compare(mutations, MutantSurvivors.read_list, full: full && complete, here: 'linux')
+lines = ['# Mutant run', '', *totals(mutations, pieces), '', *pieces_table(pieces), '',
+         *MutantSurvivors.report_lines(comparison)]
+text = "#{lines.join("\n")}\n"
 File.write(ARGV[1], text)
 puts text
+exit(comparison.passed? && complete ? 0 : 1)

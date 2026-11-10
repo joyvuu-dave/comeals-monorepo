@@ -1,0 +1,43 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Checks the survivors of a mutant run on this machine against
+# config/mutant/accepted_survivors.yml. bin/mutant runs it after mutant,
+# and each piece of the Mutant workflow runs it on its own subjects. Given
+# no file, it reads the newest session in .mutant/results.
+#
+# --full says the run had every subject in .mutant.yml, so an entry whose
+# subject did not run names a method that was renamed or removed.
+#
+# Exits 1 when a survivor is not on the list or an entry no longer
+# survives; 0 otherwise.
+#
+# Usage: bin/mutant-survivors [--full] [<session file> ...]
+#
+# Ruby's standard library only.
+
+require 'optparse'
+require_relative 'lib/mutant_survivors'
+
+full = false
+parser = OptionParser.new do |options|
+  options.banner = 'Usage: bin/mutant-survivors [--full] [<session file> ...]'
+  options.on('--full') { full = true }
+end
+begin
+  parser.parse!
+rescue OptionParser::ParseError => e
+  warn e.message, parser.banner
+  exit 2
+end
+
+files = ARGV.empty? ? [Dir.glob('.mutant/results/*.json.gz').max_by { |path| File.mtime(path) }].compact : ARGV
+if files.empty?
+  warn 'No mutant session in .mutant/results: mutant did not finish a run here.'
+  exit 1
+end
+
+mutations = files.flat_map { |path| MutantSurvivors.read_session(path) }
+comparison = MutantSurvivors.compare(mutations, MutantSurvivors.read_list, full: full)
+puts MutantSurvivors.report_lines(comparison)
+exit(comparison.passed? ? 0 : 1)

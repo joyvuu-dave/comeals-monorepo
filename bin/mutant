@@ -52,4 +52,25 @@ trap drop_workers EXIT
 # worker and leaves it there.
 step "Mutant"
 if [ "${1:-}" = "--" ]; then shift; fi
-bundle exec mutant run --jobs "$jobs" "$@"
+# With no expression, mutant runs every subject in .mutant.yml, so an
+# accepted survivor whose subject did not run names a method that is gone.
+full=()
+if [ "$#" -eq 0 ]; then full=(--full); fi
+# The session this run writes is the one newer than this file.
+mkdir -p .mutant/results
+started=.mutant/run-started
+touch "$started"
+mutant_status=0
+bundle exec mutant run --jobs "$jobs" "$@" || mutant_status=$?
+
+# Mutant exits nonzero when any mutation lives. What decides is the list
+# of accepted survivors (config/mutant/accepted_survivors.yml): every
+# survivor must be on it, and every entry for a subject that ran must
+# still survive.
+step "Survivors against the accepted list"
+session=$(find .mutant/results -name '*.json.gz' -newer "$started" 2>/dev/null | head -n 1)
+if [ -z "$session" ]; then
+  fail "mutant wrote no session, so it did not finish (exit $mutant_status)"
+  exit 1
+fi
+bin/mutant-survivors "${full[@]+"${full[@]}"}" "$session"

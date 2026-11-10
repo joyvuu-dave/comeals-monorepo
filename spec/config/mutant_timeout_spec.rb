@@ -40,9 +40,11 @@ RSpec.describe 'bin/mutant' do
     stand_in('createdb', 'exit 0')
     stand_in('dropdb', 'exit 0')
 
-    _output, status = Open3.capture2e(env.merge('PATH' => "#{dir}:#{ENV.fetch('PATH')}"),
-                                      Rails.root.join('bin/mutant').to_s, '--', 'Settlement.run!')
-    expect(status).to be_success
+    output, status = Open3.capture2e(env.merge('PATH' => "#{dir}:#{ENV.fetch('PATH')}"),
+                                     Rails.root.join('bin/mutant').to_s, '--', 'Settlement.run!')
+    # The stand-in writes no session, so bin/mutant stops at the survivors
+    # check (spec/bin/mutant_spec.rb tests that part).
+    expect([output, status.exitstatus]).to match([include('mutant wrote no session'), 1])
     File.read(record).lines.map(&:chomp)
   end
 

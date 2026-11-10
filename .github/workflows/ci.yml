@@ -278,6 +278,70 @@ jobs:
   # seconds. The second step checks every proof again on 20 solver seeds,
   # so a proof that passes only on some seeds fails in the change that
   # made it so ("A proof must pass on every solver seed").
+  # Mutant on the methods this push or pull request changed
+  # (docs/mutation-testing.md, "Accepted survivors"). It fails on a
+  # survivor that config/mutant/accepted_survivors/ does not list, and
+  # on an entry for a changed method that no longer survives. It cannot
+  # see a spec made weaker while the code stayed the same: no method
+  # changed, so nothing is mutated. The weekly full run (mutant.yml)
+  # catches that. A change to a money method can take an hour here: each
+  # of its survivors runs the 600 to 900 examples that prove the method.
+  mutant-changed:
+    runs-on: ubuntu-26.04
+    timeout-minutes: 360
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: comeals_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    # The PG* variables are for createdb and dropdb, which bin/mutant runs
+    # to give each worker its own copy of the test database.
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
+      PGHOST: localhost
+      PGUSER: postgres
+      PGPASSWORD: postgres
+      # The commit to compare with: the pull request's base, or the
+      # commit main was at before this push.
+      BASE: ${{ github.event.pull_request.base.sha || github.event.before }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # --since needs the base commit in the clone.
+          fetch-depth: 0
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: bin/rails db:schema:load
+      - name: Choose the changed methods
+        run: |
+          set -euo pipefail
+          MUTANT=1 bundle exec mutant environment subject list --since "$BASE" > all-subjects.txt
+          grep -E '^[A-Z][^ ]*[#.][^ ]+$' all-subjects.txt > subjects.txt || true
+          echo "$(wc -l < subjects.txt) methods changed since $BASE:"
+          cat subjects.txt
+      - name: Mutate
+        run: |
+          set -o pipefail
+          # A method name like same? or [] must not be read as a file pattern.
+          set -f
+          if [ ! -s subjects.txt ]; then
+            echo "No method in .mutant.yml's subjects changed."
+            exit 0
+          fi
+          # shellcheck disable=SC2046 # one subject per word
+          MUTANT_JOBS=4 bin/mutant -- $(cat subjects.txt) 2>&1 | tr '\r' '\n' | grep -v '^progress: '
+
   proofs:
     runs-on: ubuntu-26.04
     timeout-minutes: 20

@@ -16,7 +16,7 @@ In production, Rails serves the SPA from `public/` and the API from `/api/v1/`. 
 bin/dev                    # Starts Rails (3000) + Vite (3036) + Solid Queue (bin/jobs) via foreman
 bin/prod                   # Builds the production bundle, serves it from Rails alone (3000)
 bin/check                  # Full health check: tests, linters, security, freshness
-bin/mutant                 # Mutation testing: one class or one stage here; every class is the Mutant workflow on GitHub Actions (not in bin/check; docs/mutation-testing.md)
+bin/mutant                 # Mutation testing: one class or one stage here; every class is the Mutant workflow (Saturdays), changed methods are CI's mutant-changed job (not in bin/check). Every survivor must be in config/mutant/accepted_survivors/ with its reason (docs/mutation-testing.md)
 bin/storm                  # Real-server concurrency storm: many Puma threads, many clients (not in bin/check; docs/concurrency-testing.md)
 bin/dafny-verify           # Check the Dafny proofs of the money rules in proofs/ (a bin/check step; docs/proofs.md)
 ```
