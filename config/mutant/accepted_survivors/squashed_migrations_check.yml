@@ -1,0 +1,132 @@
+- subject: SquashedMigrationsCheck.verify!
+  kind: same-answer
+  why: >-
+    `database` is `schema_migration.integer_versions`, which Rails reads in order of the version text. Every
+    version in this app is a 14-digit timestamp, so the text order is the number order, and the last version
+    is the largest.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def self.verify!
+       database = database_versions
+       reason = problem(database:, squashed: squashed_version(Rails.root.join(VERSION_FILE).read), recorded: recorded_versions(Rails.root.join(STRUCTURE_FILE).read), tables: ActiveRecord::Base.connection.tables)
+       if reason
+         raise(DatabaseBehind, reason)
+       end
+    -  database.max
+    +  database.last
+     end
+- subject: SquashedMigrationsCheck.squashed_version
+  kind: same-answer
+  why: >-
+    For any line, `strip`, `lstrip` and `rstrip` give an empty String exactly when the line holds only
+    whitespace (null bytes too, checked on Ruby 4.0).
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.squashed_version(text)
+       versions = text.lines(chomp: true).reject { |line|
+    -    line.start_with?("#") || line.strip.empty?
+    +    line.start_with?("#") || line.lstrip.empty?
+       }
+       unless versions.size == 1
+         raise(ArgumentError, "#{VERSION_FILE} must hold one version, not #{versions}")
+       end
+       Integer(versions.first, 10)
+     end
+- subject: SquashedMigrationsCheck.squashed_version
+  kind: same-answer
+  why: >-
+    For any line, `strip`, `lstrip` and `rstrip` give an empty String exactly when the line holds only
+    whitespace (null bytes too, checked on Ruby 4.0).
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.squashed_version(text)
+       versions = text.lines(chomp: true).reject { |line|
+    -    line.start_with?("#") || line.strip.empty?
+    +    line.start_with?("#") || line.rstrip.empty?
+       }
+       unless versions.size == 1
+         raise(ArgumentError, "#{VERSION_FILE} must hold one version, not #{versions}")
+       end
+       Integer(versions.first, 10)
+     end
+- subject: SquashedMigrationsCheck.recorded_versions
+  kind: same-answer
+  why: >-
+    Rails writes this INSERT only when there is at least one version, so there is always text between VALUES
+    and the `;`, and `.+?` stops at the same `;` as `.*?`.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.recorded_versions(text)
+    -  list = text[/^INSERT INTO "schema_migrations" \(version\) VALUES\n(.*?);$/m, 1]
+    +  list = text[/^INSERT INTO "schema_migrations" \(version\) VALUES\n(.+?);$/m, 1]
+       if list.nil?
+         raise(ArgumentError, "#{STRUCTURE_FILE} has no INSERT INTO schema_migrations list")
+       end
+       list.scan(/'(\d+)'/).flatten.map {
+         Integer(it, 10)
+       }
+     end
+- subject: SquashedMigrationsCheck.recorded_versions
+  kind: same-answer
+  why: >-
+    The whole match adds only the words before the list (INSERT INTO "schema_migrations" (version) VALUES)
+    and the `;` after it. Neither holds a number in single quotes, so the scan for `'(\d+)'` finds the same
+    versions.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.recorded_versions(text)
+    -  list = text[/^INSERT INTO "schema_migrations" \(version\) VALUES\n(.*?);$/m, 1]
+    +  list = text[/^INSERT INTO "schema_migrations" \(version\) VALUES\n(.*?);$/m, 0]
+       if list.nil?
+         raise(ArgumentError, "#{STRUCTURE_FILE} has no INSERT INTO schema_migrations list")
+       end
+       list.scan(/'(\d+)'/).flatten.map {
+         Integer(it, 10)
+       }
+     end
+- subject: SquashedMigrationsCheck.recorded_versions
+  kind: same-answer
+  why: >-
+    The whole match adds only the words before the list (INSERT INTO "schema_migrations" (version) VALUES)
+    and the `;` after it. Neither holds a number in single quotes, so the scan for `'(\d+)'` finds the same
+    versions.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.recorded_versions(text)
+    -  list = text[/^INSERT INTO "schema_migrations" \(version\) VALUES\n(.*?);$/m, 1]
+    +  list = text[/^INSERT INTO "schema_migrations" \(version\) VALUES\n(.*?);$/m]
+       if list.nil?
+         raise(ArgumentError, "#{STRUCTURE_FILE} has no INSERT INTO schema_migrations list")
+       end
+       list.scan(/'(\d+)'/).flatten.map {
+         Integer(it, 10)
+       }
+     end
+- subject: SquashedMigrationsCheck.problem
+  kind: same-answer
+  why: >-
+    `unless tables.empty?` with no `else` gives nil when the tables are empty and `not_new(tables)`
+    otherwise, the same as the `if`/`else` it replaces.
+  diff: |
+    @@ -1,20 +1,18 @@
+     def self.problem(database:, squashed:, recorded:, tables:)
+       newest = database.max
+       if newest.nil?
+    -    return (if tables.empty?
+    -      nil
+    -    else
+    +    return (unless tables.empty?
+           not_new(tables)
+         end)
+       end
+       if newest < squashed
+         return behind(newest:, squashed:)
+       end
+       missing = (recorded.select {
+         it <= squashed
+       } - database).sort
+       if missing.empty?
+         return nil
+       end
+       gap(missing:, squashed:)
+     end

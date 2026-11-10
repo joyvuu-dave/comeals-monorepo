@@ -1,0 +1,136 @@
+- subject: CollectionList#initialize
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident of every line in one query the first time one line reads it, so without
+    the `includes` the same residents are read with the same number of queries.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def initialize(reconciliation)
+    -  lines = reconciliation.reconciliation_balances.includes(:resident).to_a
+    +  lines = reconciliation.reconciliation_balances.includes(nil).to_a
+       moved_out_known = reconciliation.records_who_moved_out?
+       (lived_here, gone) = lines.partition { |line|
+         line.lived_here || !moved_out_known
+       }
+       people = people_by_unit(lived_here, Resident.active.where.not(id: lines.map(&:resident_id)).to_a)
+       @units = T.let(reconciliation.unit_balances.filter_map { |(unit_id, unit_name), total|
+         in_unit = people.fetch(unit_id, [])
+         if in_unit.any?
+           Unit.new(name: unit_name, total:, people: by_name(in_unit))
+         end
+       }, T::Array[Unit])
+       @moved_out = T.let(by_name(gone.map { |line|
+         person(line)
+       }), T::Array[Person])
+     end
+- subject: CollectionList#initialize
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident of every line in one query the first time one line reads it, so without
+    the `includes` the same residents are read with the same number of queries.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def initialize(reconciliation)
+    -  lines = reconciliation.reconciliation_balances.includes(:resident).to_a
+    +  lines = reconciliation.reconciliation_balances.to_a
+       moved_out_known = reconciliation.records_who_moved_out?
+       (lived_here, gone) = lines.partition { |line|
+         line.lived_here || !moved_out_known
+       }
+       people = people_by_unit(lived_here, Resident.active.where.not(id: lines.map(&:resident_id)).to_a)
+       @units = T.let(reconciliation.unit_balances.filter_map { |(unit_id, unit_name), total|
+         in_unit = people.fetch(unit_id, [])
+         if in_unit.any?
+           Unit.new(name: unit_name, total:, people: by_name(in_unit))
+         end
+       }, T::Array[Unit])
+       @moved_out = T.let(by_name(gone.map { |line|
+         person(line)
+       }), T::Array[Person])
+     end
+- subject: CollectionList#initialize
+  kind: same-answer
+  why: >-
+    An ActiveRecord relation answers `to_ary` with the same loaded Array as `to_a`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def initialize(reconciliation)
+    -  lines = reconciliation.reconciliation_balances.includes(:resident).to_a
+    +  lines = reconciliation.reconciliation_balances.includes(:resident).to_ary
+       moved_out_known = reconciliation.records_who_moved_out?
+       (lived_here, gone) = lines.partition { |line|
+         line.lived_here || !moved_out_known
+       }
+       people = people_by_unit(lived_here, Resident.active.where.not(id: lines.map(&:resident_id)).to_a)
+       @units = T.let(reconciliation.unit_balances.filter_map { |(unit_id, unit_name), total|
+         in_unit = people.fetch(unit_id, [])
+         if in_unit.any?
+           Unit.new(name: unit_name, total:, people: by_name(in_unit))
+         end
+       }, T::Array[Unit])
+       @moved_out = T.let(by_name(gone.map { |line|
+         person(line)
+       }), T::Array[Person])
+     end
+- subject: CollectionList#initialize
+  kind: same-answer
+  why: >-
+    Without `to_a`, `lines` is the relation itself. The method only reads it with `partition` and `map`,
+    which load it once and then use the loaded rows, so the rows and the number of queries are the same.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def initialize(reconciliation)
+    -  lines = reconciliation.reconciliation_balances.includes(:resident).to_a
+    +  lines = reconciliation.reconciliation_balances.includes(:resident)
+       moved_out_known = reconciliation.records_who_moved_out?
+       (lived_here, gone) = lines.partition { |line|
+         line.lived_here || !moved_out_known
+       }
+       people = people_by_unit(lived_here, Resident.active.where.not(id: lines.map(&:resident_id)).to_a)
+       @units = T.let(reconciliation.unit_balances.filter_map { |(unit_id, unit_name), total|
+         in_unit = people.fetch(unit_id, [])
+         if in_unit.any?
+           Unit.new(name: unit_name, total:, people: by_name(in_unit))
+         end
+       }, T::Array[Unit])
+       @moved_out = T.let(by_name(gone.map { |line|
+         person(line)
+       }), T::Array[Person])
+     end
+- subject: CollectionList#initialize
+  kind: same-answer
+  why: >-
+    An ActiveRecord relation answers `to_ary` with the same loaded Array as `to_a`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def initialize(reconciliation)
+       lines = reconciliation.reconciliation_balances.includes(:resident).to_a
+       moved_out_known = reconciliation.records_who_moved_out?
+       (lived_here, gone) = lines.partition { |line|
+         line.lived_here || !moved_out_known
+       }
+    -  people = people_by_unit(lived_here, Resident.active.where.not(id: lines.map(&:resident_id)).to_a)
+    +  people = people_by_unit(lived_here, Resident.active.where.not(id: lines.map(&:resident_id)).to_ary)
+       @units = T.let(reconciliation.unit_balances.filter_map { |(unit_id, unit_name), total|
+         in_unit = people.fetch(unit_id, [])
+         if in_unit.any?
+           Unit.new(name: unit_name, total:, people: by_name(in_unit))
+         end
+       }, T::Array[Unit])
+       @moved_out = T.let(by_name(gone.map { |line|
+         person(line)
+       }), T::Array[Person])
+     end
+- subject: CollectionList#by_name
+  kind: same-answer
+  why: >-
+    `T.unsafe` returns its argument unchanged when the code runs; it only tells Sorbet not to check the
+    call. So the name and its `downcase(:fold)` are the same.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def by_name(list)
+       list.sort_by { |person|
+    -    T.unsafe(person.name).downcase(:fold)
+    +    person.name.downcase(:fold)
+       }
+     end

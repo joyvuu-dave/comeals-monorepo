@@ -1,0 +1,16 @@
+- subject: UnknownRouteLog.call
+  kind: same-answer
+  why: >-
+    No class in the app or its gems inherits from ActionController::RoutingError (checked on Rails 8.1:
+    UrlGenerationError inherits from ActionControllerError), so `is_a?` and `instance_of?` give the same
+    answer.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.call(request, exception)
+    -  unless exception.is_a?(ActionController::RoutingError)
+    +  unless exception.instance_of?(ActionController::RoutingError)
+         return
+       end
+       request.set_header(LOG_RESCUED, false)
+       Rails.logger.info("#{exception.message} (404 Not Found)")
+     end

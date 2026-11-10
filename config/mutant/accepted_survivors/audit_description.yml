@@ -1,0 +1,1616 @@
+- subject: AuditDescription#created_amount
+  kind: same-answer
+  why: >-
+    audited_changes is a jsonb column, so a whole number in it is read back as a plain Integer. Ruby has no
+    subclass of Integer, so `is_a?` and `instance_of?` give the same answer.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def created_amount(changes)
+       if changes.key?("amount")
+         return dollars(changes["amount"])
+       end
+       cents = changes["amount_cents"]
+    -  if cents.is_a?(Integer)
+    +  if cents.instance_of?(Integer)
+         BigDecimal(cents) / 100
+       end
+     end
+- subject: AuditDescription#created_amount
+  kind: same-answer
+  why: >-
+    The line runs only when `changes.key?("amount")` is true, so `fetch` finds the key and gives the same
+    value as `[]`.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def created_amount(changes)
+       if changes.key?("amount")
+    -    return dollars(changes["amount"])
+    +    return dollars(changes.fetch("amount"))
+       end
+       cents = changes["amount_cents"]
+       if cents.is_a?(Integer)
+         BigDecimal(cents) / 100
+       end
+     end
+- subject: AuditDescription#dollars
+  kind: same-answer
+  why: >-
+    The audited gem writes a bill amount as text ("30.5"), the old amount_cents rows give Integers, and
+    amount_change gives BigDecimals. BigDecimal reads text, an Integer and a BigDecimal to the same number
+    with or without `to_s`, and nil, true, a list or an object to nil both ways. Only a Float with 17
+    significant digits reads differently, and no row holds a Float amount.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def dollars(value)
+    -  BigDecimal(value.to_s, exception: false)
+    +  BigDecimal(value, exception: false)
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    For a row of another kind `describe` reads no resident: it reads one only for a Bill, MealResident or
+    Guest row. So an id taken from such a row only loads a resident that nothing reads. A Meal row has no
+    resident_id at all, and `compact` drops its nil. The residents are read in the same one query either
+    way.
+  diff: |
+    @@ -1,8 +1,6 @@
+     def named_resident_ids(rows)
+       from_changes = rows.filter_map { |row|
+    -    if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+    -      row.audited_changes["resident_id"]
+    -    end
+    +    row.audited_changes["resident_id"]
+       }
+       (from_changes.flatten + @named_before.values).compact.uniq
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    For a row of another kind `describe` reads no resident: it reads one only for a Bill, MealResident or
+    Guest row. So an id taken from such a row only loads a resident that nothing reads. A Meal row has no
+    resident_id at all, and `compact` drops its nil. The residents are read in the same one query either
+    way.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def named_resident_ids(rows)
+       from_changes = rows.filter_map { |row|
+    -    if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+    +    if row.auditable_type
+           row.audited_changes["resident_id"]
+         end
+       }
+       (from_changes.flatten + @named_before.values).compact.uniq
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    For a row of another kind `describe` reads no resident: it reads one only for a Bill, MealResident or
+    Guest row. So an id taken from such a row only loads a resident that nothing reads. A Meal row has no
+    resident_id at all, and `compact` drops its nil. The residents are read in the same one query either
+    way.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def named_resident_ids(rows)
+       from_changes = rows.filter_map { |row|
+    -    if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+    +    if true
+           row.audited_changes["resident_id"]
+         end
+       }
+       (from_changes.flatten + @named_before.values).compact.uniq
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    For a row of another kind `describe` reads no resident: it reads one only for a Bill, MealResident or
+    Guest row. So an id taken from such a row only loads a resident that nothing reads. A Meal row has no
+    resident_id at all, and `compact` drops its nil. The residents are read in the same one query either
+    way.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def named_resident_ids(rows)
+       from_changes = rows.filter_map { |row|
+    -    if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+    +    if NAMED_THROUGH_HISTORY
+           row.audited_changes["resident_id"]
+         end
+       }
+       (from_changes.flatten + @named_before.values).compact.uniq
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    `map` keeps the nil of each row that names no resident, and `compact` two lines below drops every nil,
+    so the ids are the same as with `filter_map`.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def named_resident_ids(rows)
+    -  from_changes = rows.filter_map { |row|
+    +  from_changes = rows.map { |row|
+         if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+           row.audited_changes["resident_id"]
+         end
+       }
+       (from_changes.flatten + @named_before.values).compact.uniq
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    The ids go only into `Resident.where(id: ...)`. An id listed twice finds the same one resident, in the
+    same one query, so the residents loaded are the same without `uniq`.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def named_resident_ids(rows)
+       from_changes = rows.filter_map { |row|
+         if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+           row.audited_changes["resident_id"]
+         end
+       }
+    -  (from_changes.flatten + @named_before.values).compact.uniq
+    +  (from_changes.flatten + @named_before.values).compact
+     end
+- subject: AuditDescription#named_resident_ids
+  kind: same-answer
+  why: >-
+    The ids go only into `Resident.where(id: ...)`. A nil in the list adds `OR id IS NULL`, and residents.id
+    is never NULL, so the residents loaded are the same without `compact`.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def named_resident_ids(rows)
+       from_changes = rows.filter_map { |row|
+         if NAMED_THROUGH_HISTORY.include?(row.auditable_type)
+           row.audited_changes["resident_id"]
+         end
+       }
+    -  (from_changes.flatten + @named_before.values).compact.uniq
+    +  (from_changes.flatten + @named_before.values).uniq
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+    -      if changes["closed"][1] == true
+    +      if changes.fetch("closed")[1] == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The value was checked to be an Array just above, and `Array#at` with a whole number gives the same item
+    as `Array#[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+    -      final = changes["max"][1]
+    +      final = changes["max"].at(1)
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+    -      final = changes["max"][1]
+    +      final = changes.fetch("max")[1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The value was checked to be an Array just above, and `Array#at` with a whole number gives the same item
+    as `Array#[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+    -      initial = changes["max"][0]
+    +      initial = changes["max"].at(0)
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+    -      initial = changes["max"][0]
+    +      initial = changes.fetch("max")[0]
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The value was checked to be an Array just above, and `Array#at` with a whole number gives the same item
+    as `Array#[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+    -      if changes["closed"][0] == true
+    +      if changes["closed"].at(0) == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+    -      if changes["closed"][0] == true
+    +      if changes.fetch("closed")[0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The value was checked to be an Array just above, and `Array#at` with a whole number gives the same item
+    as `Array#[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+           return cancelled_words(changes["cancelled_at"])
+         end
+         if changes["closed"].instance_of?(Array)
+    -      if changes["closed"][1] == true
+    +      if changes["closed"].at(1) == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,48 +1,48 @@
+     def describe_meal(audit)
+       if audit.action == "create"
+         return "Meal record created"
+       end
+       if audit.action == "destroy"
+         return "Meal record deleted"
+       end
+       if audit.action == "update"
+         changes = audit.audited_changes
+         if changes["cancelled_at"].instance_of?(Array)
+    -      return cancelled_words(changes["cancelled_at"])
+    +      return cancelled_words(changes.fetch("cancelled_at"))
+         end
+         if changes["closed"].instance_of?(Array)
+           if changes["closed"][1] == true
+             return "Meal closed"
+           end
+           if changes["closed"][0] == true
+             return "Meal opened"
+           end
+           return fallback_description(audit)
+         end
+         if changes["description"].present?
+           return "Menu description updated"
+         end
+         if changes["max"].instance_of?(Array)
+           initial = changes["max"][0]
+           final = changes["max"][1]
+           if initial.nil?
+             return "Extras count set"
+           end
+           if final.nil?
+             return "Extras count cleared"
+           end
+           if final > initial
+             return "Extras count increased by #{final - initial}"
+           end
+           if initial > final
+             return "Extras count decreased by #{initial - final}"
+           end
+           return "Extras count set"
+         end
+         words = rarer_meal_change_words(changes)
+         if words
+           return words
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#cancelled_words
+  kind: same-answer
+  why: >-
+    The only caller, describe_meal, passes `changes["cancelled_at"]` after checking that it is an Array, and
+    `Array#at(1)` gives the same item as `[1]`.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def cancelled_words(change)
+    -  if change[1].nil?
+    +  if change.at(1).nil?
+         "Dinner restored"
+       else
+         "Dinner cancelled"
+       end
+     end
+- subject: AuditDescription#rarer_meal_change_words
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def rarer_meal_change_words(changes)
+       if changes["rotation_id"].present?
+         return "Meal assigned to a rotation"
+       end
+       if changes["date"].instance_of?(Array)
+    -    return date_words(changes["date"])
+    +    return date_words(changes.fetch("date"))
+       end
+       if changes["reconciliation_id"].instance_of?(Array)
+         return settlement_words(changes["reconciliation_id"])
+       end
+       if changes["closed_at"].instance_of?(Array)
+         close_time_words(changes["closed_at"])
+       end
+     end
+- subject: AuditDescription#rarer_meal_change_words
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def rarer_meal_change_words(changes)
+       if changes["rotation_id"].present?
+         return "Meal assigned to a rotation"
+       end
+       if changes["date"].instance_of?(Array)
+         return date_words(changes["date"])
+       end
+       if changes["reconciliation_id"].instance_of?(Array)
+    -    return settlement_words(changes["reconciliation_id"])
+    +    return settlement_words(changes.fetch("reconciliation_id"))
+       end
+       if changes["closed_at"].instance_of?(Array)
+         close_time_words(changes["closed_at"])
+       end
+     end
+- subject: AuditDescription#rarer_meal_change_words
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def rarer_meal_change_words(changes)
+       if changes["rotation_id"].present?
+         return "Meal assigned to a rotation"
+       end
+       if changes["date"].instance_of?(Array)
+         return date_words(changes["date"])
+       end
+       if changes["reconciliation_id"].instance_of?(Array)
+         return settlement_words(changes["reconciliation_id"])
+       end
+       if changes["closed_at"].instance_of?(Array)
+    -    close_time_words(changes["closed_at"])
+    +    close_time_words(changes.fetch("closed_at"))
+       end
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    `to` is read from a jsonb column. When it is a String, `to_str` and `to_s` give the same text. Any other
+    jsonb value (a number, true, a list or an object) makes both forms raise: `to_str` does not exist on it,
+    and its `to_s` is not ISO 8601 text, so `Time.iso8601` refuses it.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def close_time_words(change)
+       to = change[1]
+       if to.nil?
+         return "Close time cleared"
+       end
+    -  at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+    +  at = Time.iso8601(to.to_str).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+       if change[0].nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    `to` is read from a jsonb column. When it is a String, `to_s` returns the same String. Any other jsonb
+    value makes both forms raise: `Time.iso8601` refuses a value that is not a String, and the `to_s` of a
+    number, true, a list or an object is not ISO 8601 text.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def close_time_words(change)
+       to = change[1]
+       if to.nil?
+         return "Close time cleared"
+       end
+    -  at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+    +  at = Time.iso8601(to).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+       if change[0].nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    The only caller passes the change after checking that it is an Array, and `Array#at` with a whole number
+    gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def close_time_words(change)
+    -  to = change[1]
+    +  to = change.at(1)
+       if to.nil?
+         return "Close time cleared"
+       end
+       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+       if change[0].nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    The only caller passes the change after checking that it is an Array, and `Array#at` with a whole number
+    gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def close_time_words(change)
+       to = change[1]
+       if to.nil?
+         return "Close time cleared"
+       end
+       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+    -  if change[0].nil?
+    +  if change.at(0).nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    The only caller passes the change after checking that it is an Array, and the line runs only when its
+    second item is not nil, so the Array has at least two items and `fetch(0)` gives the same item as `[0]`.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def close_time_words(change)
+       to = change[1]
+       if to.nil?
+         return "Close time cleared"
+       end
+       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+    -  if change[0].nil?
+    +  if change.fetch(0).nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     end
+- subject: AuditDescription#describe_bill_update
+  kind: same-answer
+  why: >-
+    An `if` with no `else` gives nil when its condition is false, the same as the `else nil` it drops.
+  diff: |
+    @@ -1,17 +1,15 @@
+     def describe_bill_update(audit)
+       changes = audit.audited_changes
+       amounts = amount_change(changes)
+       what = [amounts && "changed from #{number_to_currency(amounts[0])} to #{number_to_currency(amounts[1])}", no_cost_change(audit, if amounts.nil?
+         @amount_before[audit.id]
+    -  else
+    -    nil
+       end)].compact
+       move = moved(changes)
+       if move
+         return ["Bill moved #{move}", *what].join(" and ")
+       end
+       if what.empty?
+         return "unknown bill changed"
+       end
+       "Bill for #{name_before(audit)} #{what.join(" and ")}"
+     end
+- subject: AuditDescription#no_cost_change
+  kind: same-answer
+  why: >-
+    The line runs only after `flags` was checked to be an Array, and `Array#at(1)` gives the same item as
+    `[1]`.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def no_cost_change(audit, amount)
+       flags = audit.audited_changes["no_cost"]
+       unless flags.instance_of?(Array)
+         return nil
+       end
+    -  if flags[1] == true
+    +  if flags.at(1) == true
+         return "marked as no cost"
+       end
+       unless amount&.positive?
+         return "no longer marked as no cost"
+       end
+       "no longer marked as no cost, so the #{number_to_currency(amount)} now counts in the meal's cost"
+     end
+- subject: AuditDescription#amount_change
+  kind: same-answer
+  why: >-
+    The line runs only when `changes["amount"]` is not nil, so the key is there, and `fetch` gives the same
+    value as `[]`.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def amount_change(changes)
+       unless changes["amount"].nil?
+    -    return changes["amount"]
+    +    return changes.fetch("amount")
+       end
+       cents = changes["amount_cents"]
+       unless cents.instance_of?(Array) && cents.all?(Integer)
+         return nil
+       end
+       cents.map { |amount|
+         BigDecimal(amount) / 100
+       }
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+    -    if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+    +    if changes["vegetarian"][0] == false && changes["vegetarian"].at(1) == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+    -    if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+    +    if changes.fetch("vegetarian")[0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+    -    if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+    +    if changes["vegetarian"].at(0) == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+    -    if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+    +    if changes["vegetarian"][0] == true && changes.fetch("vegetarian")[1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+    -    if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+    +    if changes["vegetarian"][0] == true && changes["vegetarian"].at(1) == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+    -    if changes["late"][0] == false && changes["late"][1] == true
+    +    if changes["late"][0] == false && changes["late"].at(1) == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+    -    if changes["late"][0] == false && changes["late"][1] == true
+    +    if changes.fetch("late")[0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+    -    if changes["late"][0] == false && changes["late"][1] == true
+    +    if changes["late"].at(0) == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+    -    if changes["late"][0] == false && changes["late"][1] == true
+    +    if changes["late"][0] == false && changes.fetch("late")[1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+    -    if changes["late"][0] == true && changes["late"][1] == false
+    +    if changes.fetch("late")[0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+    -    if changes["late"][0] == true && changes["late"][1] == false
+    +    if changes["late"].at(0) == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+    -    if changes["late"][0] == true && changes["late"][1] == false
+    +    if changes["late"][0] == true && changes.fetch("late")[1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+    -    if changes["late"][0] == true && changes["late"][1] == false
+    +    if changes["late"][0] == true && changes["late"].at(1) == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+         if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+    -    if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+    +    if changes.fetch("vegetarian")[0] == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+    -    if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+    +    if changes["vegetarian"].at(0) == false && changes["vegetarian"][1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#describe_meal_resident_update
+  kind: same-answer
+  why: >-
+    The line runs only after the same key was checked to hold an Array (`instance_of?(Array)` on the line
+    above the branch). So the key is there, `fetch` gives the same value as `[]`, and `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,30 +1,30 @@
+     def describe_meal_resident_update(audit)
+       changes = audit.audited_changes
+       price = price_change(changes)
+       move = moved(changes)
+       if move
+         return ["Sign-up moved #{move}", price].compact.join(": ")
+       end
+       name = name_before(audit)
+       if price
+         return "#{name}: #{price}"
+       end
+       if changes["late"].instance_of?(Array)
+         if changes["late"][0] == false && changes["late"][1] == true
+           return "#{name} marked late"
+         end
+         if changes["late"][0] == true && changes["late"][1] == false
+           return "#{name} marked not late"
+         end
+         return fallback_description(audit)
+       end
+       if changes["vegetarian"].instance_of?(Array)
+    -    if changes["vegetarian"][0] == false && changes["vegetarian"][1] == true
+    +    if changes["vegetarian"][0] == false && changes.fetch("vegetarian")[1] == true
+           return "#{name} marked veg"
+         end
+         if changes["vegetarian"][0] == true && changes["vegetarian"][1] == false
+           return "#{name} marked not veg"
+         end
+       end
+       fallback_description(audit)
+     end
+- subject: AuditDescription#before_each_update
+  kind: same-answer
+  why: >-
+    With no update row of a bill, an attendance row or a guest, `describe_bill_update` never runs, and it is
+    the only reader of @amount_before. `describe` only gets rows given to `for`: AuditSerializer builds the
+    describer from the same list it describes, and `.describe` passes its one row. So a nil @amount_before
+    is never read.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def before_each_update(rows)
+       updates = rows.select { |row|
+         NAMED_THROUGH_HISTORY.include?(row.auditable_type) && row.action == "update"
+       }
+       if updates.empty?
+    -    return [{}, {}]
+    +    return [{}, nil]
+       end
+       trail = updates.group_by(&:auditable_type).map { |type, typed|
+         Audited::Audit.where(auditable_type: type, auditable_id: typed.map(&:auditable_id))
+       }.reduce(:or).where(action: ["create", "update"]).order(:version, :id)
+       walk(trail)
+     end
+- subject: AuditDescription#before_each_update
+  kind: same-answer
+  why: >-
+    With no update row of a bill, an attendance row or a guest, `describe_bill_update` never runs, and it is
+    the only reader of @amount_before. `describe` only gets rows given to `for`: AuditSerializer builds the
+    describer from the same list it describes, and `.describe` passes its one row. So a nil @amount_before
+    is never read.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def before_each_update(rows)
+       updates = rows.select { |row|
+         NAMED_THROUGH_HISTORY.include?(row.auditable_type) && row.action == "update"
+       }
+       if updates.empty?
+    -    return [{}, {}]
+    +    return [{}]
+       end
+       trail = updates.group_by(&:auditable_type).map { |type, typed|
+         Audited::Audit.where(auditable_type: type, auditable_id: typed.map(&:auditable_id))
+       }.reduce(:or).where(action: ["create", "update"]).order(:version, :id)
+       walk(trail)
+     end
+- subject: AuditDescription#walk
+  kind: same-answer
+  why: >-
+    The line runs only when `changes["resident_id"]` is an Array, so the key is there, and `fetch` gives the
+    same value as `[]`.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def walk(trail)
+       named_now = {}
+       amount_now = {}
+       trail.each_with_object([{}, {}]) { |audit, (named, amounts)|
+         record = audit.auditable_type, audit.auditable_id
+         changes = audit.audited_changes
+         if audit.action == "create"
+           named_now[record] = changes["resident_id"]
+           amount_now[record] = created_amount(changes)
+         else
+           named[audit.id] = named_now[record]
+           amounts[audit.id] = amount_now[record]
+           if changes["resident_id"].instance_of?(Array)
+    -        named_now[record] = changes["resident_id"].last
+    +        named_now[record] = changes.fetch("resident_id").last
+           end
+           amount = amount_change(changes)
+           if amount.instance_of?(Array)
+             amount_now[record] = dollars(amount.last)
+           end
+         end
+       }
+     end

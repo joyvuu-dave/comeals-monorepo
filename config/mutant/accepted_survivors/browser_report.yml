@@ -1,0 +1,18 @@
+- subject: BrowserReport#text
+  kind: same-answer
+  why: >-
+    The value comes from `request.query_parameters`, where Rails gives text as a plain String, never a
+    subclass, so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def text(params, key)
+       value = params[key]
+       if value.nil?
+         return nil
+       end
+    -  unless value.is_a?(String)
+    +  unless value.instance_of?(String)
+         raise(Invalid, "#{key} must be one value")
+       end
+       value
+     end

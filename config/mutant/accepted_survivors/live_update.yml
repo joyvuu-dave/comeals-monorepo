@@ -1,0 +1,50 @@
+- subject: LiveUpdate.calendar_range
+  kind: same-answer
+  why: >-
+    `batch.dates` is a Set. When `last` is the first day of a month, `<=` adds that day as the month, and
+    the line after the loop adds `last`, the same day, again. With `<` only the second add happens. The Set
+    holds the same days either way.
+  diff: |
+    @@ -1,21 +1,21 @@
+     class << self
+       def calendar_range(from, to)
+         if from.nil?
+           return
+         end
+         first = community_date(from)
+         last = if to.nil?
+           first
+         else
+           community_date(to)
+         end
+         note { |batch|
+           month = first.beginning_of_month
+    -      while month <= last
+    +      while month < last
+             batch.dates << month
+             month = month.next_month
+           end
+           batch.dates << last
+         }
+       end
+     end
+- subject: LiveUpdate.meal
+  kind: same-answer
+  why: >-
+    The only reader of `untokened` is `unless entry.untokened` when the push is sent, where nil and false
+    are the same.
+  diff: |
+    @@ -1,12 +1,12 @@
+     class << self
+       def meal(meal_id, socket_id: Current.socket_id, push_token: Current.push_token)
+         note { |batch|
+    -      entry = (batch.meals[meal_id] ||= Batch::MealNote.new(socket_id, Set.new, false))
+    +      entry = (batch.meals[meal_id] ||= Batch::MealNote.new(socket_id, Set.new))
+           if push_token
+             entry.tokens << push_token
+           else
+             entry.untokened=true
+           end
+         }
+       end
+     end

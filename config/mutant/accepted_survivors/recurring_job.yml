@@ -1,0 +1,36 @@
+- subject: RecurringJob#perform
+  kind: same-answer
+  why: >-
+    `const_get(:HEALTHCHECK)` and `::HEALTHCHECK` both look the name up in the job class and its parents,
+    and both raise NameError when no class defines it. They differ only for a top-level HEALTHCHECK
+    constant, which `const_get` would also find, and the app has none. (Sorbet refuses the `::HEALTHCHECK`
+    form, which is why the code uses `const_get`.)
+  diff: |
+    @@ -1,15 +1,15 @@
+     def perform
+       @started_at = Time.current
+       details = T.let(nil, T.untyped)
+    -  self.class.const_get(:HEALTHCHECK).then { |slug|
+    +  self.class::HEALTHCHECK.then { |slug|
+         Healthcheck.monitor(slug) {
+           details = RetryOnConflict.call(attempts: CONFLICT_ATTEMPTS, base_delay: CONFLICT_BASE_DELAY) {
+             run
+           }
+         }
+       }
+       record(started_at, outcome: "ok", details:)
+     rescue Exception => e
+       record(started_at, outcome: "failed", error: "#{e.class}: #{e.message}")
+       raise
+     end
+- subject: RecurringJob#run
+  kind: same-answer
+  why: >-
+    Every subclass of RecurringJob is a named class in app/jobs, and for a named class `Class#to_s` returns
+    its name, so the message is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def run
+    -  raise(NotImplementedError, "#{self.class.name} must define #run")
+    +  raise(NotImplementedError, "#{self.class} must define #run")
+     end

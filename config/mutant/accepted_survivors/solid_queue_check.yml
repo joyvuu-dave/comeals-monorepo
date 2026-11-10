@@ -1,0 +1,102 @@
+- subject: SolidQueueCheck.verify_processes!
+  kind: same-answer
+  why: >-
+    solid_queue_processes.kind is a NOT NULL text column, so `pluck(:kind)` gives Strings, and `to_s` and
+    `to_str` on a String return the same String.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.verify_processes!
+       alive = SolidQueue::Process.where(last_heartbeat_at: HEARTBEAT_WITHIN.ago..).pluck(:kind).map { |kind|
+    -    kind.to_s.sub(/\(\w+\)\z/, "")
+    +    kind.to_str.sub(/\(\w+\)\z/, "")
+       }
+       problem = process_problem(alive)
+       if problem
+         raise(problem)
+       end
+     end
+- subject: SolidQueueCheck.verify_processes!
+  kind: same-answer
+  why: >-
+    solid_queue_processes.kind is a NOT NULL text column, so `pluck(:kind)` gives Strings, and `to_s` and
+    `to_str` on a String return the same String.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.verify_processes!
+       alive = SolidQueue::Process.where(last_heartbeat_at: HEARTBEAT_WITHIN.ago..).pluck(:kind).map { |kind|
+    -    kind.to_s.sub(/\(\w+\)\z/, "")
+    +    kind.sub(/\(\w+\)\z/, "")
+       }
+       problem = process_problem(alive)
+       if problem
+         raise(problem)
+       end
+     end
+- subject: SolidQueueCheck.enqueue_like_the_scheduler
+  kind: same-answer
+  why: >-
+    Solid Queue sets `payload[:skipped]` only to true (RecurringTask#enqueue, solid_queue 1.7.0), so the key
+    is there exactly when its value is true, and `key?(:skipped)` gives the same answer as `[:skipped]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def self.enqueue_like_the_scheduler(task, at)
+       payload = T.let({}, T::Hash[Symbol, T.untyped])
+       callback = ->(*, event_payload) {
+         payload = event_payload
+       }
+       job = ActiveSupport::Notifications.subscribed(callback, "enqueue_recurring_task.solid_queue") {
+         task.enqueue(at:)
+       }
+       if job
+         return job.provider_job_id
+       end
+    -  reason = payload[:enqueue_error] || (payload[:skipped] && "a run at that time is already recorded")
+    +  reason = payload[:enqueue_error] || (payload.key?(:skipped) && "a run at that time is already recorded")
+       raise("could not queue #{RUN_CHECK_TASK}: #{reason || "Solid Queue gave no reason"}")
+     end
+- subject: SolidQueueCheck.enqueue_like_the_scheduler
+  kind: same-answer
+  why: >-
+    With no event name the callback hears every event inside the block, and keeps the payload of the last
+    one to finish. RecurringTask#enqueue runs all its work inside its enqueue_recurring_task.solid_queue
+    event, so that event finishes last, and the payload kept is the same.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def self.enqueue_like_the_scheduler(task, at)
+       payload = T.let({}, T::Hash[Symbol, T.untyped])
+       callback = ->(*, event_payload) {
+         payload = event_payload
+       }
+    -  job = ActiveSupport::Notifications.subscribed(callback, "enqueue_recurring_task.solid_queue") {
+    +  job = ActiveSupport::Notifications.subscribed(callback) {
+         task.enqueue(at:)
+       }
+       if job
+         return job.provider_job_id
+       end
+       reason = payload[:enqueue_error] || (payload[:skipped] && "a run at that time is already recorded")
+       raise("could not queue #{RUN_CHECK_TASK}: #{reason || "Solid Queue gave no reason"}")
+     end
+- subject: SolidQueueCheck.enqueue_like_the_scheduler
+  kind: same-answer
+  why: >-
+    With no event name the callback hears every event inside the block, and keeps the payload of the last
+    one to finish. RecurringTask#enqueue runs all its work inside its enqueue_recurring_task.solid_queue
+    event, so that event finishes last, and the payload kept is the same.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def self.enqueue_like_the_scheduler(task, at)
+       payload = T.let({}, T::Hash[Symbol, T.untyped])
+       callback = ->(*, event_payload) {
+         payload = event_payload
+       }
+    -  job = ActiveSupport::Notifications.subscribed(callback, "enqueue_recurring_task.solid_queue") {
+    +  job = ActiveSupport::Notifications.subscribed(callback, nil) {
+         task.enqueue(at:)
+       }
+       if job
+         return job.provider_job_id
+       end
+       reason = payload[:enqueue_error] || (payload[:skipped] && "a run at that time is already recorded")
+       raise("could not queue #{RUN_CHECK_TASK}: #{reason || "Solid Queue gave no reason"}")
+     end

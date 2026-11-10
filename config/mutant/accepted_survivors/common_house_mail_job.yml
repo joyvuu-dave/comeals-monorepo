@@ -1,0 +1,24 @@
+- subject: CommonHouseMailJob#perform
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `where` value into its id, so `where(id: reconciliation)` and `where(id:
+    reconciliation.id)` run the same SQL.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def perform(reconciliation)
+    -  unless self.class.not_sent(Reconciliation.where(id: reconciliation.id)).exists?
+    +  unless self.class.not_sent(Reconciliation.where(id: reconciliation)).exists?
+         return
+       end
+       result = PacedDelivery.deliver([reconciliation], mailer: MAILER, recipient: ->(_reconciliation) {
+         ReconciliationMailer::COMMON_HOUSE
+       }, after_send: ->(sent) {
+         MailDelivery.record!(mailer: MAILER, about: sent, resident: nil)
+       }) { |about|
+         ReconciliationMailer.common_house_collection_email(about)
+       }
+       unless result.failed.positive?
+         return
+       end
+       raise(SendFailed, "the common house email was not sent for reconciliation ##{reconciliation.id}")
+     end

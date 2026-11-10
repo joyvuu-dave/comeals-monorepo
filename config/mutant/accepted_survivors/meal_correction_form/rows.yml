@@ -1,0 +1,227 @@
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    The id is the second sort key, used only when two guests have hosts with the same name. ActiveRecord
+    compares two guests by their ids, so sorting by the guest and sorting by its id give the same order.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+    -    [name_of(guest.resident), guest.id]
+    +    [name_of(guest.resident), guest]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `where` value into its id, so `meal_id: meal` and `meal_id: meal.id` run
+    the same SQL.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+    -  }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+    +  }, guests: Guest.where(meal_id: meal).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident (and the resident's community) of every row in one query the first time
+    one row reads it, so without this `includes` the rows are the same and so is the number of queries.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+    -  }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+    +  }, guests: Guest.where(meal_id: meal.id).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident (and the resident's community) of every row in one query the first time
+    one row reads it, so without this `includes` the rows are the same and so is the number of queries.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+    -  }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+    +  }, guests: Guest.where(meal_id: meal.id).includes(nil).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident (and the resident's community) of every row in one query the first time
+    one row reads it, so without this `includes` the rows are the same and so is the number of queries.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+    -  new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+    +  new(bills: Bill.where(meal_id: meal.id).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `where` value into its id, so `meal_id: meal` and `meal_id: meal.id` run
+    the same SQL.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+    -  new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+    +  new(bills: Bill.where(meal_id: meal).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident (and the resident's community) of every row in one query the first time
+    one row reads it, so without this `includes` the rows are the same and so is the number of queries.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+    -  new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+    +  new(bills: Bill.where(meal_id: meal.id).includes(nil).sort_by { |bill|
+         name_of(bill.resident)
+       }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident (and the resident's community) of every row in one query the first time
+    one row reads it, so without this `includes` the rows are the same and so is the number of queries.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+    -  }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+    +  }, eaters: MealResident.where(meal_id: meal.id).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `where` value into its id, so `meal_id: meal` and `meal_id: meal.id` run
+    the same SQL.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+    -  }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+    +  }, eaters: MealResident.where(meal_id: meal).includes(resident: :community).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.of
+  kind: same-answer
+  why: >-
+    goldiloader loads the resident (and the resident's community) of every row in one query the first time
+    one row reads it, so without this `includes` the rows are the same and so is the number of queries.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.of(meal)
+       new(bills: Bill.where(meal_id: meal.id).includes(:resident).sort_by { |bill|
+         name_of(bill.resident)
+    -  }, eaters: MealResident.where(meal_id: meal.id).includes(resident: :community).sort_by { |row|
+    +  }, eaters: MealResident.where(meal_id: meal.id).includes(resident: nil).sort_by { |row|
+         name_of(row.resident)
+       }, guests: Guest.where(meal_id: meal.id).includes(:resident).sort_by { |guest|
+         [name_of(guest.resident), guest.id]
+       })
+     end
+- subject: MealCorrectionForm::Rows.name_of
+  kind: same-answer
+  why: >-
+    The resident is loaded from the database, and residents.name is NOT NULL, so it is always a String.
+    `to_s` and `to_str` on a String return the same text as the String itself.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.name_of(resident)
+    -  T.must(resident).name.to_s
+    +  T.must(resident).name.to_str
+     end
+- subject: MealCorrectionForm::Rows.name_of
+  kind: same-answer
+  why: >-
+    The resident is loaded from the database, and residents.name is NOT NULL, so it is always a String.
+    `to_s` and `to_str` on a String return the same text as the String itself.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.name_of(resident)
+    -  T.must(resident).name.to_s
+    +  T.must(resident).name
+     end
+- subject: MealCorrectionForm::Rows#seen
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no format it uses "F", the same as `to_s("F")`. The
+    new example that pins the exact digest passes with this change.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def seen
+       Digest::SHA256.hexdigest([bills.map { |bill|
+    -    [bill.resident_id, T.must(bill.amount).to_s("F"), bill.no_cost]
+    +    [bill.resident_id, T.must(bill.amount).to_s, bill.no_cost]
+       }, eaters.map { |row|
+         [row.resident_id, row.multiplier]
+       }, guests.map { |guest|
+         [guest.id, guest.resident_id, guest.multiplier]
+       }].to_json)
+     end
+- subject: MealCorrectionForm::Rows#seen
+  kind: same-answer
+  why: >-
+    ActiveSupport writes a BigDecimal to JSON as the text of `to_s`, which with no format is the "F" form
+    ("30.0"). So `to_json` writes the same text for the BigDecimal as for `to_s("F")`, and the new example
+    that pins the exact digest passes with this change.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def seen
+       Digest::SHA256.hexdigest([bills.map { |bill|
+    -    [bill.resident_id, T.must(bill.amount).to_s("F"), bill.no_cost]
+    +    [bill.resident_id, T.must(bill.amount), bill.no_cost]
+       }, eaters.map { |row|
+         [row.resident_id, row.multiplier]
+       }, guests.map { |guest|
+         [guest.id, guest.resident_id, guest.multiplier]
+       }].to_json)
+     end

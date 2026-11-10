@@ -1,0 +1,52 @@
+- subject: GuestAdd#error
+  kind: same-answer
+  why: >-
+    `@flags` is a Hash or the refusal from TrueOrFalse.from_params, which is a plain String, never a
+    subclass, so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def error
+       flags = @flags
+    -  @key_header.error || (if flags.is_a?(String)
+    +  @key_header.error || (if flags.instance_of?(String)
+         flags
+       end)
+     end
+- subject: GuestAdd#seen_key
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so `meal_id: meal` and `meal_id: meal.id`
+    run the same SQL.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def seen_key(meal)
+       if error
+         return nil
+       end
+    -  GuestAddKey.find_by(meal_id: meal.id, key: @key_header.key)
+    +  GuestAddKey.find_by(meal_id: meal, key: @key_header.key)
+     end
+- subject: GuestAdd#vegetarian
+  kind: same-answer
+  why: >-
+    sorbet-runtime checks only that the value is a Hash; it does not check the types of the keys or values
+    of a generic Hash. And `vegetarian` runs only when `error` is nil, so @flags is the Hash from
+    TrueOrFalse.from_params. The cast passes and returns the same Hash.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def vegetarian
+    -  T.cast(@flags, T::Hash[Symbol, T::Boolean]).fetch(:vegetarian)
+    +  T.cast(@flags, T::Hash[nil, T::Boolean]).fetch(:vegetarian)
+     end
+- subject: GuestAdd#vegetarian
+  kind: same-answer
+  why: >-
+    sorbet-runtime checks only that the value is a Hash; it does not check the types of the keys or values
+    of a generic Hash. And `vegetarian` runs only when `error` is nil, so @flags is the Hash from
+    TrueOrFalse.from_params. The cast passes and returns the same Hash.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def vegetarian
+    -  T.cast(@flags, T::Hash[Symbol, T::Boolean]).fetch(:vegetarian)
+    +  T.cast(@flags, T::Hash[Symbol, nil]).fetch(:vegetarian)
+     end

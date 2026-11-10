@@ -1,0 +1,126 @@
+- subject: RecurringCatchUp#due
+  kind: same-answer
+  why: >-
+    Every entry in config/recurring.yml that names a class also has a schedule (Solid Queue refuses an entry
+    with none), so `fetch(:schedule)` finds the key and gives the same value as `[]`.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def due
+       recurring = tasks.filter_map { |task|
+         job_class = task[:class].constantize
+         if job_class < RecurringJob
+    -      [job_class, task[:schedule]]
+    +      [job_class, task.fetch(:schedule)]
+         end
+       }
+       last_successes = JobRun.last_success_at(recurring.map { |job_class, _schedule|
+         job_class.run_name
+       })
+       recurring.filter_map { |job_class, schedule|
+         last_tick = Fugit.parse(schedule).previous_time(@now).to_t
+         last_success = last_successes[job_class.run_name]
+         if last_success.nil? || last_success < last_tick
+           job_class
+         end
+       }
+     end
+- subject: RecurringCatchUp#due
+  kind: same-answer
+  why: >-
+    `tasks` keeps only the entries whose `[:class]` is present, so the key is there, and `fetch(:class)`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def due
+       recurring = tasks.filter_map { |task|
+    -    job_class = task[:class].constantize
+    +    job_class = task.fetch(:class).constantize
+         if job_class < RecurringJob
+           [job_class, task[:schedule]]
+         end
+       }
+       last_successes = JobRun.last_success_at(recurring.map { |job_class, _schedule|
+         job_class.run_name
+       })
+       recurring.filter_map { |job_class, schedule|
+         last_tick = Fugit.parse(schedule).previous_time(@now).to_t
+         last_success = last_successes[job_class.run_name]
+         if last_success.nil? || last_success < last_tick
+           job_class
+         end
+       }
+     end
+- subject: RecurringCatchUp#enqueue
+  kind: same-answer
+  why: >-
+    The job class comes from `constantize` on a class name in config/recurring.yml, so it is a named class,
+    and for a named class `Class#to_s` returns its name.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def enqueue(job_class)
+       if RetryOnConflict.call {
+         job_class.perform_later
+       }
+         return true
+       end
+    -  report(RuntimeError.new("#{job_class.name} was not queued"), job_class.name)
+    +  report(RuntimeError.new("#{job_class} was not queued"), job_class.name)
+       false
+     rescue StandardError => e
+       report(e, job_class.name)
+       false
+     end
+- subject: RecurringCatchUp#enqueue
+  kind: same-answer
+  why: >-
+    `report` returns what `Rails.error.report` returns, which is nil (ActiveSupport::ErrorReporter #report
+    ends with nil), and the rescue branch ends with nil too without the `false`. The only caller uses the
+    answer inside `select`, where nil and false are the same.
+  diff: |
+    @@ -1,12 +1,11 @@
+     def enqueue(job_class)
+       if RetryOnConflict.call {
+         job_class.perform_later
+       }
+         return true
+       end
+       report(RuntimeError.new("#{job_class.name} was not queued"), job_class.name)
+       false
+     rescue StandardError => e
+       report(e, job_class.name)
+    -  false
+     end
+- subject: RecurringCatchUp#enqueue
+  kind: same-answer
+  why: >-
+    `report` returns what `Rails.error.report` returns, which is nil (ActiveSupport::ErrorReporter #report
+    ends with nil), and the rescue branch ends with nil too without the `false`. The only caller uses the
+    answer inside `select`, where nil and false are the same.
+  diff: |
+    @@ -1,12 +1,11 @@
+     def enqueue(job_class)
+       if RetryOnConflict.call {
+         job_class.perform_later
+       }
+         return true
+       end
+       report(RuntimeError.new("#{job_class.name} was not queued"), job_class.name)
+    -  false
+     rescue StandardError => e
+       report(e, job_class.name)
+       false
+     end
+- subject: RecurringCatchUp#tasks
+  kind: same-answer
+  why: >-
+    Rails.application.config_for gives the entries of config/recurring.yml as plain Hashes; only the top
+    level is an OrderedOptions. So `is_a?(Hash)` and `instance_of?(Hash)` give the same answer.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def tasks
+       config = Rails.application.config_for(:recurring)
+       config.values.select { |task|
+    -    task.is_a?(Hash) && task[:class].present?
+    +    task.instance_of?(Hash) && task[:class].present?
+       }
+     end

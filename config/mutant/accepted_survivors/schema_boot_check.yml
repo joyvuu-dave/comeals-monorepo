@@ -1,0 +1,17 @@
+- subject: SchemaBootCheck.pending_versions
+  kind: same-answer
+  why: >-
+    ActiveSupport adds `String#at`, which returns `self[position]`, and `String#[]` takes a Regexp, so
+    `at(/\A\d+/)` gives the same digits as `[/\A\d+/]`.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.pending_versions(context)
+       files = Array(context.migrations_paths).flat_map {
+         Dir[File.join(it, "**", "[0-9]*_*.rb")]
+       }
+       versions = files.map {
+    -    Integer(File.basename(it)[/\A\d+/], 10)
+    +    Integer(File.basename(it).at(/\A\d+/), 10)
+       }
+       (versions - context.schema_migration.integer_versions).sort
+     end

@@ -1,0 +1,362 @@
+- subject: BillsPayload#initialize
+  kind: same-answer
+  why: >-
+    unknown_cook sets @residents before `check` can return nil, and the controller calls write_to, the only
+    reader of @residents, only on a valid payload. On a payload that is not valid nothing reads @residents,
+    so its first value is never seen.
+  diff: |
+    @@ -1,10 +1,9 @@
+     def initialize(params)
+       @outdated = T.let(params.key?(:bills), T::Boolean)
+       @edits = T.let([], T::Array[Edit])
+    -  @residents = T.let({}, T::Hash[Integer, Resident])
+       @error = T.let(if @outdated
+         OUTDATED
+       else
+         check(params[:edits])
+       end, T.nilable(String))
+     end
+- subject: BillsPayload#fingerprint
+  kind: same-answer
+  why: >-
+    T::Enum answers to_json with its serialized value, so JSON.generate writes the op as "add", "change" or
+    "remove" either way. The existing example that pins the exact digest passes with this change.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def fingerprint
+       Digest::SHA256.hexdigest(JSON.generate(@edits.map { |edit|
+    -    [edit.op.serialize, edit.resident_id, *sides(edit)]
+    +    [edit.op, edit.resident_id, *sides(edit)]
+       }))
+     end
+- subject: BillsPayload#write_to
+  kind: same-answer
+  why: >-
+    The name comes from a resident loaded from the database, and residents.name is NOT NULL, so it is always
+    a String. `to_s` and `to_str` on a String return the same text as the String itself.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def write_to(meal, stored)
+       changes = @edits.filter_map { |edit|
+         bill = stored[T.must(edit.resident_id)]
+         unless edit.done?(bill) || edit.built_on?(bill)
+    -      edit.change_seen(bill, resident_of(edit).name.to_s)
+    +      edit.change_seen(bill, resident_of(edit).name)
+         end
+       }
+       if changes.any?
+         return stale(changes)
+       end
+       @edits.each { |edit|
+         bill = stored[T.must(edit.resident_id)]
+         unless edit.done?(bill)
+           write(meal, edit, bill)
+         end
+       }
+       nil
+     end
+- subject: BillsPayload#write_to
+  kind: same-answer
+  why: >-
+    The name comes from a resident loaded from the database, and residents.name is NOT NULL, so it is always
+    a String. `to_s` and `to_str` on a String return the same text as the String itself.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def write_to(meal, stored)
+       changes = @edits.filter_map { |edit|
+         bill = stored[T.must(edit.resident_id)]
+         unless edit.done?(bill) || edit.built_on?(bill)
+    -      edit.change_seen(bill, resident_of(edit).name.to_s)
+    +      edit.change_seen(bill, resident_of(edit).name.to_str)
+         end
+       }
+       if changes.any?
+         return stale(changes)
+       end
+       @edits.each { |edit|
+         bill = stored[T.must(edit.resident_id)]
+         unless edit.done?(bill)
+           write(meal, edit, bill)
+         end
+       }
+       nil
+     end
+- subject: BillsPayload#sides
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no format it uses "F", the same as `to_s("F")`. So
+    the amounts are written the same way, and the digest is the same.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def sides(edit)
+       [edit.from, edit.to].map { |side|
+    -    side && [side.amount.to_s("F"), side.no_cost]
+    +    side && [side.amount.to_s, side.no_cost]
+       }
+     end
+- subject: BillsPayload#sides
+  kind: same-answer
+  why: >-
+    ActiveSupport writes a BigDecimal to JSON as the text of `to_s`, which with no format is the "F" form
+    ("5.0"). So JSON.generate writes the same text for the BigDecimal as for `to_s("F")`, and the digest is
+    the same.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def sides(edit)
+       [edit.from, edit.to].map { |side|
+    -    side && [side.amount.to_s("F"), side.no_cost]
+    +    side && [side.amount, side.no_cost]
+       }
+     end
+- subject: BillsPayload#check
+  kind: same-answer
+  why: >-
+    `raw` is `params[:edits]` from ActionController::Parameters, which gives a list as a plain Array, never
+    a subclass, so `is_a?(Array)` and `instance_of?(Array)` give the same answer.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def check(raw)
+    -  unless raw.is_a?(Array) && raw.all? { |item|
+    +  unless raw.instance_of?(Array) && raw.all? { |item|
+         item.respond_to?(:key?)
+       }
+         return "edits must be a list of changes."
+       end
+       raw.each { |item|
+         parsed = edit(item)
+         if parsed.is_a?(String)
+           return parsed
+         end
+         @edits << parsed
+       }
+       duplicate_cook || unknown_cook
+     end
+- subject: BillsPayload#check
+  kind: same-answer
+  why: >-
+    `edit` returns an Edit or a sentence. Every sentence is a plain String (a String literal,
+    Bill::NO_COST_MEANS_NO_AMOUNT, or TrueOrFalse.refusal), never a subclass, so `is_a?` and `instance_of?`
+    give the same answer.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def check(raw)
+       unless raw.is_a?(Array) && raw.all? { |item|
+         item.respond_to?(:key?)
+       }
+         return "edits must be a list of changes."
+       end
+       raw.each { |item|
+         parsed = edit(item)
+    -    if parsed.is_a?(String)
+    +    if parsed.instance_of?(String)
+           return parsed
+         end
+         @edits << parsed
+       }
+       duplicate_cook || unknown_cook
+     end
+- subject: BillsPayload#edit
+  kind: same-answer
+  why: >-
+    `side` returns nil, a Values, or a sentence that is a plain String (a literal, an interpolated String,
+    or TrueOrFalse.refusal), never a subclass of String, so `is_a?` and `instance_of?` give the same answer.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def edit(item)
+       op = Op.try_deserialize(item["op"])
+       if op.nil?
+         return "Each edit's op must be add, change or remove."
+       end
+       (sides, wrong) = SIDES.fetch(op)
+       unless sides == [!item["from"].nil?, !item["to"].nil?]
+         return wrong
+       end
+       from = side(item["from"])
+    -  if from.is_a?(String)
+    +  if from.instance_of?(String)
+         return from
+       end
+       to = side(item["to"])
+       if to.is_a?(String)
+         return to
+       end
+       if to&.no_cost && to.amount.positive?
+         return Bill::NO_COST_MEANS_NO_AMOUNT
+       end
+       Edit.new(op:, resident_id: resident_id(item["resident_id"]), from:, to:)
+     end
+- subject: BillsPayload#edit
+  kind: same-answer
+  why: >-
+    `side` returns nil, a Values, or a sentence that is a plain String (a literal, an interpolated String,
+    or TrueOrFalse.refusal), never a subclass of String, so `is_a?` and `instance_of?` give the same answer.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def edit(item)
+       op = Op.try_deserialize(item["op"])
+       if op.nil?
+         return "Each edit's op must be add, change or remove."
+       end
+       (sides, wrong) = SIDES.fetch(op)
+       unless sides == [!item["from"].nil?, !item["to"].nil?]
+         return wrong
+       end
+       from = side(item["from"])
+       if from.is_a?(String)
+         return from
+       end
+       to = side(item["to"])
+    -  if to.is_a?(String)
+    +  if to.instance_of?(String)
+         return to
+       end
+       if to&.no_cost && to.amount.positive?
+         return Bill::NO_COST_MEANS_NO_AMOUNT
+       end
+       Edit.new(op:, resident_id: resident_id(item["resident_id"]), from:, to:)
+     end
+- subject: BillsPayload#side
+  kind: same-answer
+  why: >-
+    `amount` returns a BigDecimal or an interpolated String, never a subclass of String, so `is_a?` and
+    `instance_of?` give the same answer.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def side(raw)
+       if raw.nil?
+         return nil
+       end
+       unless raw.respond_to?(:key?) && raw.key?("amount") && raw.key?("no_cost")
+         return "'from' and 'to' each need amount and no_cost."
+       end
+       amount = amount(raw["amount"])
+    -  if amount.is_a?(String)
+    +  if amount.instance_of?(String)
+         return amount
+       end
+       no_cost = TrueOrFalse.read(raw["no_cost"])
+       if no_cost.nil?
+         return TrueOrFalse.refusal(:no_cost)
+       end
+       Values.new(amount:, no_cost:)
+     end
+- subject: BillsPayload#side
+  kind: same-answer
+  why: >-
+    The line runs only after `raw.key?("amount")` and `raw.key?("no_cost")` were both checked true, so
+    `fetch` finds the key and gives the same value as `[]`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def side(raw)
+       if raw.nil?
+         return nil
+       end
+       unless raw.respond_to?(:key?) && raw.key?("amount") && raw.key?("no_cost")
+         return "'from' and 'to' each need amount and no_cost."
+       end
+    -  amount = amount(raw["amount"])
+    +  amount = amount(raw.fetch("amount"))
+       if amount.is_a?(String)
+         return amount
+       end
+       no_cost = TrueOrFalse.read(raw["no_cost"])
+       if no_cost.nil?
+         return TrueOrFalse.refusal(:no_cost)
+       end
+       Values.new(amount:, no_cost:)
+     end
+- subject: BillsPayload#side
+  kind: same-answer
+  why: >-
+    The line runs only after `raw.key?("amount")` and `raw.key?("no_cost")` were both checked true, so
+    `fetch` finds the key and gives the same value as `[]`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def side(raw)
+       if raw.nil?
+         return nil
+       end
+       unless raw.respond_to?(:key?) && raw.key?("amount") && raw.key?("no_cost")
+         return "'from' and 'to' each need amount and no_cost."
+       end
+       amount = amount(raw["amount"])
+       if amount.is_a?(String)
+         return amount
+       end
+    -  no_cost = TrueOrFalse.read(raw["no_cost"])
+    +  no_cost = TrueOrFalse.read(raw.fetch("no_cost"))
+       if no_cost.nil?
+         return TrueOrFalse.refusal(:no_cost)
+       end
+       Values.new(amount:, no_cost:)
+     end
+- subject: BillsPayload#amount
+  kind: same-answer
+  why: >-
+    The value comes from ActionController::Parameters, which gives text as a plain String, never a subclass,
+    so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def amount(raw)
+       if raw.is_a?(String) && (raw.empty? || WHOLE_CENTS_AMOUNT.match?(raw))
+         return raw.empty? ? BigDecimal("0") : BigDecimal(raw)
+       end
+    -  shown = if raw.is_a?(String)
+    +  shown = if raw.instance_of?(String)
+         raw
+       else
+         raw.to_json
+       end
+       "Invalid amount: #{shown}. Amounts are text with whole cents, 0 to 9999.99, like \"25.50\"."
+     end
+- subject: BillsPayload#amount
+  kind: same-answer
+  why: >-
+    The value comes from ActionController::Parameters, which gives text as a plain String, never a subclass,
+    so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def amount(raw)
+    -  if raw.is_a?(String) && (raw.empty? || WHOLE_CENTS_AMOUNT.match?(raw))
+    +  if raw.instance_of?(String) && (raw.empty? || WHOLE_CENTS_AMOUNT.match?(raw))
+         return raw.empty? ? BigDecimal("0") : BigDecimal(raw)
+       end
+       shown = if raw.is_a?(String)
+         raw
+       else
+         raw.to_json
+       end
+       "Invalid amount: #{shown}. Amounts are text with whole cents, 0 to 9999.99, like \"25.50\"."
+     end
+- subject: BillsPayload#resident_id
+  kind: same-answer
+  why: >-
+    Ruby has no subclass of Integer, and a JSON number in the parameters is a plain Integer, so `is_a?` and
+    `instance_of?` give the same answer.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def resident_id(raw)
+    -  if raw.is_a?(Integer)
+    +  if raw.instance_of?(Integer)
+         return raw
+       end
+       if raw.is_a?(String) && RESIDENT_ID.match?(raw)
+         Integer(raw, 10)
+       end
+     end
+- subject: BillsPayload#resident_id
+  kind: same-answer
+  why: >-
+    The value comes from ActionController::Parameters, which gives text as a plain String, never a subclass,
+    so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def resident_id(raw)
+       if raw.is_a?(Integer)
+         return raw
+       end
+    -  if raw.is_a?(String) && RESIDENT_ID.match?(raw)
+    +  if raw.instance_of?(String) && RESIDENT_ID.match?(raw)
+         Integer(raw, 10)
+       end
+     end

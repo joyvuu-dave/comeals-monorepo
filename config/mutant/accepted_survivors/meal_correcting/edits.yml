@@ -1,0 +1,167 @@
+- subject: MealCorrecting::Edits#cost
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def cost(cook, amount:, no_cost:)
+    -  bill = Bill.find_by(meal_id: @meal.id, resident_id: cook.id)
+    +  bill = Bill.find_by(meal_id: @meal.id, resident_id: cook)
+       if bill.nil?
+         Bill.create!(meal: @meal, resident: cook, amount:, no_cost:)
+         return record("cost", cook, nil, cost_of(amount, no_cost))
+       end
+       before = cost_of(T.must(bill.amount), T.must(bill.no_cost))
+       bill.update!(amount:, no_cost:)
+       if bill.saved_changes?
+         record("cost", cook, before, cost_of(amount, no_cost))
+       end
+     end
+- subject: MealCorrecting::Edits#cost
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def cost(cook, amount:, no_cost:)
+    -  bill = Bill.find_by(meal_id: @meal.id, resident_id: cook.id)
+    +  bill = Bill.find_by(meal_id: @meal, resident_id: cook.id)
+       if bill.nil?
+         Bill.create!(meal: @meal, resident: cook, amount:, no_cost:)
+         return record("cost", cook, nil, cost_of(amount, no_cost))
+       end
+       before = cost_of(T.must(bill.amount), T.must(bill.no_cost))
+       bill.update!(amount:, no_cost:)
+       if bill.saved_changes?
+         record("cost", cook, before, cost_of(amount, no_cost))
+       end
+     end
+- subject: MealCorrecting::Edits#remove_cook
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def remove_cook(cook)
+    -  bill = Bill.find_by!(meal_id: @meal.id, resident_id: cook.id)
+    +  bill = Bill.find_by!(meal_id: @meal, resident_id: cook.id)
+       bill.destroy!
+       record("cost", cook, cost_of(T.must(bill.amount), T.must(bill.no_cost)), nil)
+     end
+- subject: MealCorrecting::Edits#remove_cook
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def remove_cook(cook)
+    -  bill = Bill.find_by!(meal_id: @meal.id, resident_id: cook.id)
+    +  bill = Bill.find_by!(meal_id: @meal.id, resident_id: cook)
+       bill.destroy!
+       record("cost", cook, cost_of(T.must(bill.amount), T.must(bill.no_cost)), nil)
+     end
+- subject: MealCorrecting::Edits#remove_eater
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def remove_eater(eater)
+    -  row = MealResident.find_by!(meal_id: @meal.id, resident_id: eater.id)
+    +  row = MealResident.find_by!(meal_id: @meal.id, resident_id: eater)
+       row.admin_correction=true
+       row.destroy!
+       record("eater", eater, row.multiplier, nil)
+     end
+- subject: MealCorrecting::Edits#remove_eater
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def remove_eater(eater)
+    -  row = MealResident.find_by!(meal_id: @meal.id, resident_id: eater.id)
+    +  row = MealResident.find_by!(meal_id: @meal, resident_id: eater.id)
+       row.admin_correction=true
+       row.destroy!
+       record("eater", eater, row.multiplier, nil)
+     end
+- subject: MealCorrecting::Edits#reprice_eater
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def reprice_eater(eater)
+    -  row = MealResident.find_by!(meal_id: @meal.id, resident_id: eater.id)
+    +  row = MealResident.find_by!(meal_id: @meal.id, resident_id: eater)
+       before = row.multiplier
+       row.admin_correction=true
+       row.update!(multiplier: eater.multiplier_on(T.must(@meal.date)))
+       if row.saved_changes?
+         record("eater", eater, before, row.multiplier)
+       end
+     end
+- subject: MealCorrecting::Edits#reprice_eater
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def reprice_eater(eater)
+    -  row = MealResident.find_by!(meal_id: @meal.id, resident_id: eater.id)
+    +  row = MealResident.find_by!(meal_id: @meal, resident_id: eater.id)
+       before = row.multiplier
+       row.admin_correction=true
+       row.update!(multiplier: eater.multiplier_on(T.must(@meal.date)))
+       if row.saved_changes?
+         record("eater", eater, before, row.multiplier)
+       end
+     end
+- subject: MealCorrecting::Edits#remove_guest
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def remove_guest(guest)
+    -  row = Guest.find_by!(id: guest.id, meal_id: @meal.id)
+    +  row = Guest.find_by!(id: guest, meal_id: @meal.id)
+       row.admin_correction=true
+       row.destroy!
+       record("guest", T.must(row.resident), row.multiplier, nil)
+     end
+- subject: MealCorrecting::Edits#remove_guest
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `find_by` value into its id, so a record and its `.id` run the same SQL
+    and find the same row.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def remove_guest(guest)
+    -  row = Guest.find_by!(id: guest.id, meal_id: @meal.id)
+    +  row = Guest.find_by!(id: guest.id, meal_id: @meal)
+       row.admin_correction=true
+       row.destroy!
+       record("guest", T.must(row.resident), row.multiplier, nil)
+     end
+- subject: MealCorrecting::Edits#cost_of
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no format it uses "F", the same as `to_s("F")`, so
+    the recorded amount is the same text.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def cost_of(amount, no_cost)
+    -  { "amount" => amount.to_s("F"), "no_cost" => no_cost }
+    +  { "amount" => amount.to_s, "no_cost" => no_cost }
+     end

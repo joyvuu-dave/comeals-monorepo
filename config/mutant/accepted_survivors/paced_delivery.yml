@@ -1,0 +1,128 @@
+- subject: PacedDelivery#with_session
+  kind: same-answer
+  why: >-
+    ActionMailer::MessageDelivery passes every method it does not have to its Mail::Message, which is the
+    same object `message.message` returns, and `deliver_now` delivers that same object. So the delivery
+    method is set on the same message either way.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def with_session
+       unless smtp?
+         return yield(->(message) {
+           message.deliver_now
+         })
+       end
+       open_smtp { |session|
+         yield(lambda { |message|
+    -      message.message.delivery_method(SessionDelivery, session:)
+    +      message.delivery_method(SessionDelivery, session:)
+           message.deliver_now
+         })
+       }
+     rescue *MAIL_DELIVERY_ERRORS => e
+       @failed = @items.size - @sent - @skipped
+       MailDeliveryFailure.report(e, mailer: @mailer)
+     end
+- subject: PacedDelivery#open_smtp
+  kind: same-answer
+  why: >-
+    The line runs only when `settings[...]` for the same key is not nil, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def open_smtp(&)
+       settings = ActionMailer::Base.smtp_settings
+       smtp = Net::SMTP.new(settings[:address], settings[:port])
+       if settings[:enable_starttls_auto]
+         smtp.enable_starttls_auto
+       end
+       if settings[:open_timeout]
+         smtp.open_timeout=settings[:open_timeout]
+       end
+       if settings[:read_timeout]
+    -    smtp.read_timeout=settings[:read_timeout]
+    +    smtp.read_timeout=settings.fetch(:read_timeout)
+       end
+       smtp.start(settings[:domain], settings[:user_name], settings[:password], settings[:authentication]&.to_sym, &)
+     end
+- subject: PacedDelivery#open_smtp
+  kind: same-answer
+  why: >-
+    SMTP is used only in production, and config/environments/production.rb sets both :address and :port in
+    smtp_settings, so `fetch` finds the key and gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def open_smtp(&)
+       settings = ActionMailer::Base.smtp_settings
+    -  smtp = Net::SMTP.new(settings[:address], settings[:port])
+    +  smtp = Net::SMTP.new(settings.fetch(:address), settings[:port])
+       if settings[:enable_starttls_auto]
+         smtp.enable_starttls_auto
+       end
+       if settings[:open_timeout]
+         smtp.open_timeout=settings[:open_timeout]
+       end
+       if settings[:read_timeout]
+         smtp.read_timeout=settings[:read_timeout]
+       end
+       smtp.start(settings[:domain], settings[:user_name], settings[:password], settings[:authentication]&.to_sym, &)
+     end
+- subject: PacedDelivery#open_smtp
+  kind: same-answer
+  why: >-
+    The line runs only when `settings[...]` for the same key is not nil, so the key is there, and `fetch`
+    gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def open_smtp(&)
+       settings = ActionMailer::Base.smtp_settings
+       smtp = Net::SMTP.new(settings[:address], settings[:port])
+       if settings[:enable_starttls_auto]
+         smtp.enable_starttls_auto
+       end
+       if settings[:open_timeout]
+    -    smtp.open_timeout=settings[:open_timeout]
+    +    smtp.open_timeout=settings.fetch(:open_timeout)
+       end
+       if settings[:read_timeout]
+         smtp.read_timeout=settings[:read_timeout]
+       end
+       smtp.start(settings[:domain], settings[:user_name], settings[:password], settings[:authentication]&.to_sym, &)
+     end
+- subject: PacedDelivery#open_smtp
+  kind: same-answer
+  why: >-
+    SMTP is used only in production, and config/environments/production.rb sets both :address and :port in
+    smtp_settings, so `fetch` finds the key and gives the same value as `[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def open_smtp(&)
+       settings = ActionMailer::Base.smtp_settings
+    -  smtp = Net::SMTP.new(settings[:address], settings[:port])
+    +  smtp = Net::SMTP.new(settings[:address], settings.fetch(:port))
+       if settings[:enable_starttls_auto]
+         smtp.enable_starttls_auto
+       end
+       if settings[:open_timeout]
+         smtp.open_timeout=settings[:open_timeout]
+       end
+       if settings[:read_timeout]
+         smtp.read_timeout=settings[:read_timeout]
+       end
+       smtp.start(settings[:domain], settings[:user_name], settings[:password], settings[:authentication]&.to_sym, &)
+     end
+- subject: PacedDelivery#initialize
+  kind: same-answer
+  why: >-
+    Every caller passes an Array (CommonHouseMailJob) or an ActiveRecord relation (from
+    MailDelivery.not_yet_sent), and both answer `to_ary` with the same Array as `to_a`.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def initialize(items, mailer:, recipient:, after_send:, build:)
+    -  @items = items.to_a
+    +  @items = items.to_ary
+       @mailer = mailer
+       @recipient = recipient
+       @after_send = after_send
+       @build = build
+     end

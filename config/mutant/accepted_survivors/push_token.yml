@@ -1,0 +1,13 @@
+- subject: PushToken.read
+  kind: same-answer
+  why: >-
+    The only caller passes `params[:push_token]`, and Rails gives a text parameter as a plain String, never
+    a subclass, so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def self.read(raw)
+    -  if raw.is_a?(String) && raw.match?(FORM)
+    +  if raw.instance_of?(String) && raw.match?(FORM)
+         raw
+       end
+     end

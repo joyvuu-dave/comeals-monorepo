@@ -1,0 +1,38 @@
+- subject: AssetCacheControl#call
+  kind: same-answer
+  why: >-
+    Rack requires PATH_INFO in every request env, so `env.fetch("PATH_INFO")` finds the key and gives the
+    same value as `env["PATH_INFO"]`.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def call(env)
+       (status, headers, body) = @app.call(env)
+    -  if env["PATH_INFO"].start_with?("/assets/", "/vite-assets/") && status == 200 && !headers["content-type"].to_s.start_with?("text/html")
+    +  if env.fetch("PATH_INFO").start_with?("/assets/", "/vite-assets/") && status == 200 && !headers["content-type"].to_s.start_with?("text/html")
+         headers["cache-control"] = HEADER
+       else
+         if REVALIDATE_PATHS.include?(env["PATH_INFO"]) && status == 200
+           headers["cache-control"] = "no-cache"
+         end
+       end
+       [status, headers, body]
+     end
+- subject: AssetCacheControl#call
+  kind: same-answer
+  why: >-
+    Rack requires PATH_INFO in every request env, so `env.fetch("PATH_INFO")` finds the key and gives the
+    same value as `env["PATH_INFO"]`.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def call(env)
+       (status, headers, body) = @app.call(env)
+       if env["PATH_INFO"].start_with?("/assets/", "/vite-assets/") && status == 200 && !headers["content-type"].to_s.start_with?("text/html")
+         headers["cache-control"] = HEADER
+       else
+    -    if REVALIDATE_PATHS.include?(env["PATH_INFO"]) && status == 200
+    +    if REVALIDATE_PATHS.include?(env.fetch("PATH_INFO")) && status == 200
+           headers["cache-control"] = "no-cache"
+         end
+       end
+       [status, headers, body]
+     end

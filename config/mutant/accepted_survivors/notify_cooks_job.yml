@@ -1,0 +1,24 @@
+- subject: NotifyCooksJob.cooks
+  kind: same-answer
+  why: >-
+    Rails turns a record given as a `where` value into its id, so `where(id: reconciliation)` and `where(id:
+    reconciliation.id)` run the same SQL.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def self.cooks(reconciliation)
+    -  rows = cook_rows(Reconciliation.where(id: reconciliation.id))
+    +  rows = cook_rows(Reconciliation.where(id: reconciliation))
+       Resident.where(id: Resident.from(rows).select("cooks.resident_id"))
+     end
+- subject: NotifyCooksJob.cooks_owed
+  kind: same-answer
+  why: >-
+    The relation is not loaded here, so `size` calls `count(:all)`. `count` with no column also counts :all,
+    because the relation selects no columns of its own. Both run the same grouped COUNT query.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def self.cooks_owed(reconciliations)
+       delivered = MailDelivery.where(mailer: MAILER, about_type: Reconciliation.polymorphic_name).where("mail_deliveries.about_id = cooks.reconciliation_id").where("mail_deliveries.resident_id = cooks.resident_id")
+    -  Resident.from(cook_rows(reconciliations)).joins("JOIN residents ON residents.id = cooks.resident_id").where.not(residents: { email: nil }).where(delivered.arel.exists.not).group("cooks.reconciliation_id").count
+    +  Resident.from(cook_rows(reconciliations)).joins("JOIN residents ON residents.id = cooks.resident_id").where.not(residents: { email: nil }).where(delivered.arel.exists.not).group("cooks.reconciliation_id").size
+     end

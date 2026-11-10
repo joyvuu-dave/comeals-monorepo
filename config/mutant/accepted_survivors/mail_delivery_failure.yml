@@ -1,0 +1,33 @@
+- subject: MailDeliveryFailure.report
+  kind: same-answer
+  why: >-
+    The text is used only inside "#{mailer} failed#{target}: ...", and nil interpolates as an empty String,
+    the same as "".
+  diff: |
+    @@ -1,9 +1,9 @@
+     def self.report(error, mailer:, recipient: nil)
+       target = if recipient
+         " for #{recipient}"
+       else
+    -    ""
+    +    nil
+       end
+       Rails.logger.error("#{mailer} failed#{target}: #{error.class} - #{error.message}")
+       Rails.error.report(error, handled: true, severity: :error, source: "mailer", context: { mailer: })
+     end
+- subject: MailDeliveryFailure.report
+  kind: same-answer
+  why: >-
+    The text is used only inside "#{mailer} failed#{target}: ...", and nil interpolates as an empty String,
+    the same as "".
+  diff: |
+    @@ -1,9 +1,7 @@
+     def self.report(error, mailer:, recipient: nil)
+       target = if recipient
+         " for #{recipient}"
+    -  else
+    -    ""
+       end
+       Rails.logger.error("#{mailer} failed#{target}: #{error.class} - #{error.message}")
+       Rails.error.report(error, handled: true, severity: :error, source: "mailer", context: { mailer: })
+     end

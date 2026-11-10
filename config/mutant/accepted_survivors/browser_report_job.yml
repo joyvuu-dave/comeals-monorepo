@@ -1,0 +1,100 @@
+- subject: BrowserReportJob#alert
+  kind: same-answer
+  why: >-
+    perform builds `context` itself, with every key: browser, major, os, device, tests and user_agent.
+    `major` can be nil, but its key is always there. So `fetch` finds every key that `[]` reads, and gives
+    the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def alert(result, tests, error, context)
+    -  description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+    +  description = "#{[context.fetch(:browser), context[:major]].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+       case result
+       when "failed"
+         report(UnsupportedBrowserSeen.new("#{description} failed the browser check: #{tests.join(", ")}"), context.merge(grouping_hash: "UnsupportedBrowserSeen #{context[:browser]} #{tests.join(",")}"))
+       when "error"
+         report(BrowserCheckBroke.new("The browser check broke in #{description}: #{error}"), context.merge(grouping_hash: "BrowserCheckBroke"))
+       when "load_failed"
+         report(AppDidNotLoad.new("The app did not load in #{description}: #{error}"), context.merge(grouping_hash: "AppDidNotLoad"))
+       end
+     end
+- subject: BrowserReportJob#alert
+  kind: same-answer
+  why: >-
+    perform builds `context` itself, with every key: browser, major, os, device, tests and user_agent.
+    `major` can be nil, but its key is always there. So `fetch` finds every key that `[]` reads, and gives
+    the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def alert(result, tests, error, context)
+       description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+       case result
+       when "failed"
+    -    report(UnsupportedBrowserSeen.new("#{description} failed the browser check: #{tests.join(", ")}"), context.merge(grouping_hash: "UnsupportedBrowserSeen #{context[:browser]} #{tests.join(",")}"))
+    +    report(UnsupportedBrowserSeen.new("#{description} failed the browser check: #{tests.join(", ")}"), context.merge(grouping_hash: "UnsupportedBrowserSeen #{context.fetch(:browser)} #{tests.join(",")}"))
+       when "error"
+         report(BrowserCheckBroke.new("The browser check broke in #{description}: #{error}"), context.merge(grouping_hash: "BrowserCheckBroke"))
+       when "load_failed"
+         report(AppDidNotLoad.new("The app did not load in #{description}: #{error}"), context.merge(grouping_hash: "AppDidNotLoad"))
+       end
+     end
+- subject: BrowserReportJob#alert
+  kind: same-answer
+  why: >-
+    perform builds `context` itself, with every key: browser, major, os, device, tests and user_agent.
+    `major` can be nil, but its key is always there. So `fetch` finds every key that `[]` reads, and gives
+    the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def alert(result, tests, error, context)
+    -  description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+    +  description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context[:os]} (#{context.fetch(:device)})"
+       case result
+       when "failed"
+         report(UnsupportedBrowserSeen.new("#{description} failed the browser check: #{tests.join(", ")}"), context.merge(grouping_hash: "UnsupportedBrowserSeen #{context[:browser]} #{tests.join(",")}"))
+       when "error"
+         report(BrowserCheckBroke.new("The browser check broke in #{description}: #{error}"), context.merge(grouping_hash: "BrowserCheckBroke"))
+       when "load_failed"
+         report(AppDidNotLoad.new("The app did not load in #{description}: #{error}"), context.merge(grouping_hash: "AppDidNotLoad"))
+       end
+     end
+- subject: BrowserReportJob#alert
+  kind: same-answer
+  why: >-
+    perform builds `context` itself, with every key: browser, major, os, device, tests and user_agent.
+    `major` can be nil, but its key is always there. So `fetch` finds every key that `[]` reads, and gives
+    the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def alert(result, tests, error, context)
+    -  description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+    +  description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context.fetch(:os)} (#{context[:device]})"
+       case result
+       when "failed"
+         report(UnsupportedBrowserSeen.new("#{description} failed the browser check: #{tests.join(", ")}"), context.merge(grouping_hash: "UnsupportedBrowserSeen #{context[:browser]} #{tests.join(",")}"))
+       when "error"
+         report(BrowserCheckBroke.new("The browser check broke in #{description}: #{error}"), context.merge(grouping_hash: "BrowserCheckBroke"))
+       when "load_failed"
+         report(AppDidNotLoad.new("The app did not load in #{description}: #{error}"), context.merge(grouping_hash: "AppDidNotLoad"))
+       end
+     end
+- subject: BrowserReportJob#alert
+  kind: same-answer
+  why: >-
+    perform builds `context` itself, with every key: browser, major, os, device, tests and user_agent.
+    `major` can be nil, but its key is always there. So `fetch` finds every key that `[]` reads, and gives
+    the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def alert(result, tests, error, context)
+    -  description = "#{[context[:browser], context[:major]].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+    +  description = "#{[context[:browser], context.fetch(:major)].compact.join(" ")} on #{context[:os]} (#{context[:device]})"
+       case result
+       when "failed"
+         report(UnsupportedBrowserSeen.new("#{description} failed the browser check: #{tests.join(", ")}"), context.merge(grouping_hash: "UnsupportedBrowserSeen #{context[:browser]} #{tests.join(",")}"))
+       when "error"
+         report(BrowserCheckBroke.new("The browser check broke in #{description}: #{error}"), context.merge(grouping_hash: "BrowserCheckBroke"))
+       when "load_failed"
+         report(AppDidNotLoad.new("The app did not load in #{description}: #{error}"), context.merge(grouping_hash: "AppDidNotLoad"))
+       end
+     end

@@ -1,0 +1,96 @@
+- subject: ResidentNameShortener#short
+  kind: same-answer
+  why: >-
+    Both are Strings: the names come from `Resident.pluck(:name)` and `name` is a resident's name. For two
+    Strings `eql?` and `==` give the same answer.
+  diff: |
+    @@ -1,24 +1,24 @@
+     def short(name)
+       if name.blank?
+         return ""
+       end
+       first = first_word(name)
+       last = last_word(name)
+       if last.nil?
+         return name
+       end
+       same_first = @names.select { |n|
+         same?(first_word(n), first)
+       }
+       if same_first.one?
+         return first
+       end
+       initial_unique = same_first.none? { |n|
+    -    n != name && same?(last_word(n)&.slice(0), last[0])
+    +    !n.eql?(name) && same?(last_word(n)&.slice(0), last[0])
+       }
+       if initial_unique
+         "#{first} #{last[0]}"
+       else
+         name
+       end
+     end
+- subject: ResidentNameShortener#short
+  kind: same-answer
+  why: >-
+    `last` is a String, and ActiveSupport adds `String#at`, which returns `self[position]`, so `at(0)` gives
+    the same first letter as `[0]`.
+  diff: |
+    @@ -1,24 +1,24 @@
+     def short(name)
+       if name.blank?
+         return ""
+       end
+       first = first_word(name)
+       last = last_word(name)
+       if last.nil?
+         return name
+       end
+       same_first = @names.select { |n|
+         same?(first_word(n), first)
+       }
+       if same_first.one?
+         return first
+       end
+       initial_unique = same_first.none? { |n|
+         n != name && same?(last_word(n)&.slice(0), last[0])
+       }
+       if initial_unique
+    -    "#{first} #{last[0]}"
+    +    "#{first} #{last.at(0)}"
+       else
+         name
+       end
+     end
+- subject: ResidentNameShortener#short
+  kind: same-answer
+  why: >-
+    `last` is a String, and ActiveSupport adds `String#at`, which returns `self[position]`, so `at(0)` gives
+    the same first letter as `[0]`.
+  diff: |
+    @@ -1,24 +1,24 @@
+     def short(name)
+       if name.blank?
+         return ""
+       end
+       first = first_word(name)
+       last = last_word(name)
+       if last.nil?
+         return name
+       end
+       same_first = @names.select { |n|
+         same?(first_word(n), first)
+       }
+       if same_first.one?
+         return first
+       end
+       initial_unique = same_first.none? { |n|
+    -    n != name && same?(last_word(n)&.slice(0), last[0])
+    +    n != name && same?(last_word(n)&.slice(0), last.at(0))
+       }
+       if initial_unique
+         "#{first} #{last[0]}"
+       else
+         name
+       end
+     end

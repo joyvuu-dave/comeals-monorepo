@@ -1,0 +1,30 @@
+- subject: MealCorrecting::Result#fingerprint
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no format it uses "F", the same as `to_s("F")`, and
+    interpolation calls `to_s`. So the text is the same, and the new example that pins the exact digest
+    passes with this change.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def fingerprint
+       amounts = changes.sort.map { |id, amount|
+    -    "#{id}:#{amount.to_s("F")}"
+    +    "#{id}:#{amount.to_s}"
+       }
+       Digest::SHA256.hexdigest([edits.to_json, amounts.join(",")].join("|"))
+     end
+- subject: MealCorrecting::Result#fingerprint
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no format it uses "F", the same as `to_s("F")`, and
+    interpolation calls `to_s`. So the text is the same, and the new example that pins the exact digest
+    passes with this change.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def fingerprint
+       amounts = changes.sort.map { |id, amount|
+    -    "#{id}:#{amount.to_s("F")}"
+    +    "#{id}:#{amount}"
+       }
+       Digest::SHA256.hexdigest([edits.to_json, amounts.join(",")].join("|"))
+     end

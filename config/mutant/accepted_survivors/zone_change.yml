@@ -1,0 +1,48 @@
+- subject: ZoneChange#initialize
+  kind: same-answer
+  why: >-
+    The variable is read only through `||=`, and Ruby reads an instance variable that was never set as nil,
+    the same nil this line set.
+  diff: |
+    @@ -1,6 +1,5 @@
+     def initialize(community, zone)
+       @old_zone = T.let(T.must(ActiveSupport::TimeZone[T.must(community.timezone)]), ActiveSupport::TimeZone)
+       @new_zone = T.let(T.must(ActiveSupport::TimeZone[zone]), ActiveSupport::TimeZone)
+       @timed = T.let(nil, T.nilable(T::Array[[String, T.nilable(String), Time, Time]]))
+    -  @all_day_starts = T.let(nil, T.nilable(T::Array[Time]))
+     end
+- subject: ZoneChange#initialize
+  kind: same-answer
+  why: >-
+    The variable is read only through `||=`, and Ruby reads an instance variable that was never set as nil,
+    the same nil this line set.
+  diff: |
+    @@ -1,6 +1,5 @@
+     def initialize(community, zone)
+       @old_zone = T.let(T.must(ActiveSupport::TimeZone[T.must(community.timezone)]), ActiveSupport::TimeZone)
+       @new_zone = T.let(T.must(ActiveSupport::TimeZone[zone]), ActiveSupport::TimeZone)
+    -  @timed = T.let(nil, T.nilable(T::Array[[String, T.nilable(String), Time, Time]]))
+       @all_day_starts = T.let(nil, T.nilable(T::Array[Time]))
+     end
+- subject: ZoneChange#moves?
+  kind: same-answer
+  why: >-
+    `utc_offset` returns a small Integer. For two small Integers `equal?`, `eql?` and `==` give the same
+    answer.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def moves?(time)
+    -  time.in_time_zone(@old_zone).utc_offset != time.in_time_zone(@new_zone).utc_offset
+    +  !time.in_time_zone(@old_zone).utc_offset.equal?(time.in_time_zone(@new_zone).utc_offset)
+     end
+- subject: ZoneChange#moves?
+  kind: same-answer
+  why: >-
+    `utc_offset` returns a small Integer. For two small Integers `equal?`, `eql?` and `==` give the same
+    answer.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def moves?(time)
+    -  time.in_time_zone(@old_zone).utc_offset != time.in_time_zone(@new_zone).utc_offset
+    +  !time.in_time_zone(@old_zone).utc_offset.eql?(time.in_time_zone(@new_zone).utc_offset)
+     end

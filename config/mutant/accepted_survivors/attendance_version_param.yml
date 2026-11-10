@@ -1,0 +1,86 @@
+- subject: AttendanceVersionParam.from_params
+  kind: same-answer
+  why: >-
+    Ruby has no subclass of Integer, and a request parameter that is a number is a plain Integer, so
+    `is_a?(Integer)` and `instance_of?(Integer)` give the same answer.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.from_params(params)
+       raw = params[:attendance_version]
+       if raw.nil?
+         return nil
+       end
+    -  if raw.is_a?(Integer) && raw.to_s.match?(DIGITS)
+    +  if raw.instance_of?(Integer) && raw.to_s.match?(DIGITS)
+         return raw
+       end
+       if raw.is_a?(String) && raw.match?(DIGITS)
+         return Integer(raw, 10)
+       end
+       REFUSAL
+     end
+- subject: AttendanceVersionParam.from_params
+  kind: same-answer
+  why: >-
+    The value comes from the request parameters, and Rails gives a text parameter as a plain String, never a
+    subclass of String, so `is_a?(String)` and `instance_of?(String)` give the same answer.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.from_params(params)
+       raw = params[:attendance_version]
+       if raw.nil?
+         return nil
+       end
+       if raw.is_a?(Integer) && raw.to_s.match?(DIGITS)
+         return raw
+       end
+    -  if raw.is_a?(String) && raw.match?(DIGITS)
+    +  if raw.instance_of?(String) && raw.match?(DIGITS)
+         return Integer(raw, 10)
+       end
+       REFUSAL
+     end
+- subject: AttendanceVersionParam.from_params
+  kind: same-answer
+  why: >-
+    The text has just matched DIGITS: only digits, with no leading zero unless it is the single digit 0, and
+    no prefix like 0x. Ruby reads such text as a base 10 number whatever base it is given, so `Integer(raw)`
+    and `Integer(raw, 0)` give the same number as `Integer(raw, 10)`.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.from_params(params)
+       raw = params[:attendance_version]
+       if raw.nil?
+         return nil
+       end
+       if raw.is_a?(Integer) && raw.to_s.match?(DIGITS)
+         return raw
+       end
+       if raw.is_a?(String) && raw.match?(DIGITS)
+    -    return Integer(raw, 10)
+    +    return Integer(raw, 0)
+       end
+       REFUSAL
+     end
+- subject: AttendanceVersionParam.from_params
+  kind: same-answer
+  why: >-
+    The text has just matched DIGITS: only digits, with no leading zero unless it is the single digit 0, and
+    no prefix like 0x. Ruby reads such text as a base 10 number whatever base it is given, so `Integer(raw)`
+    and `Integer(raw, 0)` give the same number as `Integer(raw, 10)`.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.from_params(params)
+       raw = params[:attendance_version]
+       if raw.nil?
+         return nil
+       end
+       if raw.is_a?(Integer) && raw.to_s.match?(DIGITS)
+         return raw
+       end
+       if raw.is_a?(String) && raw.match?(DIGITS)
+    -    return Integer(raw, 10)
+    +    return Integer(raw)
+       end
+       REFUSAL
+     end

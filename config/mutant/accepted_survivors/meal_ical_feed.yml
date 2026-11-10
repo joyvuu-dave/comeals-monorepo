@@ -1,0 +1,76 @@
+- subject: MealIcalFeed#initialize
+  kind: same-answer
+  why: >-
+    Each of the 15 zones in Community::SUPPORTED_TIMEZONES gives the same VTIMEZONE text for 2017-06-01,
+    2017-06-02, 2017-05-01 and 2017-07-01 (checked with tzinfo on 2026-11-10): in none of them do the rules
+    change between those days. A zone where they do, such as America/Santiago on 2017-05-13, is not one a
+    community can choose.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def initialize(community, calendar_name:, feed:)
+       require("icalendar/tzinfo")
+       @community = community
+       @feed = feed
+       @tzid = community.timezone
+       @calendar = Icalendar::Calendar.new
+    -  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1)))
+    +  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6)))
+       @calendar.x_wr_calname=calendar_name
+     end
+- subject: MealIcalFeed#initialize
+  kind: same-answer
+  why: >-
+    Each of the 15 zones in Community::SUPPORTED_TIMEZONES gives the same VTIMEZONE text for 2017-06-01,
+    2017-06-02, 2017-05-01 and 2017-07-01 (checked with tzinfo on 2026-11-10): in none of them do the rules
+    change between those days. A zone where they do, such as America/Santiago on 2017-05-13, is not one a
+    community can choose.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def initialize(community, calendar_name:, feed:)
+       require("icalendar/tzinfo")
+       @community = community
+       @feed = feed
+       @tzid = community.timezone
+       @calendar = Icalendar::Calendar.new
+    -  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1)))
+    +  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 5, 1)))
+       @calendar.x_wr_calname=calendar_name
+     end
+- subject: MealIcalFeed#initialize
+  kind: same-answer
+  why: >-
+    Each of the 15 zones in Community::SUPPORTED_TIMEZONES gives the same VTIMEZONE text for 2017-06-01,
+    2017-06-02, 2017-05-01 and 2017-07-01 (checked with tzinfo on 2026-11-10): in none of them do the rules
+    change between those days. A zone where they do, such as America/Santiago on 2017-05-13, is not one a
+    community can choose.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def initialize(community, calendar_name:, feed:)
+       require("icalendar/tzinfo")
+       @community = community
+       @feed = feed
+       @tzid = community.timezone
+       @calendar = Icalendar::Calendar.new
+    -  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1)))
+    +  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 7, 1)))
+       @calendar.x_wr_calname=calendar_name
+     end
+- subject: MealIcalFeed#initialize
+  kind: same-answer
+  why: >-
+    Each of the 15 zones in Community::SUPPORTED_TIMEZONES gives the same VTIMEZONE text for 2017-06-01,
+    2017-06-02, 2017-05-01 and 2017-07-01 (checked with tzinfo on 2026-11-10): in none of them do the rules
+    change between those days. A zone where they do, such as America/Santiago on 2017-05-13, is not one a
+    community can choose.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def initialize(community, calendar_name:, feed:)
+       require("icalendar/tzinfo")
+       @community = community
+       @feed = feed
+       @tzid = community.timezone
+       @calendar = Icalendar::Calendar.new
+    -  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 1)))
+    +  @calendar.add_timezone(TZInfo::Timezone.get(@tzid).ical_timezone(DateTime.new(2017, 6, 2)))
+       @calendar.x_wr_calname=calendar_name
+     end
