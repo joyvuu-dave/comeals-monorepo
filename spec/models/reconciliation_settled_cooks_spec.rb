@@ -60,6 +60,19 @@ RSpec.describe Reconciliation do
     expect(settle!(cutoff: latest).settled_cooks_by_meal).to eq(later.id => cooks.values_at(1, 3, 0, 2))
   end
 
+  # The dinners are made latest first, so the order they were made in is
+  # the reverse of their dates.
+  it 'lists the dinners a cook cooked by date, not in the order they were made (dinners_cooked_by)' do
+    dinners = [latest, latest - 1, latest - 2].map do |date|
+      create(:meal, community: community, date: date).tap do |dinner|
+        create(:bill, meal: dinner, resident: ann, community: community, amount: BigDecimal('10'))
+        create(:meal_resident, meal: dinner, resident: eater, community: community)
+      end
+    end
+
+    expect(settle!(cutoff: latest).dinners_cooked_by(ann).map(&:meal)).to eq(dinners.reverse)
+  end
+
   it 'stays as it settled after a correction changes a cost, removes a cook and adds one' do
     correct('Wrong cooks') do |edits|
       edits.cost(ann, amount: BigDecimal('25'), no_cost: false)

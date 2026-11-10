@@ -1,0 +1,129 @@
+- subject: DinnerCancelling.cancel
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records, with the same FOR UPDATE lock, and return the same Array.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def self.cancel(meal_ids)
+    -  meals = Meal.where(id: meal_ids).order(:id).lock.to_a
+    +  meals = Meal.where(id: meal_ids).order(:id).lock.to_ary
+       with_a_cook = Bill.where(meal_id: meals.map(&:id)).distinct.pluck(:meal_id).to_set
+       cancelled = T.let([], T::Array[Meal])
+       left_alone = T.let([], T::Array[LeftAlone])
+       meals.each { |meal|
+         reason = reason_to_leave(meal, with_a_cook)
+         if reason
+           left_alone << LeftAlone.new(meal:, reason:)
+         else
+           cancelled << meal
+         end
+       }
+       cancelled.each(&:cancel!)
+       Result.new(cancelled:, left_alone:, gone: meal_ids.size - meals.size)
+     end
+
+- subject: DinnerCancelling.cancel
+  kind: same-answer
+  why: >-
+    The relation is loaded once, with its FOR UPDATE lock, the first time
+    meals.map runs on the next line. After that each, map and size all read
+    the same loaded records, so the locks, the lists and the gone count are
+    the same.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def self.cancel(meal_ids)
+    -  meals = Meal.where(id: meal_ids).order(:id).lock.to_a
+    +  meals = Meal.where(id: meal_ids).order(:id).lock
+       with_a_cook = Bill.where(meal_id: meals.map(&:id)).distinct.pluck(:meal_id).to_set
+       cancelled = T.let([], T::Array[Meal])
+       left_alone = T.let([], T::Array[LeftAlone])
+       meals.each { |meal|
+         reason = reason_to_leave(meal, with_a_cook)
+         if reason
+           left_alone << LeftAlone.new(meal:, reason:)
+         else
+           cancelled << meal
+         end
+       }
+       cancelled.each(&:cancel!)
+       Result.new(cancelled:, left_alone:, gone: meal_ids.size - meals.size)
+     end
+
+- subject: DinnerCancelling.cancel
+  kind: same-answer
+  why: >-
+    each returns the list it was called on, so meals.each(&:id) is the list of
+    meals. Rails turns records in a where hash into their ids, so the SQL is
+    the same as with meals.map(&:id).
+  diff: |
+    @@ -1,16 +1,16 @@
+     def self.cancel(meal_ids)
+       meals = Meal.where(id: meal_ids).order(:id).lock.to_a
+    -  with_a_cook = Bill.where(meal_id: meals.map(&:id)).distinct.pluck(:meal_id).to_set
+    +  with_a_cook = Bill.where(meal_id: meals.each(&:id)).distinct.pluck(:meal_id).to_set
+       cancelled = T.let([], T::Array[Meal])
+       left_alone = T.let([], T::Array[LeftAlone])
+       meals.each { |meal|
+         reason = reason_to_leave(meal, with_a_cook)
+         if reason
+           left_alone << LeftAlone.new(meal:, reason:)
+         else
+           cancelled << meal
+         end
+       }
+       cancelled.each(&:cancel!)
+       Result.new(cancelled:, left_alone:, gone: meal_ids.size - meals.size)
+     end
+
+- subject: DinnerCancelling.cancel
+  kind: same-answer
+  why: >-
+    Rails turns records in a where hash into their ids, so meal_id: meals
+    gives the same SQL as meal_id: meals.map(&:id).
+  diff: |
+    @@ -1,16 +1,16 @@
+     def self.cancel(meal_ids)
+       meals = Meal.where(id: meal_ids).order(:id).lock.to_a
+    -  with_a_cook = Bill.where(meal_id: meals.map(&:id)).distinct.pluck(:meal_id).to_set
+    +  with_a_cook = Bill.where(meal_id: meals).distinct.pluck(:meal_id).to_set
+       cancelled = T.let([], T::Array[Meal])
+       left_alone = T.let([], T::Array[LeftAlone])
+       meals.each { |meal|
+         reason = reason_to_leave(meal, with_a_cook)
+         if reason
+           left_alone << LeftAlone.new(meal:, reason:)
+         else
+           cancelled << meal
+         end
+       }
+       cancelled.each(&:cancel!)
+       Result.new(cancelled:, left_alone:, gone: meal_ids.size - meals.size)
+     end
+
+- subject: DinnerCancelling.cancel
+  kind: same-answer
+  why: >-
+    with_a_cook is read only by with_a_cook.include?(meal.id) for the meals in
+    this same list. Reading the meal ids of every bill, not just the bills of
+    these meals, adds only ids that are never asked about, so every answer is
+    the same.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def self.cancel(meal_ids)
+       meals = Meal.where(id: meal_ids).order(:id).lock.to_a
+    -  with_a_cook = Bill.where(meal_id: meals.map(&:id)).distinct.pluck(:meal_id).to_set
+    +  with_a_cook = Bill.distinct.pluck(:meal_id).to_set
+       cancelled = T.let([], T::Array[Meal])
+       left_alone = T.let([], T::Array[LeftAlone])
+       meals.each { |meal|
+         reason = reason_to_leave(meal, with_a_cook)
+         if reason
+           left_alone << LeftAlone.new(meal:, reason:)
+         else
+           cancelled << meal
+         end
+       }
+       cancelled.each(&:cancel!)
+       Result.new(cancelled:, left_alone:, gone: meal_ids.size - meals.size)
+     end

@@ -1,0 +1,49 @@
+- subject: SettlementMarkHelper#settlement_mark_words
+  kind: same-answer
+  why: >-
+    who is put inside a string with #{who}. nil inside #{} gives an empty
+    string, the same as ''.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def settlement_mark_words(mark)
+       if mark.nil?
+         return ""
+       end
+       parts = [tag.strong(mark.words)]
+       if mark.note
+         parts << tag.div(mark.note)
+       end
+       who = if names_admins?
+         "by #{mark.admin_user.email}, "
+       else
+    -    ""
+    +    nil
+       end
+       parts << tag.div("#{who}#{mark.created_at.strftime("%b %-d, %Y")}", class: "mark-by")
+       safe_join(parts, " ")
+     end
+
+- subject: SettlementMarkHelper#settlement_mark_words
+  kind: same-answer
+  why: >-
+    With the else removed, the if gives nil when names_admins? is false. who
+    is put inside a string with #{who}, and nil inside #{} gives an empty
+    string, the same as ''.
+  diff: |
+    @@ -1,16 +1,14 @@
+     def settlement_mark_words(mark)
+       if mark.nil?
+         return ""
+       end
+       parts = [tag.strong(mark.words)]
+       if mark.note
+         parts << tag.div(mark.note)
+       end
+       who = if names_admins?
+         "by #{mark.admin_user.email}, "
+    -  else
+    -    ""
+       end
+       parts << tag.div("#{who}#{mark.created_at.strftime("%b %-d, %Y")}", class: "mark-by")
+       safe_join(parts, " ")
+     end

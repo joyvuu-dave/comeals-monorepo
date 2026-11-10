@@ -1,0 +1,139 @@
+- subject: LargestRemainderSplit.call
+  kind: same-answer
+  only_on: linux
+  why: >-
+    On Linux, Ruby's sort uses the C library's sort, which keeps tied items in
+    the order given (checked with glibc 2.39). The order given is the
+    position, so dropping the tie-break by position gives the same ranking and
+    the same shares. On macOS Ruby uses its own sort, and the example with
+    eight and twelve tied shares fails on this mutation there.
+  diff: |
+    @@ -1,22 +1,18 @@
+     def self.call(total, weights)
+       whole = check!(total, weights)
+       shares = weights.map { |weight|
+         (total * weight) / whole
+       }
+       dropped = T.let(Array.new(weights.size) { |index|
+         (total * T.must(weights[index])) - (T.must(shares[index]) * whole)
+       }, T::Array[Integer])
+       leftover = total - shares.sum
+       ranked = shares.each_index.sort { |a, b|
+         by_dropped = T.must(dropped[b]) <=> T.must(dropped[a])
+    -    if by_dropped.zero?
+    -      a <=> b
+    -    else
+    -      by_dropped
+    -    end
+    +    by_dropped
+       }
+       ranked.first(leftover).each { |index|
+         shares[index] = T.must(shares[index]) + 1
+       }
+       shares
+     end
+
+- subject: LargestRemainderSplit.call
+  kind: same-answer
+  only_on: linux
+  why: >-
+    On Linux, Ruby's sort uses the C library's sort, which keeps tied items in
+    the order given (checked with glibc 2.39). The order given is the
+    position, so never using the tie-break by position gives the same ranking
+    and the same shares. On macOS Ruby uses its own sort, and the example with
+    eight and twelve tied shares fails on this mutation there.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def self.call(total, weights)
+       whole = check!(total, weights)
+       shares = weights.map { |weight|
+         (total * weight) / whole
+       }
+       dropped = T.let(Array.new(weights.size) { |index|
+         (total * T.must(weights[index])) - (T.must(shares[index]) * whole)
+       }, T::Array[Integer])
+       leftover = total - shares.sum
+       ranked = shares.each_index.sort { |a, b|
+         by_dropped = T.must(dropped[b]) <=> T.must(dropped[a])
+    -    if by_dropped.zero?
+    +    if false
+           a <=> b
+         else
+           by_dropped
+         end
+       }
+       ranked.first(leftover).each { |index|
+         shares[index] = T.must(shares[index]) + 1
+       }
+       shares
+     end
+
+- subject: LargestRemainderSplit.call
+  kind: same-answer
+  only_on: linux
+  why: >-
+    On Linux, Ruby's sort uses the C library's sort, which keeps tied items in
+    the order given (checked with glibc 2.39). The order given is the
+    position, so never using the tie-break by position gives the same ranking
+    and the same shares. On macOS Ruby uses its own sort, and the example with
+    eight and twelve tied shares fails on this mutation there.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def self.call(total, weights)
+       whole = check!(total, weights)
+       shares = weights.map { |weight|
+         (total * weight) / whole
+       }
+       dropped = T.let(Array.new(weights.size) { |index|
+         (total * T.must(weights[index])) - (T.must(shares[index]) * whole)
+       }, T::Array[Integer])
+       leftover = total - shares.sum
+       ranked = shares.each_index.sort { |a, b|
+         by_dropped = T.must(dropped[b]) <=> T.must(dropped[a])
+    -    if by_dropped.zero?
+    +    if nil
+           a <=> b
+         else
+           by_dropped
+         end
+       }
+       ranked.first(leftover).each { |index|
+         shares[index] = T.must(shares[index]) + 1
+       }
+       shares
+     end
+
+- subject: LargestRemainderSplit.call
+  kind: same-answer
+  only_on: linux
+  why: >-
+    With the if removed, the block returns by_dropped, the value of the
+    assignment. On Linux, Ruby's sort uses the C library's sort, which keeps
+    tied items in the order given (checked with glibc 2.39). The order given
+    is the position, so the ranking and the shares are the same. On macOS Ruby
+    uses its own sort, and the example with eight and twelve tied shares fails
+    on this mutation there.
+  diff: |
+    @@ -1,22 +1,17 @@
+     def self.call(total, weights)
+       whole = check!(total, weights)
+       shares = weights.map { |weight|
+         (total * weight) / whole
+       }
+       dropped = T.let(Array.new(weights.size) { |index|
+         (total * T.must(weights[index])) - (T.must(shares[index]) * whole)
+       }, T::Array[Integer])
+       leftover = total - shares.sum
+       ranked = shares.each_index.sort { |a, b|
+         by_dropped = T.must(dropped[b]) <=> T.must(dropped[a])
+    -    if by_dropped.zero?
+    -      a <=> b
+    -    else
+    -      by_dropped
+    -    end
+       }
+       ranked.first(leftover).each { |index|
+         shares[index] = T.must(shares[index]) + 1
+       }
+       shares
+     end

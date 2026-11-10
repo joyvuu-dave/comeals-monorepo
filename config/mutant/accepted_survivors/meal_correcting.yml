@@ -1,0 +1,132 @@
+- subject: MealCorrecting.save!
+  kind: same-answer
+  why: >-
+    fingerprint is a String (the sig says so) and Result#fingerprint returns a
+    String. For two Strings, eql? gives the same answer as ==.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.save!(meal, by:, reason:, fingerprint: nil, &blk)
+       RetryOnConflict.call {
+         Meal.transaction(requires_new: true) {
+           correction = MealCorrection.new(meal:, admin_user: by, reason:)
+           correction.validate!
+           result = Audited.audit_class.as_user(by) {
+             apply(meal, &blk)
+           }
+    -      if fingerprint && result.fingerprint != fingerprint
+    +      if fingerprint && !result.fingerprint.eql?(fingerprint)
+             raise(Changed, "The dinner changed after the preview was made, so nothing was saved.")
+           end
+           record!(correction, result)
+         }
+       }
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    loaded returns one meal, and both callers give it to MealLedger (one by
+    way of SettledDinnerDifference.for, which reads only its id besides),
+    which reads meal.guests. Without the preload, Rails loads the same guest
+    rows when guests is first read, so the lines are the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).preload(:bills, :meal_residents).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    preload ignores a nil argument, so this is the same as leaving guests out.
+    loaded returns one meal, and Rails loads the same guest rows when
+    MealLedger first reads meal.guests, so the lines are the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).preload(:bills, :meal_residents, nil).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    loaded returns one meal, and both callers give it to MealLedger (one by
+    way of SettledDinnerDifference.for, which reads only its id besides),
+    which reads meal.meal_residents. Without the preload, Rails loads the same
+    rows when meal_residents is first read, so the lines are the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).preload(:bills, :guests).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    preload ignores a nil argument, so this is the same as leaving
+    meal_residents out. loaded returns one meal, and Rails loads the same rows
+    when MealLedger first reads meal.meal_residents, so the lines are the
+    same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).preload(:bills, nil, :guests).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    loaded returns one meal, and both callers give it to MealLedger (one by
+    way of SettledDinnerDifference.for, which reads only its id besides),
+    which reads meal.bills. Without the preload, Rails loads the same bills
+    when bills is first read, so the lines are the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).preload(:meal_residents, :guests).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    preload ignores a nil argument, so this is the same as leaving bills out.
+    loaded returns one meal, and Rails loads the same bills when MealLedger
+    first reads meal.bills, so the lines are the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).preload(nil, :meal_residents, :guests).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    Rails turns a record in a where hash into its id, so id: meal gives the
+    same SQL as id: meal.id.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal).preload(:bills, :meal_residents, :guests).sole
+     end
+
+- subject: MealCorrecting.loaded
+  kind: same-answer
+  why: >-
+    loaded returns one meal, and both callers give it to MealLedger (one by
+    way of SettledDinnerDifference.for, which reads only its id besides),
+    which reads meal.bills, meal.meal_residents and meal.guests. Without the
+    preload, Rails loads the same rows when each is first read, so the lines
+    are the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.loaded(meal)
+    -  Meal.where(id: meal.id).preload(:bills, :meal_residents, :guests).sole
+    +  Meal.where(id: meal.id).sole
+     end

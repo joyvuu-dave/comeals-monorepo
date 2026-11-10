@@ -1,0 +1,296 @@
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    user comes from Audited.store. Nothing in app/ or lib/ sets it to a String
+    subclass: the controllers set a record, and only specs pass a plain String
+    name to as_user. For a plain String, instance_of?(String) and
+    is_a?(String) give the same answer.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+    -  who = if user.is_a?(String)
+    +  who = if user.instance_of?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    SettledMealHistory defines no constant named Audited, so Audited and
+    ::Audited are the same module.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+    -  user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+    +  user = ::Audited.store[:audited_user] || Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    SettledMealHistory defines no constant named Audited, so Audited and
+    ::Audited are the same module.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+    -  user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+    +  user = Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    SettledMealHistory defines no constant named Audited, so Audited and
+    ::Audited are the same module.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+    -  who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+    +  who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    SettledMealHistory defines no constant named Audited, so Audited and
+    ::Audited are the same module.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+    -  who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+    +  who.merge(request_uuid: Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    username has no default, so it is NULL, the same as username: nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+    -      { user_type: nil, user_id: nil, username: nil }
+    +      { user_type: nil, user_id: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    user_id has no default, so it is NULL, the same as user_id: nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+    -      { user_type: nil, user_id: nil, username: nil }
+    +      { user_type: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    user_type has no default, so it is NULL, the same as user_type: nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+    -      { user_type: nil, user_id: nil, username: nil }
+    +      { user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    user_type, user_id and username have no default, so all three are NULL,
+    the same as nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+    -      { user_type: nil, user_id: nil, username: nil }
+    +      {}
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    username has no default, so it is NULL, the same as username: nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+    -      { user_type: user.class.name, user_id: user.id, username: nil }
+    +      { user_type: user.class.name, user_id: user.id }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The hash goes only into insert_all!. Rails quotes a Class in SQL as its
+    name ('AdminUser'), so user_type is stored as the same text as
+    user.class.name.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+         { user_type: nil, user_id: nil, username: user }
+       else
+         if user
+    -      { user_type: user.class.name, user_id: user.id, username: nil }
+    +      { user_type: user.class, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    user_id has no default, so it is NULL, the same as user_id: nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+    -    { user_type: nil, user_id: nil, username: user }
+    +    { user_type: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end
+
+- subject: SettledMealHistory.writer
+  kind: same-answer
+  why: >-
+    The only caller, record, gives the same keys to every row of one
+    insert_all!. A column left out of insert_all! gets its default, and
+    user_type has no default, so it is NULL, the same as user_type: nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.writer
+       user = ::Audited.store[:audited_user] || ::Audited.store[:current_user]&.call
+       who = if user.is_a?(String)
+    -    { user_type: nil, user_id: nil, username: user }
+    +    { user_id: nil, username: user }
+       else
+         if user
+           { user_type: user.class.name, user_id: user.id, username: nil }
+         else
+           { user_type: nil, user_id: nil, username: nil }
+         end
+       end
+       who.merge(request_uuid: ::Audited.store[:current_request_uuid] || SecureRandom.uuid, remote_address: ::Audited.store[:current_remote_address])
+     end

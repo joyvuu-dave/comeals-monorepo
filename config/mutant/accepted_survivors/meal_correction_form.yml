@@ -1,0 +1,43 @@
+- subject: MealCorrectionForm#residents
+  kind: same-answer
+  why: >-
+    found.size and texts.size are both Integers. For two Integers, eql? gives
+    the same answer as ==.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def residents(raw)
+       texts = raw.map(&:to_s).reject(&:empty?).uniq
+       ids = texts.map { |text|
+         T.let(Integer(text, 10, exception: false), T.nilable(Integer))
+       }
+       found = Resident.where(id: ids).sort_by { |resident|
+         Rows.name_of(resident)
+       }
+    -  if found.size != texts.size
+    +  if !found.size.eql?(texts.size)
+         raise(Invalid, "The form named a resident who does not exist. #{CHANGED}")
+       end
+       found
+     end
+
+- subject: MealCorrectionForm#residents
+  kind: same-answer
+  why: >-
+    found.size and texts.size are both small Integers, and Ruby keeps one
+    object for each small Integer. So equal? gives the same answer as ==.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def residents(raw)
+       texts = raw.map(&:to_s).reject(&:empty?).uniq
+       ids = texts.map { |text|
+         T.let(Integer(text, 10, exception: false), T.nilable(Integer))
+       }
+       found = Resident.where(id: ids).sort_by { |resident|
+         Rows.name_of(resident)
+       }
+    -  if found.size != texts.size
+    +  if !found.size.equal?(texts.size)
+         raise(Invalid, "The form named a resident who does not exist. #{CHANGED}")
+       end
+       found
+     end

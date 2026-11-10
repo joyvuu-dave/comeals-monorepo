@@ -1,0 +1,65 @@
+- subject: MoneyFieldHelper#money_field_value
+  kind: same-answer
+  why: >-
+    Both calls run ActiveSupport's number_to_rounded with the same number and
+    precision. The view helper only marks the result HTML safe. The value is
+    digits, a dot and maybe a minus sign, so the form field shows the same
+    text, escaped or not.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def money_field_value(amount, blank_when_zero: false)
+       if amount.nil?
+         return nil
+       end
+       if blank_when_zero && amount.zero?
+         return nil
+       end
+       unless amount == amount.round(2)
+         return amount.to_s("F")
+       end
+    -  ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2)
+    +  self.number_to_rounded(amount, precision: 2)
+     end
+
+- subject: MoneyFieldHelper#money_field_value
+  kind: same-answer
+  why: >-
+    The two differ only for an amount with exactly two decimals and a
+    hundredths digit that is not zero, like 1.25. For that amount, to_s('F')
+    and number_to_rounded with precision 2 both give the same text, '1.25'.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def money_field_value(amount, blank_when_zero: false)
+       if amount.nil?
+         return nil
+       end
+       if blank_when_zero && amount.zero?
+         return nil
+       end
+    -  unless amount == amount.round(2)
+    +  unless amount == amount.round(1)
+         return amount.to_s("F")
+       end
+       ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2)
+     end
+
+- subject: MoneyFieldHelper#money_field_value
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no argument it uses the
+    'F' format. So to_s and to_s('F') give the same text.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def money_field_value(amount, blank_when_zero: false)
+       if amount.nil?
+         return nil
+       end
+       if blank_when_zero && amount.zero?
+         return nil
+       end
+       unless amount == amount.round(2)
+    -    return amount.to_s("F")
+    +    return amount.to_s
+       end
+       ActiveSupport::NumberHelper.number_to_rounded(amount, precision: 2)
+     end

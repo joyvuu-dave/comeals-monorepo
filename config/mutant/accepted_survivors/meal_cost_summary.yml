@@ -1,0 +1,55 @@
+- subject: MealCostSummary.for
+  kind: same-answer
+  why: >-
+    summary_for(meal) works only from the meal it is given. It never reads the
+    list passed to MealLedger.new, which only lines uses, so an empty list
+    gives the same summary.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.for(meal)
+       if meal.reconciled?
+         from_charges(meal)
+       else
+    -    MealLedger.new([meal]).summary_for(meal)
+    +    MealLedger.new([]).summary_for(meal)
+       end
+     end
+
+- subject: MealCostSummary.for
+  kind: same-answer
+  why: >-
+    summary_for(meal) works only from the meal it is given. It never reads the
+    list passed to MealLedger.new, which only lines uses, so a list with nil
+    in it gives the same summary.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.for(meal)
+       if meal.reconciled?
+         from_charges(meal)
+       else
+    -    MealLedger.new([meal]).summary_for(meal)
+    +    MealLedger.new([nil]).summary_for(meal)
+       end
+     end
+
+- subject: MealCostSummary.from_charges
+  kind: same-answer
+  why: >-
+    On an ActiveRecord association, to_ary is the same method as to_a. Both
+    load the records and return the same Array.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.from_charges(meal)
+    -  charges = meal.meal_charges.to_a
+    +  charges = meal.meal_charges.to_ary
+       first = charges.first
+       if first.nil?
+         return chargeless(meal)
+       end
+       credits = charges.select(&:credit?)
+       MealLedger::Summary.new(total_cost: credits.sum(BigDecimal("0")) { |credit|
+         T.must(credit.bill_amount)
+       }, effective_cost: credits.sum(BigDecimal("0")) { |credit|
+         T.must(credit.amount)
+       }, unit_cost: T.must(first.unit_cost), subsidized: charges.any?(&:subsidized?))
+     end

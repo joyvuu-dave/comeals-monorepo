@@ -1,0 +1,130 @@
+- subject: LedgerCheckFindingsTable#build
+  kind: same-answer
+  why: >-
+    The ids go into WHERE id IN (...). A nil in that list adds OR id IS NULL,
+    and residents.id is never NULL, so the same residents are loaded.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def build(run)
+       findings = findings_of(run)
+    -  residents = Resident.where(id: findings.filter_map(&:resident_id)).index_by(&:id)
+    +  residents = Resident.where(id: findings.map(&:resident_id)).index_by(&:id)
+       table_for(findings) {
+         column("Reconciliation", &:reconciliation)
+         column("Check") { |finding|
+           check_name(finding)
+         }
+         column("Resident") { |finding|
+           resident_cell(finding, residents)
+         }
+         column("Stored balance") { |finding|
+           stored_cell(finding)
+         }
+         column("What the check found") { |finding|
+           found_cell(finding)
+         }
+       }
+     end
+
+- subject: LedgerCheckFindingsTable#findings_of
+  kind: same-answer
+  why: >-
+    Every detail in run.details was written by LedgerVerification#detail,
+    which always sets the differences key (the production copy of 2026-10-20
+    has no stored detail at all). With the key there, fetch and [] give the
+    same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def findings_of(run)
+       run.details.flat_map { |detail|
+    -    detail["differences"].map { |difference|
+    +    detail.fetch("differences").map { |difference|
+           Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+         }
+       }
+     end
+
+- subject: LedgerCheckFindingsTable#findings_of
+  kind: same-answer
+  why: >-
+    Every difference in run.details was written by LedgerVerification, and
+    each of its three writers always sets the stored key, nil or not. With the
+    key there, fetch and [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def findings_of(run)
+       run.details.flat_map { |detail|
+         detail["differences"].map { |difference|
+    -      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+    +      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference.fetch("stored"), source: difference["source"])
+         }
+       }
+     end
+
+- subject: LedgerCheckFindingsTable#findings_of
+  kind: same-answer
+  why: >-
+    Every detail in run.details was written by LedgerVerification#detail,
+    which always sets the reconciliation_id key. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def findings_of(run)
+       run.details.flat_map { |detail|
+         detail["differences"].map { |difference|
+    -      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+    +      Finding.new(reconciliation: "##{detail.fetch("reconciliation_id")} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+         }
+       }
+     end
+
+- subject: LedgerCheckFindingsTable#findings_of
+  kind: same-answer
+  why: >-
+    Every difference in run.details was written by LedgerVerification, and
+    each of its three writers always sets the source key. With the key there,
+    fetch and [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def findings_of(run)
+       run.details.flat_map { |detail|
+         detail["differences"].map { |difference|
+    -      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+    +      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference.fetch("source"))
+         }
+       }
+     end
+
+- subject: LedgerCheckFindingsTable#findings_of
+  kind: same-answer
+  why: >-
+    Every difference in run.details was written by LedgerVerification, and
+    each of its three writers always sets the resident_id key, nil or not.
+    With the key there, fetch and [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def findings_of(run)
+       run.details.flat_map { |detail|
+         detail["differences"].map { |difference|
+    -      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+    +      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference.fetch("resident_id"), stored: difference["stored"], source: difference["source"])
+         }
+       }
+     end
+
+- subject: LedgerCheckFindingsTable#findings_of
+  kind: same-answer
+  why: >-
+    Every detail in run.details was written by LedgerVerification#detail,
+    which always sets the date key. With the key there, fetch and [] give the
+    same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def findings_of(run)
+       run.details.flat_map { |detail|
+         detail["differences"].map { |difference|
+    -      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail["date"]})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+    +      Finding.new(reconciliation: "##{detail["reconciliation_id"]} (#{detail.fetch("date")})", check: detail.fetch("check", "recompute"), meal_date: difference["meal_date"], resident_id: difference["resident_id"], stored: difference["stored"], source: difference["source"])
+         }
+       }
+     end

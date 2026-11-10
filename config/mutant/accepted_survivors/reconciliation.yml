@@ -1,0 +1,291 @@
+- subject: Reconciliation.settled_dinner_cooks
+  kind: same-answer
+  why: >-
+    Rails lets this text through order without Arel.sql, because it is only
+    table.column names and column names separated by commas. So the query has
+    the same ORDER BY.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.settled_dinner_cooks(reconciliations)
+       named = MealCorrection.cost_edits.where("meal_corrections.meal_id = bills.meal_id").where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
+       unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations, cancelled_at: nil }).where(named.arel.exists.not).select("meals.reconciliation_id", "bills.meal_id", "bills.resident_id")
+    -  first_edits = MealCorrection.cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations }).select(Arel.sql("DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id"), "meal_corrections.meal_id", MealCorrection::COOK_ID.as("cook_id"), MealCorrection::COST_BEFORE.as("cost_before")).order(Arel.sql("meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place"))
+    +  first_edits = MealCorrection.cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations }).select(Arel.sql("DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id"), "meal_corrections.meal_id", MealCorrection::COOK_ID.as("cook_id"), MealCorrection::COST_BEFORE.as("cost_before")).order("meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place")
+       were_cooks = MealCorrection.from(first_edits, :first_edits).where("jsonb_typeof(first_edits.cost_before) = 'object'").select("first_edits.reconciliation_id", "first_edits.meal_id", "first_edits.cook_id")
+       Arel::Nodes::Union.new(unnamed.arel, were_cooks.arel)
+     end
+
+- subject: Reconciliation.settled_dinner_cooks
+  kind: same-answer
+  why: >-
+    self is Reconciliation here. The relation is used only for its arel,
+    inside a UNION, and neither Reconciliation nor MealCorrection has a
+    default scope. So the SQL is the same: the FROM is first_edits either way,
+    and the model class is never used.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.settled_dinner_cooks(reconciliations)
+       named = MealCorrection.cost_edits.where("meal_corrections.meal_id = bills.meal_id").where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
+       unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations, cancelled_at: nil }).where(named.arel.exists.not).select("meals.reconciliation_id", "bills.meal_id", "bills.resident_id")
+       first_edits = MealCorrection.cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations }).select(Arel.sql("DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id"), "meal_corrections.meal_id", MealCorrection::COOK_ID.as("cook_id"), MealCorrection::COST_BEFORE.as("cost_before")).order(Arel.sql("meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place"))
+    -  were_cooks = MealCorrection.from(first_edits, :first_edits).where("jsonb_typeof(first_edits.cost_before) = 'object'").select("first_edits.reconciliation_id", "first_edits.meal_id", "first_edits.cook_id")
+    +  were_cooks = self.from(first_edits, :first_edits).where("jsonb_typeof(first_edits.cost_before) = 'object'").select("first_edits.reconciliation_id", "first_edits.meal_id", "first_edits.cook_id")
+       Arel::Nodes::Union.new(unnamed.arel, were_cooks.arel)
+     end
+
+- subject: Reconciliation.settled_dinner_cooks
+  kind: same-answer
+  why: >-
+    select does not check its text, so Arel.sql changes nothing here. The
+    query has the same SELECT.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.settled_dinner_cooks(reconciliations)
+       named = MealCorrection.cost_edits.where("meal_corrections.meal_id = bills.meal_id").where(MealCorrection::COOK_ID.eq(Bill.arel_table[:resident_id]))
+       unnamed = Bill.joins(:meal).where(meals: { reconciliation_id: reconciliations, cancelled_at: nil }).where(named.arel.exists.not).select("meals.reconciliation_id", "bills.meal_id", "bills.resident_id")
+    -  first_edits = MealCorrection.cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations }).select(Arel.sql("DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id"), "meal_corrections.meal_id", MealCorrection::COOK_ID.as("cook_id"), MealCorrection::COST_BEFORE.as("cost_before")).order(Arel.sql("meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place"))
+    +  first_edits = MealCorrection.cost_edits.joins(:meal).where(meals: { reconciliation_id: reconciliations }).select("DISTINCT ON (meal_corrections.meal_id, cook_id) meals.reconciliation_id", "meal_corrections.meal_id", MealCorrection::COOK_ID.as("cook_id"), MealCorrection::COST_BEFORE.as("cost_before")).order(Arel.sql("meal_corrections.meal_id, cook_id, meal_corrections.id, cost_edit.place"))
+       were_cooks = MealCorrection.from(first_edits, :first_edits).where("jsonb_typeof(first_edits.cost_before) = 'object'").select("first_edits.reconciliation_id", "first_edits.meal_id", "first_edits.cook_id")
+       Arel::Nodes::Union.new(unnamed.arel, were_cooks.arel)
+     end
+
+- subject: Reconciliation#settled_cooks_by_meal
+  kind: same-answer
+  why: >-
+    residents.name is NOT NULL, so name is always a String. For a String,
+    to_str and to_s both return the same text.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def settled_cooks_by_meal
+       rows = Arel::Nodes::TableAlias.new(self.class.settled_dinner_cooks(self.class.where(id:)), "dinner_cooks")
+       pairs = T.let(Resident.from(rows).pluck("dinner_cooks.meal_id", "dinner_cooks.resident_id"), T::Array[[Integer, Integer]])
+       residents = Resident.where(id: pairs.map(&:last)).index_by { |resident|
+         T.must(resident.id)
+       }
+       pairs.group_by(&:first).transform_values { |list|
+         list.map { |_, resident_id|
+           residents.fetch(resident_id)
+         }.sort_by { |resident|
+    -      resident.name.to_s
+    +      resident.name.to_str
+         }
+       }
+     end
+
+- subject: Reconciliation#settled_cooks_by_meal
+  kind: same-answer
+  why: >-
+    residents.name is NOT NULL, so name is always a String, and to_s on a
+    String returns the same text. So sort_by compares the same values.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def settled_cooks_by_meal
+       rows = Arel::Nodes::TableAlias.new(self.class.settled_dinner_cooks(self.class.where(id:)), "dinner_cooks")
+       pairs = T.let(Resident.from(rows).pluck("dinner_cooks.meal_id", "dinner_cooks.resident_id"), T::Array[[Integer, Integer]])
+       residents = Resident.where(id: pairs.map(&:last)).index_by { |resident|
+         T.must(resident.id)
+       }
+       pairs.group_by(&:first).transform_values { |list|
+         list.map { |_, resident_id|
+           residents.fetch(resident_id)
+         }.sort_by { |resident|
+    -      resident.name.to_s
+    +      resident.name
+         }
+       }
+     end
+
+- subject: Reconciliation#settled_cook?
+  kind: same-answer
+  why: >-
+    Rails turns a record in a where hash into its id, so resident_id: resident
+    gives the same SQL as resident_id: resident.id.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def settled_cook?(resident)
+       cooks = Arel::Nodes::TableAlias.new(self.class.settled_cooks(self.class.where(id:)), "settled_cooks")
+    -  Resident.from(cooks).exists?(settled_cooks: { resident_id: resident.id })
+    +  Resident.from(cooks).exists?(settled_cooks: { resident_id: resident })
+     end
+
+- subject: Reconciliation#settlement_balances
+  kind: same-answer
+  why: >-
+    allocate_to_cents returns BigDecimal values. With no values, the plain sum
+    is the Integer 0, and 0.zero? is true, the same as for BigDecimal 0. With
+    values, the sum is the same number.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def settlement_balances(ledger = settlement_ledger)
+       raw_balances = ledger.balances(T.must(community).residents.pluck(:id))
+       add_correction_lines!(raw_balances, MealCorrection.where(reconciliation_id: id))
+       add_correction_lines!(raw_balances, MealCorrection.where(meal_id: meals), sign: -1)
+       balances = Settlement.allocate_to_cents(raw_balances, reconciliation_id: id)
+    -  total = balances.values.sum(BigDecimal("0"))
+    +  total = balances.values.sum
+       unless total.zero?
+         raise("settlement_balances: books do not balance for reconciliation #{id}. " "Discrepancy: #{total}. This indicates a bug in Settlement.allocate_to_cents.")
+       end
+       balances
+     end
+
+- subject: Reconciliation#settlement_ledger
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def settlement_ledger
+    -  MealLedger.new(meals.with_attendees.preload(:bills, :meal_residents, :guests).to_a)
+    +  MealLedger.new(meals.with_attendees.preload(:bills, :meal_residents, :guests).to_ary)
+     end
+
+- subject: Reconciliation#unit_balances
+  kind: same-answer
+  why: >-
+    T.cast does no check when the code runs. It returns its first argument as
+    it is, so the type named inside it changes nothing.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def unit_balances
+       lines = reconciliation_balances
+       if records_who_moved_out?
+         lines = lines.where(lived_here: true)
+       end
+    -  grouped = T.cast(lines.joins(:unit).group("units.id", "units.name").sum(:amount), T::Hash[UnitKey, BigDecimal])
+    +  grouped = T.cast(lines.joins(:unit).group("units.id", "units.name").sum(:amount), T::Hash[UnitKey, nil])
+       result = T.let({}, T::Hash[UnitKey, BigDecimal])
+       T.must(community).units.order(:name).each { |unit|
+         key = T.must(unit.id), T.must(unit.name)
+         result[key] = grouped.fetch(key, BigDecimal("0"))
+       }
+       result
+     end
+
+- subject: Reconciliation#unit_balances
+  kind: same-answer
+  why: >-
+    T.cast does no check when the code runs. It returns its first argument as
+    it is, so the type named inside it changes nothing.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def unit_balances
+       lines = reconciliation_balances
+       if records_who_moved_out?
+         lines = lines.where(lived_here: true)
+       end
+    -  grouped = T.cast(lines.joins(:unit).group("units.id", "units.name").sum(:amount), T::Hash[UnitKey, BigDecimal])
+    +  grouped = T.cast(lines.joins(:unit).group("units.id", "units.name").sum(:amount), T::Hash[nil, BigDecimal])
+       result = T.let({}, T::Hash[UnitKey, BigDecimal])
+       T.must(community).units.order(:name).each { |unit|
+         key = T.must(unit.id), T.must(unit.name)
+         result[key] = grouped.fetch(key, BigDecimal("0"))
+       }
+       result
+     end
+
+- subject: Reconciliation#add_correction_lines!
+  kind: same-answer
+  why: >-
+    T.cast does no check when the code runs. It returns its first argument as
+    it is, so the type named inside it changes nothing.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def add_correction_lines!(raw, corrections, sign: 1)
+       lines = MealCorrectionLine.where(meal_correction_id: corrections).group(:resident_id).sum(:amount)
+    -  T.cast(lines, T::Hash[Integer, BigDecimal]).each { |resident_id, amount|
+    +  T.cast(lines, T::Hash[Integer, nil]).each { |resident_id, amount|
+         raw[resident_id] = raw.fetch(resident_id) + (sign * amount)
+       }
+     end
+
+- subject: Reconciliation#add_correction_lines!
+  kind: same-answer
+  why: >-
+    T.cast does no check when the code runs. It returns its first argument as
+    it is, so the type named inside it changes nothing.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def add_correction_lines!(raw, corrections, sign: 1)
+       lines = MealCorrectionLine.where(meal_correction_id: corrections).group(:resident_id).sum(:amount)
+    -  T.cast(lines, T::Hash[Integer, BigDecimal]).each { |resident_id, amount|
+    +  T.cast(lines, T::Hash[nil, BigDecimal]).each { |resident_id, amount|
+         raw[resident_id] = raw.fetch(resident_id) + (sign * amount)
+       }
+     end
+
+- subject: Reconciliation#end_date_old_enough
+  kind: same-answer
+  why: >-
+    end_date() with parentheses calls the method, not the new local variable,
+    so it reads the same column as self.end_date.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def end_date_old_enough
+    -  end_date = self.end_date
+    +  end_date = end_date()
+       if end_date.nil?
+         return
+       end
+       refusal = Reconciliation.cutoff_refusal(end_date, T.must(community).today)
+       if refusal
+         errors.add(:end_date, refusal)
+       end
+     end
+
+- subject: Reconciliation#must_settle_at_least_one_meal
+  kind: same-answer
+  why: >-
+    When this runs, only end_date can have an error. The validations before it
+    are community (always filled in by BelongsToTheCommunity before
+    validation), end_date, units_recorded_on (always filled in by set_date
+    before validation) and end_date_old_enough, which adds to end_date. So
+    errors.any? and errors[:end_date].any? give the same answer.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def must_settle_at_least_one_meal
+    -  if errors[:end_date].any?
+    +  if errors.any?
+         return
+       end
+       if eligible_meals.exists? || MealCorrection.waiting.exists?
+         return
+       end
+       held = left_behind_dates(Meal.unreconciled.receipt_and_nobody_to_charge)
+       waiting = left_behind_dates(Meal.unreconciled.waiting_for_a_cost)
+       if held.empty? && waiting.empty?
+         errors.add(:base, "No unreconciled meals with bills on or before this date. " "A reconciliation must settle at least one meal or carry a correction.")
+       else
+         errors.add(:base, ["No meal on or before this date can be settled yet.", held_words(held), waiting_words(waiting), "A reconciliation must settle at least one meal or carry a correction."].compact.join(" "))
+       end
+     end
+
+- subject: Reconciliation.cutoff_refusal
+  kind: same-answer
+  why: >-
+    latest is a Date, and the app sets no default Date format. So Date#to_s
+    gives the ISO 8601 text, the same as iso8601.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.cutoff_refusal(cutoff, today)
+       latest = latest_cutoff(today)
+       if cutoff <= latest
+         return
+       end
+    -  "must be on or before #{latest.iso8601}, #{DAYS_TO_WAIT} days before today"
+    +  "must be on or before #{latest}, #{DAYS_TO_WAIT} days before today"
+     end
+
+- subject: Reconciliation#number_of_meals
+  kind: same-answer
+  why: >-
+    The only caller is the settlement's admin page, which reads the record
+    fresh, and its meals are not loaded there. On an association that is not
+    loaded, size runs the same COUNT query as count.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def number_of_meals
+    -  meals.count
+    +  meals.size
+     end

@@ -1,0 +1,205 @@
+- subject: CorrectionWords.edit
+  kind: same-answer
+  why: >-
+    Every edit in meal_corrections.edits is written by
+    MealCorrecting::Edits#record (by way of MealCorrecting.record!, the only
+    writer, and MealCorrection is append-only). record always sets the what,
+    resident_id, from and to keys, nil or not. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.edit(edit, residents)
+       name = residents[edit["resident_id"]]&.name || "Resident ##{edit["resident_id"]}"
+       from = edit["from"]
+       to = edit["to"]
+       case edit["what"]
+       when "cost"
+         cost(name, from, to)
+       when "eater"
+         eater(name, from, to)
+       when "guest"
+         guest(name, from, to)
+       else
+    -    "#{edit["what"]}: #{from.inspect} to #{to.inspect}"
+    +    "#{edit.fetch("what")}: #{from.inspect} to #{to.inspect}"
+       end
+     end
+
+- subject: CorrectionWords.edit
+  kind: same-answer
+  why: >-
+    Every edit in meal_corrections.edits is written by
+    MealCorrecting::Edits#record (by way of MealCorrecting.record!, the only
+    writer, and MealCorrection is append-only). record always sets the what,
+    resident_id, from and to keys, nil or not. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.edit(edit, residents)
+    -  name = residents[edit["resident_id"]]&.name || "Resident ##{edit["resident_id"]}"
+    +  name = residents[edit.fetch("resident_id")]&.name || "Resident ##{edit["resident_id"]}"
+       from = edit["from"]
+       to = edit["to"]
+       case edit["what"]
+       when "cost"
+         cost(name, from, to)
+       when "eater"
+         eater(name, from, to)
+       when "guest"
+         guest(name, from, to)
+       else
+         "#{edit["what"]}: #{from.inspect} to #{to.inspect}"
+       end
+     end
+
+- subject: CorrectionWords.edit
+  kind: same-answer
+  why: >-
+    Every edit in meal_corrections.edits is written by
+    MealCorrecting::Edits#record (by way of MealCorrecting.record!, the only
+    writer, and MealCorrection is append-only). record always sets the what,
+    resident_id, from and to keys, nil or not. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.edit(edit, residents)
+       name = residents[edit["resident_id"]]&.name || "Resident ##{edit["resident_id"]}"
+       from = edit["from"]
+    -  to = edit["to"]
+    +  to = edit.fetch("to")
+       case edit["what"]
+       when "cost"
+         cost(name, from, to)
+       when "eater"
+         eater(name, from, to)
+       when "guest"
+         guest(name, from, to)
+       else
+         "#{edit["what"]}: #{from.inspect} to #{to.inspect}"
+       end
+     end
+
+- subject: CorrectionWords.edit
+  kind: same-answer
+  why: >-
+    Every edit in meal_corrections.edits is written by
+    MealCorrecting::Edits#record (by way of MealCorrecting.record!, the only
+    writer, and MealCorrection is append-only). record always sets the what,
+    resident_id, from and to keys, nil or not. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.edit(edit, residents)
+       name = residents[edit["resident_id"]]&.name || "Resident ##{edit["resident_id"]}"
+       from = edit["from"]
+       to = edit["to"]
+    -  case edit["what"]
+    +  case edit.fetch("what")
+       when "cost"
+         cost(name, from, to)
+       when "eater"
+         eater(name, from, to)
+       when "guest"
+         guest(name, from, to)
+       else
+         "#{edit["what"]}: #{from.inspect} to #{to.inspect}"
+       end
+     end
+
+- subject: CorrectionWords.edit
+  kind: same-answer
+  why: >-
+    Every edit in meal_corrections.edits is written by
+    MealCorrecting::Edits#record (by way of MealCorrecting.record!, the only
+    writer, and MealCorrection is append-only). record always sets the what,
+    resident_id, from and to keys, nil or not. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.edit(edit, residents)
+    -  name = residents[edit["resident_id"]]&.name || "Resident ##{edit["resident_id"]}"
+    +  name = residents[edit["resident_id"]]&.name || "Resident ##{edit.fetch("resident_id")}"
+       from = edit["from"]
+       to = edit["to"]
+       case edit["what"]
+       when "cost"
+         cost(name, from, to)
+       when "eater"
+         eater(name, from, to)
+       when "guest"
+         guest(name, from, to)
+       else
+         "#{edit["what"]}: #{from.inspect} to #{to.inspect}"
+       end
+     end
+
+- subject: CorrectionWords.edit
+  kind: same-answer
+  why: >-
+    Every edit in meal_corrections.edits is written by
+    MealCorrecting::Edits#record (by way of MealCorrecting.record!, the only
+    writer, and MealCorrection is append-only). record always sets the what,
+    resident_id, from and to keys, nil or not. With the key there, fetch and
+    [] give the same value.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.edit(edit, residents)
+       name = residents[edit["resident_id"]]&.name || "Resident ##{edit["resident_id"]}"
+    -  from = edit["from"]
+    +  from = edit.fetch("from")
+       to = edit["to"]
+       case edit["what"]
+       when "cost"
+         cost(name, from, to)
+       when "eater"
+         eater(name, from, to)
+       when "guest"
+         guest(name, from, to)
+       else
+         "#{edit["what"]}: #{from.inspect} to #{to.inspect}"
+       end
+     end
+
+- subject: CorrectionWords.cost_words
+  kind: same-answer
+  why: >-
+    cost_words is given only a cost that is not nil, and every such cost in
+    meal_corrections.edits was made by MealCorrecting::Edits#cost_of, which
+    always sets the amount and no_cost keys. With the key there, fetch and []
+    give the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def self.cost_words(cost)
+    -  if cost["no_cost"]
+    +  if cost.fetch("no_cost")
+         return "No cost"
+       end
+       amount = BigDecimal(cost["amount"])
+       if amount.zero?
+         "blank"
+       else
+         ActiveSupport::NumberHelper.number_to_currency(amount)
+       end
+     end
+
+- subject: CorrectionWords.cost_words
+  kind: same-answer
+  why: >-
+    cost_words is given only a cost that is not nil, and every such cost in
+    meal_corrections.edits was made by MealCorrecting::Edits#cost_of, which
+    always sets the amount and no_cost keys. With the key there, fetch and []
+    give the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def self.cost_words(cost)
+       if cost["no_cost"]
+         return "No cost"
+       end
+    -  amount = BigDecimal(cost["amount"])
+    +  amount = BigDecimal(cost.fetch("amount"))
+       if amount.zero?
+         "blank"
+       else
+         ActiveSupport::NumberHelper.number_to_currency(amount)
+       end
+     end

@@ -1,0 +1,1167 @@
+- subject: Settlement.fingerprint
+  kind: same-answer
+  why: >-
+    cutoff is a Date (the sig says so), and the app sets no default Date
+    format. So Date#to_s, which join uses, gives the ISO 8601 text, the same
+    as iso8601.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def self.fingerprint(cutoff:, meal_ids:, correction_ids:, balances:)
+       amounts = balances.reject { |_, amount|
+         amount.zero?
+       }.sort.map { |id, amount|
+         "#{id}:#{amount.to_s("F")}"
+       }
+    -  Digest::SHA256.hexdigest([cutoff.iso8601, meal_ids.sort.join(","), correction_ids.sort.join(","), amounts.join(",")].join("|"))
+    +  Digest::SHA256.hexdigest([cutoff, meal_ids.sort.join(","), correction_ids.sort.join(","), amounts.join(",")].join("|"))
+     end
+
+- subject: Settlement.fingerprint
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no argument it uses the
+    'F' format. So the text is the same.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def self.fingerprint(cutoff:, meal_ids:, correction_ids:, balances:)
+       amounts = balances.reject { |_, amount|
+         amount.zero?
+       }.sort.map { |id, amount|
+    -    "#{id}:#{amount.to_s("F")}"
+    +    "#{id}:#{amount.to_s}"
+       }
+       Digest::SHA256.hexdigest([cutoff.iso8601, meal_ids.sort.join(","), correction_ids.sort.join(","), amounts.join(",")].join("|"))
+     end
+
+- subject: Settlement.fingerprint
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no argument it uses the
+    'F' format, and #{amount} calls to_s with no argument. So the text is the
+    same.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def self.fingerprint(cutoff:, meal_ids:, correction_ids:, balances:)
+       amounts = balances.reject { |_, amount|
+         amount.zero?
+       }.sort.map { |id, amount|
+    -    "#{id}:#{amount.to_s("F")}"
+    +    "#{id}:#{amount}"
+       }
+       Digest::SHA256.hexdigest([cutoff.iso8601, meal_ids.sort.join(","), correction_ids.sort.join(","), amounts.join(",")].join("|"))
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_ary
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, nil).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :guests).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, nil, :guests).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload(:meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: nil }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({}, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload(nil, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).to_a
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+    -  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+    +  meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_ary
+       ledger = MealLedger.new(meals)
+       corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: nil).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(:meal, nil, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(:meal, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(:admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.preview
+  kind: same-answer
+  why: >-
+    The corrections are preloaded only so that the preview reads them in few
+    queries. The app uses goldiloader. When one record of a list reads an
+    association that was not preloaded, goldiloader loads it for every record
+    of the list in one query. So the same rows are loaded, and the answer is
+    the same.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def self.preview(cutoff:, community: Community.instance)
+       today = community.today
+       refusal = Reconciliation.cutoff_refusal(cutoff, today)
+       if refusal
+         raise(InvalidCutoff, "cutoff #{refusal}")
+       end
+       meals = Meal.settleable_by(cutoff).order(:date).preload({ bills: :resident }, :meal_residents, :guests).to_a
+       ledger = MealLedger.new(meals)
+    -  corrections = MealCorrection.waiting.order(:id).preload(:meal, :admin_user, lines: :resident).to_a
+    +  corrections = MealCorrection.waiting.order(:id).preload(nil, :admin_user, lines: :resident).to_a
+       raw = ledger.balances(community.residents.pluck(:id))
+       corrections.flat_map(&:lines).each { |line|
+         raw[T.must(line.resident_id)] = raw.fetch(T.must(line.resident_id)) + T.must(line.amount)
+       }
+       Preview.new(cutoff:, meals:, ledger:, resident_balances: allocate_to_cents(raw, reconciliation_id: "preview"), skipped_meals: skipped_by(cutoff, today:), held_meals: held_by(cutoff, today:), waiting_meals: waiting_by(cutoff, today:), corrections:)
+     end
+
+- subject: Settlement.skipped_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.skipped_by(cutoff, today:)
+    -  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_a
+    +  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, nil).to_a
+     end
+
+- subject: Settlement.skipped_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.skipped_by(cutoff, today:)
+    -  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_a
+    +  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents).to_a
+     end
+
+- subject: Settlement.skipped_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.skipped_by(cutoff, today:)
+    -  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_a
+    +  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:guests).to_a
+     end
+
+- subject: Settlement.skipped_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.skipped_by(cutoff, today:)
+    -  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_a
+    +  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(nil, :guests).to_a
+     end
+
+- subject: Settlement.skipped_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.skipped_by(cutoff, today:)
+    -  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_a
+    +  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).to_a
+     end
+
+- subject: Settlement.skipped_by
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.skipped_by(cutoff, today:)
+    -  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_a
+    +  Meal.unreconciled.not_cancelled.where(date: ..cutoff).where(date: ...today).where.missing(:bills).with_attendees.order(:date).preload(:meal_residents, :guests).to_ary
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).to_a
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_ary
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }).to_a
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, nil).to_a
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload(:meal_residents).to_a
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: nil }, :meal_residents).to_a
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({}, :meal_residents).to_a
+     end
+
+- subject: Settlement.held_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.held_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload({ bills: :resident }, :meal_residents).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).receipt_and_nobody_to_charge.order(:date).preload(nil, :meal_residents).to_a
+     end
+
+- subject: Settlement.waiting_by
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.waiting_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).waiting_for_a_cost.order(:date).preload(bills: :resident).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).waiting_for_a_cost.order(:date).preload(bills: :resident).to_ary
+     end
+
+- subject: Settlement.waiting_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.waiting_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).waiting_for_a_cost.order(:date).preload(bills: :resident).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).waiting_for_a_cost.order(:date).preload(bills: nil).to_a
+     end
+
+- subject: Settlement.waiting_by
+  kind: same-answer
+  why: >-
+    The meals are preloaded only so that the list is read in few queries. The
+    app uses goldiloader. When one record of a list reads an association that
+    was not preloaded, goldiloader loads it for every record of the list in
+    one query. So the same rows are loaded, and the answer is the same.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.waiting_by(cutoff, today:)
+    -  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).waiting_for_a_cost.order(:date).preload(bills: :resident).to_a
+    +  Meal.unreconciled.where(date: ..cutoff).where(date: ...today).waiting_for_a_cost.order(:date).to_a
+     end
+
+- subject: Settlement#initialize
+  kind: same-answer
+  why: >-
+    Without the T.let line, @claimed_corrections is not set, and Ruby reads an
+    instance variable that was never set as nil. claimed_corrections reads it
+    with T.must, so it raises the same way before claim_corrections sets it,
+    and gives the same list after.
+  diff: |
+    @@ -1,5 +1,4 @@
+     def initialize(reconciliation)
+       @reconciliation = reconciliation
+       @claimed_meals = T.let(nil, T.nilable(T::Array[[Integer, Date]]))
+    -  @claimed_corrections = T.let(nil, T.nilable(T::Array[Integer]))
+     end
+
+- subject: Settlement#initialize
+  kind: same-answer
+  why: >-
+    Without the T.let line, @claimed_meals is not set, and Ruby reads an
+    instance variable that was never set as nil. claimed_meals reads it with
+    T.must, so it raises the same way before assign_meals sets it, and gives
+    the same list after.
+  diff: |
+    @@ -1,5 +1,4 @@
+     def initialize(reconciliation)
+       @reconciliation = reconciliation
+    -  @claimed_meals = T.let(nil, T.nilable(T::Array[[Integer, Date]]))
+       @claimed_corrections = T.let(nil, T.nilable(T::Array[Integer]))
+     end
+
+- subject: Settlement.allocate_to_cents
+  kind: same-answer
+  why: >-
+    This branch runs only when pennies is not positive, so pennies is zero or
+    negative. An Integer is always true in Ruby, so the new test also passes
+    when pennies is zero. Then no penny moves: 0.times does nothing, and the
+    check of the candidates passes for zero pennies. So the balances are the
+    same.
+  diff: |
+    @@ -1,31 +1,31 @@
+     def self.allocate_to_cents(raw_balances, reconciliation_id:)
+       assert_balanced_input!(raw_balances, reconciliation_id)
+       one_cent = BigDecimal("0.01")
+       (truncated, remainders) = truncate_toward_zero(raw_balances)
+       residual = truncated.values.sum(BigDecimal("0"))
+       pennies = (residual / one_cent).to_i
+       if pennies.positive?
+         candidates = remainders.select { |_, r|
+           r.negative?
+         }.sort_by { |id, r|
+           [r, id]
+         }
+         assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
+         pennies.times { |i|
+           adjust!(truncated, candidates.fetch(i).first, -one_cent)
+         }
+       else
+    -    if pennies.negative?
+    +    if pennies
+           candidates = remainders.select { |_, r|
+             r.positive?
+           }.sort_by { |id, r|
+             [-r, id]
+           }
+           assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+           pennies.abs.times { |i|
+             adjust!(truncated, candidates.fetch(i).first, one_cent)
+           }
+         end
+       end
+       truncated
+     end
+
+- subject: Settlement.allocate_to_cents
+  kind: same-answer
+  why: >-
+    This branch runs only when pennies is not positive, so pennies is zero or
+    negative. With if true, the code also runs when pennies is zero. Then no
+    penny moves: 0.times does nothing, and the check of the candidates passes
+    for zero pennies. So the balances are the same.
+  diff: |
+    @@ -1,31 +1,31 @@
+     def self.allocate_to_cents(raw_balances, reconciliation_id:)
+       assert_balanced_input!(raw_balances, reconciliation_id)
+       one_cent = BigDecimal("0.01")
+       (truncated, remainders) = truncate_toward_zero(raw_balances)
+       residual = truncated.values.sum(BigDecimal("0"))
+       pennies = (residual / one_cent).to_i
+       if pennies.positive?
+         candidates = remainders.select { |_, r|
+           r.negative?
+         }.sort_by { |id, r|
+           [r, id]
+         }
+         assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
+         pennies.times { |i|
+           adjust!(truncated, candidates.fetch(i).first, -one_cent)
+         }
+       else
+    -    if pennies.negative?
+    +    if true
+           candidates = remainders.select { |_, r|
+             r.positive?
+           }.sort_by { |id, r|
+             [-r, id]
+           }
+           assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+           pennies.abs.times { |i|
+             adjust!(truncated, candidates.fetch(i).first, one_cent)
+           }
+         end
+       end
+       truncated
+     end
+
+- subject: Settlement.allocate_to_cents
+  kind: same-answer
+  why: >-
+    This branch runs only when pennies is not positive, so pennies is zero or
+    negative. With the if removed, the code also runs when pennies is zero.
+    Then no penny moves: 0.times does nothing, and the check of the candidates
+    passes for zero pennies. So the balances are the same.
+  diff: |
+    @@ -1,31 +1,29 @@
+     def self.allocate_to_cents(raw_balances, reconciliation_id:)
+       assert_balanced_input!(raw_balances, reconciliation_id)
+       one_cent = BigDecimal("0.01")
+       (truncated, remainders) = truncate_toward_zero(raw_balances)
+       residual = truncated.values.sum(BigDecimal("0"))
+       pennies = (residual / one_cent).to_i
+       if pennies.positive?
+         candidates = remainders.select { |_, r|
+           r.negative?
+         }.sort_by { |id, r|
+           [r, id]
+         }
+         assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
+         pennies.times { |i|
+           adjust!(truncated, candidates.fetch(i).first, -one_cent)
+         }
+       else
+    -    if pennies.negative?
+    -      candidates = remainders.select { |_, r|
+    -        r.positive?
+    -      }.sort_by { |id, r|
+    -        [-r, id]
+    -      }
+    -      assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+    -      pennies.abs.times { |i|
+    -        adjust!(truncated, candidates.fetch(i).first, one_cent)
+    -      }
+    -    end
+    +    candidates = remainders.select { |_, r|
+    +      r.positive?
+    +    }.sort_by { |id, r|
+    +      [-r, id]
+    +    }
+    +    assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+    +    pennies.abs.times { |i|
+    +      adjust!(truncated, candidates.fetch(i).first, one_cent)
+    +    }
+       end
+       truncated
+     end
+
+- subject: Settlement.allocate_to_cents
+  kind: same-answer
+  why: >-
+    The truncated values are BigDecimal. With no values, the plain sum is the
+    Integer 0, and 0 divided by a BigDecimal cent is BigDecimal 0, so pennies
+    is 0 either way. With values, the sum is the same BigDecimal.
+  diff: |
+    @@ -1,31 +1,31 @@
+     def self.allocate_to_cents(raw_balances, reconciliation_id:)
+       assert_balanced_input!(raw_balances, reconciliation_id)
+       one_cent = BigDecimal("0.01")
+       (truncated, remainders) = truncate_toward_zero(raw_balances)
+    -  residual = truncated.values.sum(BigDecimal("0"))
+    +  residual = truncated.values.sum
+       pennies = (residual / one_cent).to_i
+       if pennies.positive?
+         candidates = remainders.select { |_, r|
+           r.negative?
+         }.sort_by { |id, r|
+           [r, id]
+         }
+         assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
+         pennies.times { |i|
+           adjust!(truncated, candidates.fetch(i).first, -one_cent)
+         }
+       else
+         if pennies.negative?
+           candidates = remainders.select { |_, r|
+             r.positive?
+           }.sort_by { |id, r|
+             [-r, id]
+           }
+           assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+           pennies.abs.times { |i|
+             adjust!(truncated, candidates.fetch(i).first, one_cent)
+           }
+         end
+       end
+       truncated
+     end
+
+- subject: Settlement.allocate_to_cents
+  kind: same-answer
+  why: >-
+    On BigDecimal, to_int is the same method as to_i.
+  diff: |
+    @@ -1,31 +1,31 @@
+     def self.allocate_to_cents(raw_balances, reconciliation_id:)
+       assert_balanced_input!(raw_balances, reconciliation_id)
+       one_cent = BigDecimal("0.01")
+       (truncated, remainders) = truncate_toward_zero(raw_balances)
+       residual = truncated.values.sum(BigDecimal("0"))
+    -  pennies = (residual / one_cent).to_i
+    +  pennies = (residual / one_cent).to_int
+       if pennies.positive?
+         candidates = remainders.select { |_, r|
+           r.negative?
+         }.sort_by { |id, r|
+           [r, id]
+         }
+         assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
+         pennies.times { |i|
+           adjust!(truncated, candidates.fetch(i).first, -one_cent)
+         }
+       else
+         if pennies.negative?
+           candidates = remainders.select { |_, r|
+             r.positive?
+           }.sort_by { |id, r|
+             [-r, id]
+           }
+           assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+           pennies.abs.times { |i|
+             adjust!(truncated, candidates.fetch(i).first, one_cent)
+           }
+         end
+       end
+       truncated
+     end
+
+- subject: Settlement.allocate_to_cents
+  kind: same-answer
+  why: >-
+    Every truncated value is whole cents, so residual divided by one cent has
+    no fraction. For a BigDecimal with no fraction, Integer() and to_i give
+    the same Integer.
+  diff: |
+    @@ -1,31 +1,31 @@
+     def self.allocate_to_cents(raw_balances, reconciliation_id:)
+       assert_balanced_input!(raw_balances, reconciliation_id)
+       one_cent = BigDecimal("0.01")
+       (truncated, remainders) = truncate_toward_zero(raw_balances)
+       residual = truncated.values.sum(BigDecimal("0"))
+    -  pennies = (residual / one_cent).to_i
+    +  pennies = Integer((residual / one_cent))
+       if pennies.positive?
+         candidates = remainders.select { |_, r|
+           r.negative?
+         }.sort_by { |id, r|
+           [r, id]
+         }
+         assert_candidates_cover_pennies!(candidates, pennies, reconciliation_id)
+         pennies.times { |i|
+           adjust!(truncated, candidates.fetch(i).first, -one_cent)
+         }
+       else
+         if pennies.negative?
+           candidates = remainders.select { |_, r|
+             r.positive?
+           }.sort_by { |id, r|
+             [-r, id]
+           }
+           assert_candidates_cover_pennies!(candidates, pennies.abs, reconciliation_id)
+           pennies.abs.times { |i|
+             adjust!(truncated, candidates.fetch(i).first, one_cent)
+           }
+         end
+       end
+       truncated
+     end
+
+- subject: Settlement.truncate_toward_zero
+  kind: same-answer
+  why: >-
+    The two differ only when raw is exactly 0. Then raw.ceil(2) is 0, the same
+    as raw.floor(2), and the remainder is 0 either way.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.truncate_toward_zero(raw_balances)
+       truncated = T.let({}, T::Hash[Integer, BigDecimal])
+       remainders = T.let({}, T::Hash[Integer, BigDecimal])
+       raw_balances.each { |id, raw|
+    -    truncated[id] = if raw >= 0
+    +    truncated[id] = if raw > 0
+           raw.floor(2)
+         else
+           raw.ceil(2)
+         end
+         remainders[id] = raw - truncated.fetch(id)
+       }
+       [truncated, remainders]
+     end
+
+- subject: Settlement.assert_balanced_input!
+  kind: same-answer
+  why: >-
+    The raw balances are BigDecimal. With no values, the plain sum is the
+    Integer 0, and 0.zero? is true, the same as for BigDecimal 0. With values,
+    the sum is the same BigDecimal.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.assert_balanced_input!(raw_balances, reconciliation_id)
+    -  input_sum = raw_balances.values.sum(BigDecimal("0"))
+    +  input_sum = raw_balances.values.sum
+       if input_sum.zero?
+         return
+       end
+       raise("allocate_to_cents: raw balances do not sum to zero for reconciliation #{reconciliation_id}. " "Sum: #{input_sum.to_s("F")}. This indicates an upstream bug in balance computation; " "allocating pennies anyway would move the imbalance onto the residents, and nothing would report it.")
+     end
+
+- subject: Settlement#persist_charges!
+  kind: same-answer
+  why: >-
+    kind is a character varying column. insert_all! turns a Symbol into its
+    text before it writes it, so :credit is stored as 'credit', the same as
+    with to_s.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def persist_charges!(ledger)
+       MealCharge.insert_all!(ledger.lines.map { |line|
+    -    { meal_id: line.meal_id, resident_id: line.resident_id, kind: line.kind.to_s, amount: line.amount, multiplier: line.multiplier, unit_cost: line.unit_cost, bill_amount: line.bill_amount }
+    +    { meal_id: line.meal_id, resident_id: line.resident_id, kind: line.kind, amount: line.amount, multiplier: line.multiplier, unit_cost: line.unit_cost, bill_amount: line.bill_amount }
+       })
+     end
+
+- subject: Settlement#persist_balances!
+  kind: same-answer
+  why: >-
+    Hash#to_h passes the key and the value to the block as two arguments. The
+    block takes only the first one, the key, so it builds the same Hash as
+    balances.keys.to_h.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def persist_balances!(ledger, units)
+       balances = reconciliation.settlement_balances(ledger).reject { |_, amount|
+         amount.zero?
+       }
+       residents = Resident.where(id: balances.keys).index_by { |resident|
+         T.must(resident.id)
+       }
+    -  saved = balances.keys.to_h { |resident_id|
+    +  saved = balances.to_h { |resident_id|
+         resident = residents.fetch(resident_id)
+         [resident_id, units.fetch(resident_id) {
+           [T.must(resident.unit_id), T.must(resident.active)]
+         }]
+       }
+       unit_records = Unit.where(id: saved.values.map(&:first)).index_by { |unit|
+         T.must(unit.id)
+       }
+       balances.each { |resident_id, amount|
+         (unit_id, lived_here) = saved.fetch(resident_id)
+         reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount:, unit: unit_records.fetch(unit_id), lived_here:)
+       }
+       balances
+     end
+
+- subject: Settlement#persist_balances!
+  kind: same-answer
+  why: >-
+    Without the last line, the method returns the value of balances.each, and
+    each returns the Hash it was called on. So the method still returns
+    balances.
+  diff: |
+    @@ -1,22 +1,21 @@
+     def persist_balances!(ledger, units)
+       balances = reconciliation.settlement_balances(ledger).reject { |_, amount|
+         amount.zero?
+       }
+       residents = Resident.where(id: balances.keys).index_by { |resident|
+         T.must(resident.id)
+       }
+       saved = balances.keys.to_h { |resident_id|
+         resident = residents.fetch(resident_id)
+         [resident_id, units.fetch(resident_id) {
+           [T.must(resident.unit_id), T.must(resident.active)]
+         }]
+       }
+       unit_records = Unit.where(id: saved.values.map(&:first)).index_by { |unit|
+         T.must(unit.id)
+       }
+       balances.each { |resident_id, amount|
+         (unit_id, lived_here) = saved.fetch(resident_id)
+         reconciliation.reconciliation_balances.create!(resident: residents.fetch(resident_id), amount:, unit: unit_records.fetch(unit_id), lived_here:)
+       }
+    -  balances
+     end

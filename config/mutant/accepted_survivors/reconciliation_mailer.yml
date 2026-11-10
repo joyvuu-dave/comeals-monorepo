@@ -1,0 +1,127 @@
+- subject: ReconciliationMailer#corrections_of
+  kind: same-answer
+  why: >-
+    includes ignores a nil argument, so the meal is not loaded ahead. Each
+    correction's meal is loaded when correction.meal is first read, and they
+    are the same meals, so the sort and the words are the same.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def corrections_of(resident, reconciliation)
+       named = { resident.id => resident }
+    -  reconciliation.meal_corrections.includes(:meal).sort_by { |correction|
+    +  reconciliation.meal_corrections.includes(nil).sort_by { |correction|
+         [correction.meal.date, correction.id]
+       }.filter_map { |correction|
+         edits = correction.cost_edits_of(resident)
+         if edits.empty?
+           next
+         end
+         { date: correction.meal.date.strftime("%b %-d, %Y"), words: edits.map { |edit|
+           CorrectionWords.edit(edit, named)
+         }.join(" "), reason: correction.reason, url: "#{root_admin_url}/meals/#{correction.meal_id}?subdomain=admin&token=#{read_only_token}" "&utf8=%E2%9C%93" }
+       }
+     end
+
+- subject: ReconciliationMailer#corrections_of
+  kind: same-answer
+  why: >-
+    When two corrections have the same date, sort_by compares the two
+    MealCorrection records. ActiveRecord compares two records of the same
+    class by to_key, which is [id], so the order is the same as by id.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def corrections_of(resident, reconciliation)
+       named = { resident.id => resident }
+       reconciliation.meal_corrections.includes(:meal).sort_by { |correction|
+    -    [correction.meal.date, correction.id]
+    +    [correction.meal.date, correction]
+       }.filter_map { |correction|
+         edits = correction.cost_edits_of(resident)
+         if edits.empty?
+           next
+         end
+         { date: correction.meal.date.strftime("%b %-d, %Y"), words: edits.map { |edit|
+           CorrectionWords.edit(edit, named)
+         }.join(" "), reason: correction.reason, url: "#{root_admin_url}/meals/#{correction.meal_id}?subdomain=admin&token=#{read_only_token}" "&utf8=%E2%9C%93" }
+       }
+     end
+
+- subject: ReconciliationMailer#corrections_of
+  kind: same-answer
+  only_on: linux
+  why: >-
+    reconciliation.meal_corrections is ordered by id (the has_many scope), so
+    the corrections come in id order. With the id left out, only corrections
+    with the same date tie, and on Linux Ruby's sort uses the C library's
+    sort, which keeps tied items in the order given. So the order is still by
+    id. On macOS Ruby uses its own sort, and the example with eight
+    corrections of one dinner fails on this mutation there.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def corrections_of(resident, reconciliation)
+       named = { resident.id => resident }
+       reconciliation.meal_corrections.includes(:meal).sort_by { |correction|
+    -    [correction.meal.date, correction.id]
+    +    [correction.meal.date]
+       }.filter_map { |correction|
+         edits = correction.cost_edits_of(resident)
+         if edits.empty?
+           next
+         end
+         { date: correction.meal.date.strftime("%b %-d, %Y"), words: edits.map { |edit|
+           CorrectionWords.edit(edit, named)
+         }.join(" "), reason: correction.reason, url: "#{root_admin_url}/meals/#{correction.meal_id}?subdomain=admin&token=#{read_only_token}" "&utf8=%E2%9C%93" }
+       }
+     end
+
+- subject: ReconciliationMailer#corrections_of
+  kind: same-answer
+  only_on: linux
+  why: >-
+    reconciliation.meal_corrections is ordered by id (the has_many scope), so
+    the corrections come in id order. With nil for the id, corrections with
+    the same date tie, and on Linux Ruby's sort uses the C library's sort,
+    which keeps tied items in the order given. So the order is still by id. On
+    macOS Ruby uses its own sort, and the example with eight corrections of
+    one dinner fails on this mutation there.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def corrections_of(resident, reconciliation)
+       named = { resident.id => resident }
+       reconciliation.meal_corrections.includes(:meal).sort_by { |correction|
+    -    [correction.meal.date, correction.id]
+    +    [correction.meal.date, nil]
+       }.filter_map { |correction|
+         edits = correction.cost_edits_of(resident)
+         if edits.empty?
+           next
+         end
+         { date: correction.meal.date.strftime("%b %-d, %Y"), words: edits.map { |edit|
+           CorrectionWords.edit(edit, named)
+         }.join(" "), reason: correction.reason, url: "#{root_admin_url}/meals/#{correction.meal_id}?subdomain=admin&token=#{read_only_token}" "&utf8=%E2%9C%93" }
+       }
+     end
+
+- subject: ReconciliationMailer#corrections_of
+  kind: same-answer
+  why: >-
+    Without includes, each correction's meal is loaded when correction.meal is
+    first read. They are the same meals, so the sort and the words are the
+    same.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def corrections_of(resident, reconciliation)
+       named = { resident.id => resident }
+    -  reconciliation.meal_corrections.includes(:meal).sort_by { |correction|
+    +  reconciliation.meal_corrections.sort_by { |correction|
+         [correction.meal.date, correction.id]
+       }.filter_map { |correction|
+         edits = correction.cost_edits_of(resident)
+         if edits.empty?
+           next
+         end
+         { date: correction.meal.date.strftime("%b %-d, %Y"), words: edits.map { |edit|
+           CorrectionWords.edit(edit, named)
+         }.join(" "), reason: correction.reason, url: "#{root_admin_url}/meals/#{correction.meal_id}?subdomain=admin&token=#{read_only_token}" "&utf8=%E2%9C%93" }
+       }
+     end

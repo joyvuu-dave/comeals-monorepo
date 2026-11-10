@@ -1,0 +1,65 @@
+- subject: ReconciliationWarnings#warning
+  kind: same-answer
+  why: >-
+    All six callers of warning pass severity, title and body. With the key
+    there, fetch and [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def warning(kind, meal, bill, words)
+       id = "#{kind}:meal=#{meal.id}"
+       if bill
+         id += ":bill=#{bill.id}"
+       end
+    -  { id:, kind:, severity: words[:severity], meal_id: meal.id, title: words[:title], body: words[:body] }
+    +  { id:, kind:, severity: words.fetch(:severity), meal_id: meal.id, title: words[:title], body: words[:body] }
+     end
+
+- subject: ReconciliationWarnings#warning
+  kind: same-answer
+  why: >-
+    All six callers of warning pass severity, title and body. With the key
+    there, fetch and [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def warning(kind, meal, bill, words)
+       id = "#{kind}:meal=#{meal.id}"
+       if bill
+         id += ":bill=#{bill.id}"
+       end
+    -  { id:, kind:, severity: words[:severity], meal_id: meal.id, title: words[:title], body: words[:body] }
+    +  { id:, kind:, severity: words[:severity], meal_id: meal.id, title: words.fetch(:title), body: words[:body] }
+     end
+
+- subject: ReconciliationWarnings#warning
+  kind: same-answer
+  why: >-
+    All six callers of warning pass severity, title and body. With the key
+    there, fetch and [] give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def warning(kind, meal, bill, words)
+       id = "#{kind}:meal=#{meal.id}"
+       if bill
+         id += ":bill=#{bill.id}"
+       end
+    -  { id:, kind:, severity: words[:severity], meal_id: meal.id, title: words[:title], body: words[:body] }
+    +  { id:, kind:, severity: words[:severity], meal_id: meal.id, title: words[:title], body: words.fetch(:body) }
+     end
+
+- subject: ReconciliationWarnings#warnings_for
+  kind: same-answer
+  why: >-
+    The only caller, call, reads warnings_for with flat_map. flat_map takes
+    the items out of an Array but keeps a Hash as one item, so the list of
+    warnings is the same.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def warnings_for(meal)
+       if meal.cancelled?
+    -    return [dinner_cancelled(meal)]
+    +    return dinner_cancelled(meal)
+       end
+       blank_bills(meal).map { |bill|
+         zero_bill_not_flagged(meal, bill)
+       }
+     end

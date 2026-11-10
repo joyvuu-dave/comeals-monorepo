@@ -1,0 +1,15 @@
+- subject: MealCharge#subsidized?
+  kind: same-answer
+  why: >-
+    bill_amount() with parentheses calls the method, not the new local
+    variable, so it reads the same column as self.bill_amount.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def subsidized?
+    -  bill_amount = self.bill_amount
+    +  bill_amount = bill_amount()
+       unless credit? && bill_amount
+         return false
+       end
+       T.must(amount) < bill_amount
+     end

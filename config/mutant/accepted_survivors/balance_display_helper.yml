@@ -1,0 +1,53 @@
+- subject: BalanceDisplayHelper#settlement_totals_tag
+  kind: same-answer
+  why: >-
+    Every caller passes BigDecimal amounts. With no negative amount, the plain
+    sum is the Integer 0, and 0 minus nothing or a BigDecimal minus 0 gives
+    the same number. number_to_currency prints the Integer 0 and BigDecimal 0
+    the same way, as $0.00, and 0.zero? is true for both.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def settlement_totals_tag(amounts, noun)
+       owed_to = amounts.select(&:positive?).sum(BigDecimal("0"))
+    -  owed_by = amounts.select(&:negative?).sum(BigDecimal("0")).abs
+    +  owed_by = amounts.select(&:negative?).sum.abs
+       difference = owed_to - owed_by
+       lines = tag.div("Owed to #{noun}: #{number_to_currency(owed_to)}"), tag.div("Owed by #{noun}: #{number_to_currency(owed_by)}"), if difference.zero?
+         tag.div("Difference: $0.00 ✓")
+       else
+         more_owed = if difference.positive?
+           "to"
+         else
+           "by"
+         end
+         tag.div("Difference: #{number_to_currency(difference.abs)} more owed #{more_owed} #{noun}", class: "balance-owes")
+       end
+       tag.div(safe_join(lines), class: "settlement-total")
+     end
+
+- subject: BalanceDisplayHelper#settlement_totals_tag
+  kind: same-answer
+  why: >-
+    Every caller passes BigDecimal amounts. With no positive amount, the plain
+    sum is the Integer 0. number_to_currency prints the Integer 0 and
+    BigDecimal 0 the same way, as $0.00, the difference is the same number,
+    and 0.zero? is true for both.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def settlement_totals_tag(amounts, noun)
+    -  owed_to = amounts.select(&:positive?).sum(BigDecimal("0"))
+    +  owed_to = amounts.select(&:positive?).sum
+       owed_by = amounts.select(&:negative?).sum(BigDecimal("0")).abs
+       difference = owed_to - owed_by
+       lines = tag.div("Owed to #{noun}: #{number_to_currency(owed_to)}"), tag.div("Owed by #{noun}: #{number_to_currency(owed_by)}"), if difference.zero?
+         tag.div("Difference: $0.00 ✓")
+       else
+         more_owed = if difference.positive?
+           "to"
+         else
+           "by"
+         end
+         tag.div("Difference: #{number_to_currency(difference.abs)} more owed #{more_owed} #{noun}", class: "balance-owes")
+       end
+       tag.div(safe_join(lines), class: "settlement-total")
+     end

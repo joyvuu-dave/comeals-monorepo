@@ -1,0 +1,155 @@
+- subject: SettlementCorrecting#refuse_a_marked_settlement!
+  kind: same-answer
+  why: >-
+    Rails turns a record in a where hash into its id, so reconciliation_id:
+    reconciliation gives the same SQL as reconciliation_id: reconciliation.id.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def refuse_a_marked_settlement!
+    -  marked = SettlementLineMark.joins(:reconciliation_balance).where(reconciliation_balances: { reconciliation_id: reconciliation.id })
+    +  marked = SettlementLineMark.joins(:reconciliation_balance).where(reconciliation_balances: { reconciliation_id: reconciliation })
+       unless marked.exists?
+         return
+       end
+       raise(Settlement::Marked, "Refused: settlement #{reconciliation.id} has lines marked Paid or Let go, so people have paid " "from it and its numbers stay what they were. Correct the dinner instead; the next settlement " "carries it (ADR 0011 rule 6). Nothing was written.")
+     end
+
+- subject: SettlementCorrecting#stored_balances
+  kind: same-answer
+  why: >-
+    Rails turns a record in a where hash into its id, so reconciliation_id:
+    reconciliation gives the same SQL as reconciliation_id: reconciliation.id.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def stored_balances
+    -  ReconciliationBalance.where(reconciliation_id: reconciliation.id).pluck(:resident_id, :amount).to_h
+    +  ReconciliationBalance.where(reconciliation_id: reconciliation).pluck(:resident_id, :amount).to_h
+     end
+
+- subject: SettlementCorrecting#clear_ledger!
+  kind: same-answer
+  why: >-
+    Rails turns a record in a where hash into its id, so reconciliation_id:
+    reconciliation gives the same SQL as reconciliation_id: reconciliation.id.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def clear_ledger!
+       connection = Reconciliation.connection
+       was = connection.select_value("SELECT current_setting('comeals.allow_settled_writes', true)").to_s
+       write_setting(Settlement::BYPASS_SETTING, "on")
+       MealCharge.for_reconciliation(reconciliation).delete_all
+    -  ReconciliationBalance.where(reconciliation_id: reconciliation.id).delete_all
+    +  ReconciliationBalance.where(reconciliation_id: reconciliation).delete_all
+       write_setting(Settlement::BYPASS_SETTING, was)
+     end
+
+- subject: SettlementCorrecting#run_fix
+  kind: same-answer
+  why: >-
+    T.unsafe returns its argument as it is. It only tells Sorbet not to check
+    the type, so unless ended and unless T.unsafe(ended) do the same thing.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def run_fix(fix)
+       if fix.nil?
+         return
+       end
+       ended = T.let(false, T::Boolean)
+
+       begin
+         fix.call
+         ended = true
+       rescue Exception
+         ended = true
+         raise
+       ensure
+    -    unless T.unsafe(ended)
+    +    unless ended
+           raise(Settlement::FixLeftEarly, "The fix block was left by return, break or throw. Nothing was written: the fix and the " "correction stay together or not at all.")
+         end
+       end
+     end
+
+- subject: SettlementCorrecting#keep_old_ledger!
+  kind: same-answer
+  why: >-
+    squish only joins the lines of the SQL into one line. PostgreSQL reads
+    newlines and spaces between words the same way, so it runs the same
+    INSERT.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def keep_old_ledger!(reason, include_earlier_differences, earlier)
+       write_settling_setting(T.must(reconciliation.id).to_s)
+       correction = reconciliation.settlement_corrections.create!(reason:, include_earlier_differences:, earlier_differences: earlier)
+       binds = { correction: correction.id, at: correction.created_at, reconciliation: reconciliation.id }
+    -  Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC.squish, binds]))
+    +  Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC, binds]))
+     INSERT INTO settlement_correction_charges
+       (settlement_correction_id, meal_charge_id, meal_id, resident_id, kind, amount, multiplier, unit_cost,
+        bill_amount, charged_at, created_at, updated_at)
+     SELECT :correction, meal_charges.id, meal_charges.meal_id, meal_charges.resident_id, meal_charges.kind,
+            meal_charges.amount, meal_charges.multiplier, meal_charges.unit_cost, meal_charges.bill_amount,
+            meal_charges.created_at, :at, :at
+     FROM meal_charges JOIN meals ON meals.id = meal_charges.meal_id
+     WHERE meals.reconciliation_id = :reconciliation
+     ORDER BY meal_charges.id
+     HEREDOC
+       write_settling_setting("")
+       correction
+     end
+
+- subject: SettlementCorrecting#keep_old_ledger!
+  kind: same-answer
+  why: >-
+    sanitize_sql_array turns a record in the binds into its id
+    (id_for_database), so :correction becomes the same number as with
+    correction.id.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def keep_old_ledger!(reason, include_earlier_differences, earlier)
+       write_settling_setting(T.must(reconciliation.id).to_s)
+       correction = reconciliation.settlement_corrections.create!(reason:, include_earlier_differences:, earlier_differences: earlier)
+    -  binds = { correction: correction.id, at: correction.created_at, reconciliation: reconciliation.id }
+    +  binds = { correction:, at: correction.created_at, reconciliation: reconciliation.id }
+       Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC.squish, binds]))
+     INSERT INTO settlement_correction_charges
+       (settlement_correction_id, meal_charge_id, meal_id, resident_id, kind, amount, multiplier, unit_cost,
+        bill_amount, charged_at, created_at, updated_at)
+     SELECT :correction, meal_charges.id, meal_charges.meal_id, meal_charges.resident_id, meal_charges.kind,
+            meal_charges.amount, meal_charges.multiplier, meal_charges.unit_cost, meal_charges.bill_amount,
+            meal_charges.created_at, :at, :at
+     FROM meal_charges JOIN meals ON meals.id = meal_charges.meal_id
+     WHERE meals.reconciliation_id = :reconciliation
+     ORDER BY meal_charges.id
+     HEREDOC
+       write_settling_setting("")
+       correction
+     end
+
+- subject: SettlementCorrecting#keep_old_ledger!
+  kind: same-answer
+  why: >-
+    sanitize_sql_array turns a record in the binds into its id
+    (id_for_database), so :reconciliation becomes the same number as with
+    reconciliation.id.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def keep_old_ledger!(reason, include_earlier_differences, earlier)
+       write_settling_setting(T.must(reconciliation.id).to_s)
+       correction = reconciliation.settlement_corrections.create!(reason:, include_earlier_differences:, earlier_differences: earlier)
+    -  binds = { correction: correction.id, at: correction.created_at, reconciliation: reconciliation.id }
+    +  binds = { correction: correction.id, at: correction.created_at, reconciliation: }
+       Reconciliation.connection.execute(Reconciliation.sanitize_sql_array([<<-HEREDOC.squish, binds]))
+     INSERT INTO settlement_correction_charges
+       (settlement_correction_id, meal_charge_id, meal_id, resident_id, kind, amount, multiplier, unit_cost,
+        bill_amount, charged_at, created_at, updated_at)
+     SELECT :correction, meal_charges.id, meal_charges.meal_id, meal_charges.resident_id, meal_charges.kind,
+            meal_charges.amount, meal_charges.multiplier, meal_charges.unit_cost, meal_charges.bill_amount,
+            meal_charges.created_at, :at, :at
+     FROM meal_charges JOIN meals ON meals.id = meal_charges.meal_id
+     WHERE meals.reconciliation_id = :reconciliation
+     ORDER BY meal_charges.id
+     HEREDOC
+       write_settling_setting("")
+       correction
+     end

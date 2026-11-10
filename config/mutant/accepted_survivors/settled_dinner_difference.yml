@@ -1,0 +1,91 @@
+- subject: SettledDinnerDifference.for
+  kind: same-answer
+  why: >-
+    sums returns its argument as it is. Its sig only checks the type when the
+    code runs, and the grouped sum always has that type. So the Hash is the
+    same.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.for(meals)
+       ids = meals.map { |meal|
+         T.must(meal.id)
+       }
+    -  settled = sums(MealCharge.where(meal_id: ids).group(:meal_id, :resident_id).sum(:amount))
+    +  settled = MealCharge.where(meal_id: ids).group(:meal_id, :resident_id).sum(:amount)
+       corrected = sums(MealCorrectionLine.joins(:meal_correction).where(meal_corrections: { meal_id: ids }).group("meal_corrections.meal_id", :resident_id).sum(:amount))
+       now = T.let({}, T::Hash[[Integer, Integer], BigDecimal])
+       MealLedger.new(meals).lines.each { |line|
+         key = line.meal_id, line.resident_id
+         now[key] = now.fetch(key, ZERO) + line.amount
+       }
+       differences(settled, corrected, now)
+     end
+
+- subject: SettledDinnerDifference.for
+  kind: same-answer
+  why: >-
+    Rails turns records in a where hash into their ids, so meal_id: meals
+    gives the same SQL as meal_id: the list of ids. Every caller passes meals
+    read from the database, so no id is nil.
+  diff: |
+    @@ -1,13 +1,11 @@
+     def self.for(meals)
+    -  ids = meals.map { |meal|
+    -    T.must(meal.id)
+    -  }
+    +  ids = meals
+       settled = sums(MealCharge.where(meal_id: ids).group(:meal_id, :resident_id).sum(:amount))
+       corrected = sums(MealCorrectionLine.joins(:meal_correction).where(meal_corrections: { meal_id: ids }).group("meal_corrections.meal_id", :resident_id).sum(:amount))
+       now = T.let({}, T::Hash[[Integer, Integer], BigDecimal])
+       MealLedger.new(meals).lines.each { |line|
+         key = line.meal_id, line.resident_id
+         now[key] = now.fetch(key, ZERO) + line.amount
+       }
+       differences(settled, corrected, now)
+     end
+
+- subject: SettledDinnerDifference.for
+  kind: same-answer
+  why: >-
+    each returns the list it was called on, so ids is the list of meals. Rails
+    turns records in a where hash into their ids, so the SQL is the same.
+    Every caller passes meals read from the database, so no id is nil.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.for(meals)
+    -  ids = meals.map { |meal|
+    +  ids = meals.each { |meal|
+         T.must(meal.id)
+       }
+       settled = sums(MealCharge.where(meal_id: ids).group(:meal_id, :resident_id).sum(:amount))
+       corrected = sums(MealCorrectionLine.joins(:meal_correction).where(meal_corrections: { meal_id: ids }).group("meal_corrections.meal_id", :resident_id).sum(:amount))
+       now = T.let({}, T::Hash[[Integer, Integer], BigDecimal])
+       MealLedger.new(meals).lines.each { |line|
+         key = line.meal_id, line.resident_id
+         now[key] = now.fetch(key, ZERO) + line.amount
+       }
+       differences(settled, corrected, now)
+     end
+
+- subject: SettledDinnerDifference.for
+  kind: same-answer
+  why: >-
+    sums returns its argument as it is. Its sig only checks the type when the
+    code runs, and the grouped sum always has that type. So the Hash is the
+    same.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def self.for(meals)
+       ids = meals.map { |meal|
+         T.must(meal.id)
+       }
+       settled = sums(MealCharge.where(meal_id: ids).group(:meal_id, :resident_id).sum(:amount))
+    -  corrected = sums(MealCorrectionLine.joins(:meal_correction).where(meal_corrections: { meal_id: ids }).group("meal_corrections.meal_id", :resident_id).sum(:amount))
+    +  corrected = MealCorrectionLine.joins(:meal_correction).where(meal_corrections: { meal_id: ids }).group("meal_corrections.meal_id", :resident_id).sum(:amount)
+       now = T.let({}, T::Hash[[Integer, Integer], BigDecimal])
+       MealLedger.new(meals).lines.each { |line|
+         key = line.meal_id, line.resident_id
+         now[key] = now.fetch(key, ZERO) + line.amount
+       }
+       differences(settled, corrected, now)
+     end

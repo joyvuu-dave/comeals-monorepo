@@ -1,0 +1,23 @@
+- subject: SettlementPreviewHelper#no_cost_marking_words
+  kind: same-answer
+  why: >-
+    bill.date is meal.date, a Date column, and the app sets no default Date
+    format. So Date#to_s gives the ISO 8601 text, the same as iso8601.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def no_cost_marking_words(result)
+       sentences = ["Marked #{pluralize(result.marked.size, "cost")} as No cost."]
+       result.left_alone.each { |left|
+         bill = left.bill
+    -    sentences << "Left alone: #{bill.date.iso8601}, #{T.must(bill.resident).name}, because #{left.reason}."
+    +    sentences << "Left alone: #{bill.date}, #{T.must(bill.resident).name}, because #{left.reason}."
+       }
+       if result.gone.positive?
+         sentences << "#{pluralize(result.gone, "cost")} on the list #{if result.gone == 1
+       "was"
+     else
+       "were"
+     end} " "deleted after the list was shown."
+       end
+       sentences.join(" ")
+     end

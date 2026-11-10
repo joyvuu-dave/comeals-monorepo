@@ -1,0 +1,74 @@
+- subject: BalanceRecalculation#call
+  kind: same-answer
+  why: >-
+    T.cast does no check when the code runs. It returns its first argument as
+    it is, so the type named inside it changes nothing.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def call
+       (unreconciled_meals, resident_ids, corrections) = SnapshotRead.call(wait_limit: @wait_limit) {
+         meals = @community.meals.unreconciled.with_attendees.joins(:bills).distinct.preload(:bills, :meal_residents, :guests).to_a
+         waiting = MealCorrectionLine.joins(:meal_correction).merge(MealCorrection.waiting).group(:resident_id).sum(:amount)
+    -    [meals, @community.residents.pluck(:id), T.cast(waiting, T::Hash[Integer, BigDecimal])]
+    +    [meals, @community.residents.pluck(:id), T.cast(waiting, T::Hash[nil, BigDecimal])]
+       }
+       balances = MealLedger.new(unreconciled_meals).balances(resident_ids)
+       corrections.each { |resident_id, amount|
+         balances[resident_id] = balances.fetch(resident_id) + amount
+       }
+       rows = resident_ids.map { |resident_id|
+         { resident_id:, amount: balances.fetch(resident_id) }
+       }
+       ResidentBalance.upsert_all(rows, unique_by: :resident_id)
+       rows.size
+     end
+
+- subject: BalanceRecalculation#call
+  kind: same-answer
+  why: >-
+    T.cast does no check when the code runs. It returns its first argument as
+    it is, so the type named inside it changes nothing.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def call
+       (unreconciled_meals, resident_ids, corrections) = SnapshotRead.call(wait_limit: @wait_limit) {
+         meals = @community.meals.unreconciled.with_attendees.joins(:bills).distinct.preload(:bills, :meal_residents, :guests).to_a
+         waiting = MealCorrectionLine.joins(:meal_correction).merge(MealCorrection.waiting).group(:resident_id).sum(:amount)
+    -    [meals, @community.residents.pluck(:id), T.cast(waiting, T::Hash[Integer, BigDecimal])]
+    +    [meals, @community.residents.pluck(:id), T.cast(waiting, T::Hash[Integer, nil])]
+       }
+       balances = MealLedger.new(unreconciled_meals).balances(resident_ids)
+       corrections.each { |resident_id, amount|
+         balances[resident_id] = balances.fetch(resident_id) + amount
+       }
+       rows = resident_ids.map { |resident_id|
+         { resident_id:, amount: balances.fetch(resident_id) }
+       }
+       ResidentBalance.upsert_all(rows, unique_by: :resident_id)
+       rows.size
+     end
+
+- subject: BalanceRecalculation#call
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,16 +1,16 @@
+     def call
+       (unreconciled_meals, resident_ids, corrections) = SnapshotRead.call(wait_limit: @wait_limit) {
+    -    meals = @community.meals.unreconciled.with_attendees.joins(:bills).distinct.preload(:bills, :meal_residents, :guests).to_a
+    +    meals = @community.meals.unreconciled.with_attendees.joins(:bills).distinct.preload(:bills, :meal_residents, :guests).to_ary
+         waiting = MealCorrectionLine.joins(:meal_correction).merge(MealCorrection.waiting).group(:resident_id).sum(:amount)
+         [meals, @community.residents.pluck(:id), T.cast(waiting, T::Hash[Integer, BigDecimal])]
+       }
+       balances = MealLedger.new(unreconciled_meals).balances(resident_ids)
+       corrections.each { |resident_id, amount|
+         balances[resident_id] = balances.fetch(resident_id) + amount
+       }
+       rows = resident_ids.map { |resident_id|
+         { resident_id:, amount: balances.fetch(resident_id) }
+       }
+       ResidentBalance.upsert_all(rows, unique_by: :resident_id)
+       rows.size
+     end

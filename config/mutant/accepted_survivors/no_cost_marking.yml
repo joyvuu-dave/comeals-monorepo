@@ -1,0 +1,81 @@
+- subject: NoCostMarking.mark
+  kind: same-answer
+  why: >-
+    The meal ids go into WHERE id IN (...), and an id in that list twice finds
+    the same rows as once. So lock_meals locks and returns the same meals.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def self.mark(bill_ids)
+    -  closed_to_changes = lock_meals(Bill.where(id: bill_ids).distinct.pluck(:meal_id))
+    +  closed_to_changes = lock_meals(Bill.where(id: bill_ids).pluck(:meal_id))
+       bills = Bill.where(id: bill_ids).order(:id).preload(:meal, :resident).to_a
+       marked = T.let([], T::Array[Bill])
+       left_alone = T.let([], T::Array[LeftAlone])
+       bills.each { |bill|
+         reason = reason_to_leave(bill, closed_to_changes)
+         if reason
+           left_alone << LeftAlone.new(bill:, reason:)
+         else
+           marked << bill
+         end
+       }
+       marked.each { |bill|
+         bill.update!(no_cost: true)
+       }
+       Result.new(marked:, left_alone:, gone: bill_ids.size - bills.size)
+     end
+
+- subject: NoCostMarking.mark
+  kind: same-answer
+  why: >-
+    The relation is loaded once, the first time bills.each runs. After that
+    marked, left_alone and bills.size read the same loaded records, so the
+    result is the same.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def self.mark(bill_ids)
+       closed_to_changes = lock_meals(Bill.where(id: bill_ids).distinct.pluck(:meal_id))
+    -  bills = Bill.where(id: bill_ids).order(:id).preload(:meal, :resident).to_a
+    +  bills = Bill.where(id: bill_ids).order(:id).preload(:meal, :resident)
+       marked = T.let([], T::Array[Bill])
+       left_alone = T.let([], T::Array[LeftAlone])
+       bills.each { |bill|
+         reason = reason_to_leave(bill, closed_to_changes)
+         if reason
+           left_alone << LeftAlone.new(bill:, reason:)
+         else
+           marked << bill
+         end
+       }
+       marked.each { |bill|
+         bill.update!(no_cost: true)
+       }
+       Result.new(marked:, left_alone:, gone: bill_ids.size - bills.size)
+     end
+
+- subject: NoCostMarking.mark
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, to_ary is the same method as to_a. Both load
+    the records and return the same Array.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def self.mark(bill_ids)
+       closed_to_changes = lock_meals(Bill.where(id: bill_ids).distinct.pluck(:meal_id))
+    -  bills = Bill.where(id: bill_ids).order(:id).preload(:meal, :resident).to_a
+    +  bills = Bill.where(id: bill_ids).order(:id).preload(:meal, :resident).to_ary
+       marked = T.let([], T::Array[Bill])
+       left_alone = T.let([], T::Array[LeftAlone])
+       bills.each { |bill|
+         reason = reason_to_leave(bill, closed_to_changes)
+         if reason
+           left_alone << LeftAlone.new(bill:, reason:)
+         else
+           marked << bill
+         end
+       }
+       marked.each { |bill|
+         bill.update!(no_cost: true)
+       }
+       Result.new(marked:, left_alone:, gone: bill_ids.size - bills.size)
+     end

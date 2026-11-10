@@ -1,0 +1,218 @@
+- subject: MealLedger#initialize
+  kind: same-answer
+  why: >-
+    Without the T.let line, @lines is not set, and Ruby reads an instance
+    variable that was never set as nil. lines uses @lines ||= ..., so it
+    builds the list the first time either way.
+  diff: |
+    @@ -1,4 +1,3 @@
+     def initialize(meals)
+       @meals = meals
+    -  @lines = T.let(nil, T.nilable(T::Array[Line]))
+     end
+
+- subject: MealLedger.units
+  kind: same-answer
+  why: >-
+    scaled has no fraction here: the line above raises when scaled.frac is not
+    zero. For a BigDecimal with no fraction, Integer(scaled) and scaled.to_i
+    give the same Integer.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.units(amount)
+       scaled = amount * UNITS_PER_DOLLAR
+       unless scaled.frac.zero?
+         raise(ArgumentError, "#{amount.to_s("F")} is not a whole number of 10^-8 dollars")
+       end
+    -  scaled.to_i
+    +  Integer(scaled)
+     end
+
+- subject: MealLedger.units
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no argument it uses the
+    'F' format, and #{amount} calls to_s with no argument. So the message has
+    the same text.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.units(amount)
+       scaled = amount * UNITS_PER_DOLLAR
+       unless scaled.frac.zero?
+    -    raise(ArgumentError, "#{amount.to_s("F")} is not a whole number of 10^-8 dollars")
+    +    raise(ArgumentError, "#{amount} is not a whole number of 10^-8 dollars")
+       end
+       scaled.to_i
+     end
+
+- subject: MealLedger.units
+  kind: same-answer
+  why: >-
+    On BigDecimal, to_int is the same method as to_i.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.units(amount)
+       scaled = amount * UNITS_PER_DOLLAR
+       unless scaled.frac.zero?
+         raise(ArgumentError, "#{amount.to_s("F")} is not a whole number of 10^-8 dollars")
+       end
+    -  scaled.to_i
+    +  scaled.to_int
+     end
+
+- subject: MealLedger.units
+  kind: same-answer
+  why: >-
+    ActiveSupport changes BigDecimal#to_s so that with no argument it uses the
+    'F' format. So the message has the same text.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.units(amount)
+       scaled = amount * UNITS_PER_DOLLAR
+       unless scaled.frac.zero?
+    -    raise(ArgumentError, "#{amount.to_s("F")} is not a whole number of 10^-8 dollars")
+    +    raise(ArgumentError, "#{amount.to_s} is not a whole number of 10^-8 dollars")
+       end
+       scaled.to_i
+     end
+
+- subject: MealLedger#kind_rank
+  kind: same-answer
+  why: >-
+    kind_rank is used only to compare an attendee with a guest of the same
+    resident in eaters. 1 for a guest and -1 for an attendee still puts the
+    guest after the attendee, so the order is the same.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def kind_rank(eater)
+       if eater.is_a?(Guest)
+         1
+       else
+    -    0
+    +    -1
+       end
+     end
+
+- subject: MealLedger#kind_rank
+  kind: same-answer
+  why: >-
+    kind_rank is used only to compare an attendee with a guest of the same
+    resident in eaters. 2 for a guest and 0 for an attendee still puts the
+    guest after the attendee, so the order is the same.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def kind_rank(eater)
+       if eater.is_a?(Guest)
+    -    1
+    +    2
+       else
+         0
+       end
+     end
+
+- subject: MealLedger#kind_rank
+  kind: same-answer
+  why: >-
+    kind_rank is used only to compare an attendee with a guest of the same
+    resident in eaters. 167 for a guest and 0 for an attendee still puts the
+    guest after the attendee, so the order is the same.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def kind_rank(eater)
+       if eater.is_a?(Guest)
+    -    1
+    +    167
+       else
+         0
+       end
+     end
+
+- subject: MealLedger#kind_rank
+  kind: same-answer
+  why: >-
+    kind_rank is given a MealResident or a Guest (its sig says so), and no
+    class in app/ or lib/ inherits from Guest. So instance_of?(Guest) and
+    is_a?(Guest) give the same answer.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def kind_rank(eater)
+    -  if eater.is_a?(Guest)
+    +  if eater.instance_of?(Guest)
+         1
+       else
+         0
+       end
+     end
+
+- subject: MealLedger#credit_lines
+  kind: same-answer
+  why: >-
+    Line is a T::Struct, and multiplier is a T.nilable field. A T::Struct sets
+    a nilable field that is left out to nil, so the Line is the same as with
+    multiplier: nil.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def credit_lines(meal, bills, spent, financials)
+       credits = credit_units(spent, financials)
+       Array.new(bills.size) { |index|
+         bill = T.must(bills[index])
+    -    Line.new(meal_id: T.must(meal.id), resident_id: T.must(bill.resident_id), kind: :credit, amount: amount(T.must(credits[index])), multiplier: nil, unit_cost: financials.unit_cost, bill_amount: T.must(bill.amount))
+    +    Line.new(meal_id: T.must(meal.id), resident_id: T.must(bill.resident_id), kind: :credit, amount: amount(T.must(credits[index])), unit_cost: financials.unit_cost, bill_amount: T.must(bill.amount))
+       }
+     end
+
+- subject: MealLedger#debit_lines
+  kind: same-answer
+  why: >-
+    Line is a T::Struct, and bill_amount is a T.nilable field. A T::Struct
+    sets a nilable field that is left out to nil, so the Line is the same as
+    with bill_amount: nil.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def debit_lines(meal, people, financials)
+       weights = people.map { |eater|
+         T.must(eater.multiplier)
+       }
+       shares = if financials.total_multiplier.zero?
+         weights
+       else
+         LargestRemainderSplit.call(financials.effective_units, weights)
+       end
+       Array.new(people.size) { |index|
+         eater = T.must(people[index])
+         Line.new(meal_id: T.must(meal.id), resident_id: T.must(eater.resident_id), kind: if eater.is_a?(Guest)
+           :guest_debit
+         else
+           :debit
+    -    end, amount: amount(-T.must(shares[index])), multiplier: T.must(eater.multiplier), unit_cost: financials.unit_cost, bill_amount: nil)
+    +    end, amount: amount(-T.must(shares[index])), multiplier: T.must(eater.multiplier), unit_cost: financials.unit_cost)
+       }
+     end
+
+- subject: MealLedger#debit_lines
+  kind: same-answer
+  why: >-
+    people holds MealResident and Guest rows only, and no class in app/ or
+    lib/ inherits from Guest. So instance_of?(Guest) and is_a?(Guest) give the
+    same answer.
+  diff: |
+    @@ -1,18 +1,18 @@
+     def debit_lines(meal, people, financials)
+       weights = people.map { |eater|
+         T.must(eater.multiplier)
+       }
+       shares = if financials.total_multiplier.zero?
+         weights
+       else
+         LargestRemainderSplit.call(financials.effective_units, weights)
+       end
+       Array.new(people.size) { |index|
+         eater = T.must(people[index])
+    -    Line.new(meal_id: T.must(meal.id), resident_id: T.must(eater.resident_id), kind: if eater.is_a?(Guest)
+    +    Line.new(meal_id: T.must(meal.id), resident_id: T.must(eater.resident_id), kind: if eater.instance_of?(Guest)
+           :guest_debit
+         else
+           :debit
+         end, amount: amount(-T.must(shares[index])), multiplier: T.must(eater.multiplier), unit_cost: financials.unit_cost, bill_amount: nil)
+       }
+     end
