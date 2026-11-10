@@ -204,13 +204,13 @@ class Resident < ApplicationRecord
   # profile: the children in their unit who have no email (ADR 0014). A
   # child with no email cannot sign in, so an adult they live with keeps
   # their name and vegetarian setting. A child with an email signs in and
-  # edits their own. A child edits nobody else.
+  # edits their own. A child edits nobody else. The resident is never in
+  # the list: they are an adult here, and select keeps only children.
   sig { returns(T::Array[Resident]) }
   def children_i_can_edit
     return [] if child?
 
-    Resident.where(unit_id: unit_id, active: true, email: nil).where.not(id: id)
-            .order(:name, :id).to_a.select(&:child?)
+    Resident.where(unit_id: unit_id, active: true, email: nil).order(:name, :id).to_a.select(&:child?)
   end
 
   # Priced below a full adult share today.
