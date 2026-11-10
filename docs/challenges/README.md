@@ -79,7 +79,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | --- | ------------------------------------------------------------------------------------------------------ | ----------- | ------ | ---------- |
 | 1   | [An email change can take over an account](0001-email-change-account-takeover.md)                      | security    | open   | 2026-11-07 |
 | 2   | [Keep every guarantee with no database locks we take ourselves](0002-no-explicit-database-locks.md)    | concurrency | open   | 2026-11-07 |
-| 3   | [The same guarantees on every database Rails supports](0003-any-database-rails-supports.md)            | portability | open   | 2026-11-07 |
+| 3   | [The same guarantees on every database Rails supports](0003-any-database-rails-supports.md)            | portability | open   | 2026-11-10 |
 | 4   | [Many people changing many things at once](0004-many-people-many-changes-at-once.md)                   | concurrency | open   | 2026-11-07 |
 | 5   | [Time zone rules change](0005-time-zone-rules-change.md)                                               | time        | open   | 2026-11-07 |
 | 6   | [Dates far in the future](0006-dates-far-in-the-future.md)                                             | time        | open   | 2026-11-07 |
@@ -105,7 +105,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 26  | [Backups that can be restored and read](0026-backups-that-can-be-restored.md)                          | operations  | open   | 2026-11-07 |
 | 27  | [Prove the money math](0027-prove-the-money-math.md)                                                   | proof       | done   | 2026-11-10 |
 | 28  | [Model the concurrency rules](0028-model-the-concurrency-rules.md)                                     | proof       | open   | 2026-11-07 |
-| 29  | [A test catches every code change](0029-every-mutant-is-caught.md)                                     | proof       | open   | 2026-11-07 |
+| 29  | [A test catches every code change](0029-every-mutant-is-caught.md)                                     | proof       | open   | 2026-11-10 |
 | 30  | [Tests that break the network, the database and the clock](0030-tests-that-break-things-on-purpose.md) | proof       | open   | 2026-11-07 |
 | 31  | [Replay any failure exactly](0031-replay-any-failure-exactly.md)                                       | proof       | open   | 2026-11-07 |
 | 32  | [Everyone can use it](0032-everyone-can-use-it.md)                                                     | quality     | open   | 2026-11-07 |

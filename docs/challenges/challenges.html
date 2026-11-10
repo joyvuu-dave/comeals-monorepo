@@ -531,7 +531,7 @@ td {
 </details>
 <details class="challenge" id="challenge-3" data-status="open" data-area="portability">
   <summary><span class="num">3</span> <span class="title">The same guarantees on every database Rails supports</span> <span class="chip status-open">Not started</span> <span class="chip area-portability">portability</span><span class="badge">8 outside facts to read</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-07 · <code>docs/challenges/0003-any-database-rails-supports.md</code></div>
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-10 · <code>docs/challenges/0003-any-database-rails-supports.md</code></div>
   <details class="watches"><summary>Watches 2 files</summary><ul><li><code>config/database.yml</code></li><li><code>docs/adr/0008-the-ledger-grain.md</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
@@ -1776,7 +1776,7 @@ UNIQUE (idempotency_key)</pre>
 </details>
 <details class="challenge" id="challenge-29" data-status="open" data-area="proof">
   <summary><span class="num">29</span> <span class="title">A test catches every code change</span> <span class="chip status-open">Not started</span> <span class="chip area-proof">proof</span><span class="badge">1 not checked</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-07 · <code>docs/challenges/0029-every-mutant-is-caught.md</code></div>
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-10 · <code>docs/challenges/0029-every-mutant-is-caught.md</code></div>
   <details class="watches"><summary>Watches 1 file</summary><ul><li><code>docs/mutation-testing.md</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
@@ -1796,6 +1796,8 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>A timeout counts as a survivor (<code>coverage_criteria</code> in <code>.mutant.yml</code>).</p>
 </li><li>
+<p>The money rules: on 2026-11-10 mutant ran <code>LargestRemainderSplit</code>, <code>MealLedger</code> and the cent rounding in <code>Settlement</code>. 20 of 1,204 changes survived, and <code>docs/mutation-testing.md</code> says for each one why no test can catch it. The rules themselves are also proven for every input (challenge 27).</p>
+</li><li>
 <p>Not checked: whether every stage was run again after the last change to how survivors are counted, so that the recorded rates are the true ones.</p>
 </li></ul>
 
@@ -1813,6 +1815,8 @@ UNIQUE (idempotency_key)</pre>
 <h3>History</h3>
 <ul><li>
 <p>2026-11-07: Opened.</p>
+</li><li>
+<p>2026-11-10: Added the mutant run on the money rules.</p>
 </li></ul>
 </div>
 </details>

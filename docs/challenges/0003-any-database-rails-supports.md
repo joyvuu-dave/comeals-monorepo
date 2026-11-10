@@ -4,7 +4,7 @@ title: The same guarantees on every database Rails supports
 area: portability
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-10
 watches:
   - config/database.yml
   - docs/adr/0008-the-ledger-grain.md

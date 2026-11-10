@@ -4,7 +4,7 @@ title: A test catches every code change
 area: proof
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-10
 watches:
   - docs/mutation-testing.md
 ---
@@ -23,6 +23,7 @@ mutant changes `>=` to `>` in a money rule, and every test still passes. That li
 
 - `bin/mutant` runs one class or one stage, and the Mutant workflow runs every class (`docs/mutation-testing.md`). The results and the open survivors are recorded there.
 - A timeout counts as a survivor (`coverage_criteria` in `.mutant.yml`).
+- The money rules: on 2026-11-10 mutant ran `LargestRemainderSplit`, `MealLedger` and the cent rounding in `Settlement`. 20 of 1,204 changes survived, and `docs/mutation-testing.md` says for each one why no test can catch it. The rules themselves are also proven for every input (challenge 27).
 - Not checked: whether every stage was run again after the last change to how survivors are counted, so that the recorded rates are the true ones.
 
 ## Options
@@ -34,3 +35,4 @@ mutant changes `>=` to `>` in a money rule, and every test still passes. That li
 ## History
 
 - 2026-11-07: Opened.
+- 2026-11-10: Added the mutant run on the money rules.
