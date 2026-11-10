@@ -818,9 +818,9 @@ RSpec.describe AuditDescription do
     # A bill's amount change is read as a list of two amounts. A row
     # written by hand with one amount, not a list, has no change to show,
     # so it falls back the way a no_cost or resident_id change that is not
-    # a list does. Today the text "50.0" is read as the list "5", "0".
+    # a list does. Until 2026-11-10 the text "50.0" was read as the list
+    # "5", "0".
     it 'falls back for an amount change that is not a list' do
-      pending 'AuditDescription#amount_change returns any amount that is not nil, not only a list'
       changes = [{ 'amount' => '50.0' }, { 'amount' => 50 }]
       rows = changes.each_with_index.map { |change, index| stored('Bill', 'update', change, id: 990_090 + index) }
       describer = described_class.for(rows)
@@ -832,7 +832,6 @@ RSpec.describe AuditDescription do
     # The history must still answer, because a history that raises shows
     # nothing at all.
     it 'falls back for a day or a close time that is not ISO 8601 text, without raising' do
-      pending 'AuditDescription#date_words and #close_time_words raise on text that is not ISO 8601'
       community # a close time is shown in the community's zone
       changes = [{ 'date' => ['2026-11-06', 'next week'] }, { 'closed_at' => [nil, '2023-03-07 00:15'] }]
       rows = changes.each_with_index.map { |change, index| stored('Meal', 'update', change, id: 990_095 + index) }

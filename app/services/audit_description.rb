@@ -227,10 +227,13 @@ class AuditDescription
   end
 
   # "Meal moved from Sun Aug 6, 2017 to Tue Aug 1, 2017". The row holds
-  # each day as "YYYY-MM-DD".
+  # each day as "YYYY-MM-DD". Nil for a day that is not, which only a row
+  # written by hand can hold: the history falls back instead of raising.
   def date_words(change)
-    from, to = change.map { |day| Date.iso8601(day).strftime('%a %b %-d, %Y') }
+    from, to = change.map { |day| Date.iso8601(day.to_s).strftime('%a %b %-d, %Y') }
     "Meal moved from #{from} to #{to}"
+  rescue Date::Error
+    nil
   end
 
   # A settlement by its id, the number its admin page shows.
@@ -243,13 +246,16 @@ class AuditDescription
   end
 
   # In the community's zone, the way the rest of the history shows a
-  # time, whatever zone the request runs in.
+  # time, whatever zone the request runs in. Nil for a time that is not
+  # ISO 8601 text, which only a row written by hand can hold.
   def close_time_words(change)
     to = change[1]
     return 'Close time cleared' if to.nil?
 
     at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime('%a %b %-d, %Y, %-l:%M %P')
     change[0].nil? ? "Close time set to #{at}" : "Close time changed to #{at}"
+  rescue ArgumentError
+    nil
   end
 
   def community_zone
@@ -308,9 +314,11 @@ class AuditDescription
   # it still say so (6051 in production, 2017 to 2026-03). Those become
   # dollars here, as BigDecimal, so they read like every later row. A row
   # whose amount_cents is not a list of whole numbers is not read: the
-  # column was a NOT NULL integer, so a real row never has that.
+  # column was a NOT NULL integer, so a real row never has that. Nor is an
+  # amount that is not a list, which only a row written by hand can hold.
   def amount_change(changes)
-    return changes['amount'] unless changes['amount'].nil?
+    amount = changes['amount']
+    return amount if amount.instance_of?(Array)
 
     cents = changes['amount_cents']
     return nil unless cents.instance_of?(Array) && cents.all?(Integer)
