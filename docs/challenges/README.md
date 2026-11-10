@@ -103,7 +103,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 24  | [No internet at dinner time](0024-no-internet-at-dinner.md)                                            | operations  | open   | 2026-11-07 |
 | 25  | [Build the app again in 20 years](0025-build-it-again-in-20-years.md)                                  | operations  | open   | 2026-11-07 |
 | 26  | [Backups that can be restored and read](0026-backups-that-can-be-restored.md)                          | operations  | open   | 2026-11-07 |
-| 27  | [Prove the money math](0027-prove-the-money-math.md)                                                   | proof       | open   | 2026-11-07 |
+| 27  | [Prove the money math](0027-prove-the-money-math.md)                                                   | proof       | done   | 2026-11-10 |
 | 28  | [Model the concurrency rules](0028-model-the-concurrency-rules.md)                                     | proof       | open   | 2026-11-07 |
 | 29  | [A test catches every code change](0029-every-mutant-is-caught.md)                                     | proof       | open   | 2026-11-07 |
 | 30  | [Tests that break the network, the database and the clock](0030-tests-that-break-things-on-purpose.md) | proof       | open   | 2026-11-07 |
