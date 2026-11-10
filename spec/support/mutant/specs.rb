@@ -150,6 +150,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/authentication_pinning_spec.rb' => %w[JwtAuth ApiController],
   'spec/requests/api/v1/profiles_controller_spec.rb' =>
     %w[ProfileUpdate EmailChange ResidentMailer Resident Api::V1::ProfilesController],
+  # The only spec where a profile write is refused for a conflict and
+  # tried again, so the only one that fails without RetryOnConflict.
+  'spec/requests/api/v1/profile_conflict_retry_spec.rb' => %w[Api::V1::ProfilesController RetryOnConflict],
   'spec/requests/api/v1/password_reset_spec.rb' => %w[PasswordReset ResidentMailer Api::V1::ResidentsController],
   'spec/requests/admin/password_reset_button_spec.rb' => %w[PasswordReset],
   'spec/requests/password_reset_logs_spec.rb' => %w[PasswordReset ResidentMailer Api::V1::ResidentsController],

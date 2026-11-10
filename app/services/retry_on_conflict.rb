@@ -37,6 +37,17 @@
 # of TransactionRollbackError still answers it. Until 2026-10-09 a
 # refused push enqueue (LiveUpdate.push) was dropped after one try.
 #
+# The block runs with Rails' query cache off. A request runs with the cache
+# on, and a query the request ran before this block (ApiController finds
+# the signed-in resident) would be answered from the cache inside the
+# block's transaction, with no SQL. PostgreSQL never sees that read, so it
+# cannot find a conflict with it: the block decides from a row another
+# transaction has changed since, and its write goes through, or fails on
+# a CHECK as a 500. ProfilesController#email_link did that until
+# 2026-11-10 (spec/requests/api/v1/profile_conflict_retry_spec.rb). With
+# the cache off, every read in the block is a real read in its
+# transaction, and a second try reads fresh rows too.
+#
 # Retries are reported through Rails.error so they are counted rather than
 # merely survived. A retry that works and a retry that fires constantly look
 # identical from the outside, and the second one is a problem.
@@ -59,7 +70,7 @@ class RetryOnConflict
       .params(attempts: Integer, base_delay: Float, blk: T.proc.returns(T.type_parameter(:Result)))
       .returns(T.type_parameter(:Result))
   end
-  def self.call(attempts: MAX_ATTEMPTS, base_delay: BASE_DELAY, &blk)
+  def self.call(attempts: MAX_ATTEMPTS, base_delay: BASE_DELAY, &blk) # rubocop:disable Style/ArgumentsForwarding -- the sig above has to name the block
     # Already inside a transaction, so a retry here cannot succeed. See
     # above. This is also what a spec running under transactional fixtures
     # hits, which is why the fault injection lives in the non-transactional
@@ -69,7 +80,7 @@ class RetryOnConflict
     attempt = 0
     begin
       attempt += 1
-      yield
+      ActiveRecord::Base.uncached(&blk) # rubocop:disable Style/ArgumentsForwarding -- the sig above has to name the block
     rescue ActiveRecord::TransactionRollbackError, SolidQueue::Job::EnqueueError => e
       conflict = conflict_in(e)
       raise unless conflict

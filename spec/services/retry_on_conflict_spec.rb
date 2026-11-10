@@ -246,6 +246,25 @@ RSpec.describe RetryOnConflict do
         hash_including(handled: true, severity: :warning)
       )
     end
+
+    # A read the request ran before the block must be read again inside the
+    # block's transaction, so PostgreSQL sees it and can find a conflict.
+    it 'reads the database inside the block, not the query cache from before it' do
+      resident = create(:resident, name: 'Ann Lee')
+      seen = ActiveRecord::Base.cache do
+        Resident.find(resident.id)
+        # Another connection renames the resident and commits. A write on
+        # this connection would clear its cache.
+        Thread.new do
+          ActiveRecord::Base.connection_pool.with_connection do
+            Resident.where(id: resident.id).update_all(name: 'Ann Changed')
+          end
+        end.join
+        described_class.call { Resident.transaction { Resident.find(resident.id).name } }
+      end
+
+      expect(seen).to eq('Ann Changed')
+    end
   end
 
   # Retrying inside someone else's transaction cannot work: PostgreSQL has
