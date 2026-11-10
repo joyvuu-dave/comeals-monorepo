@@ -1,0 +1,97 @@
+- subject: MealSchedule#initialize
+  kind: same-answer
+  why: >-
+    The one caller, `Community#meal_schedule`, passes `schedule`, a plain
+    Array from the jsonb column or from `schedule=`; specs pass Array
+    literals. Only a subclass gives a different answer for `is_a?` and
+    `instance_of?`, and nothing in the app or its gems makes a subclass of
+    Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def initialize(weeks:)
+    -  unless weeks.is_a?(Array) && weeks.length.between?(1, MAX_WEEKS)
+    +  unless weeks.instance_of?(Array) && weeks.length.between?(1, MAX_WEEKS)
+         raise(ArgumentError, "cycle must be 1 to #{MAX_WEEKS} weeks, got #{weeks.inspect}")
+       end
+       if weeks.flatten.empty?
+         raise(ArgumentError, "schedule has no meal days")
+       end
+       @weeks = weeks
+     end
+
+- subject: MealSchedule.weeks_since_epoch
+  kind: same-answer
+  why: >-
+    `date.to_date - EPOCH` is a Rational with denominator 1, a whole
+    number of days. `to_i` and `to_int` give the same Integer for it.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.weeks_since_epoch(date)
+    -  (date.to_date - EPOCH).to_i / 7
+    +  (date.to_date - EPOCH).to_int / 7
+     end
+
+- subject: MealSchedule.weeks_since_epoch
+  kind: same-answer
+  why: >-
+    `date.to_date - EPOCH` is a Rational with denominator 1, a whole
+    number of days. `to_i` and `Integer()` give the same Integer for it.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.weeks_since_epoch(date)
+    -  (date.to_date - EPOCH).to_i / 7
+    +  Integer((date.to_date - EPOCH)) / 7
+     end
+
+- subject: MealSchedule#meal_day?
+  kind: same-answer
+  why: >-
+    `week_index` is `weeks_since_epoch(date) % cycle_length`, and
+    `cycle_length` is the number of weeks, so the index is always from 0
+    to the last week. `[]`, `at` and `fetch` give the same week.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def meal_day?(date)
+    -  weeks[week_index(date)].include?(date.wday)
+    +  weeks.fetch(week_index(date)).include?(date.wday)
+     end
+
+- subject: MealSchedule#meal_day?
+  kind: same-answer
+  why: >-
+    `week_index` is `weeks_since_epoch(date) % cycle_length`, and
+    `cycle_length` is the number of weeks, so the index is always from 0
+    to the last week. `[]`, `at` and `fetch` give the same week.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def meal_day?(date)
+    -  weeks[week_index(date)].include?(date.wday)
+    +  weeks.at(week_index(date)).include?(date.wday)
+     end
+
+- subject: MealSchedule#upcoming_dates
+  kind: never-ends
+  why: >-
+    With the loop body removed, `dates` never grows, so `while
+    dates.length < count` never ends for a count above 0. Nothing is
+    called inside the loop, so no example can stop it with an error of its
+    own.
+  diff: |
+    @@ -1,17 +1,9 @@
+     def upcoming_dates(from:, count:)
+       dates = []
+       date = from.to_date
+       scan_limit = (count * cycle_length * 7) + 366
+       scanned = 0
+       while dates.length < count
+    -    if scanned > scan_limit
+    -      raise("Scanned #{scanned} days from #{from} and found only #{dates.length} of " "#{count} meal days — the schedule #{weeks.inspect} looks broken")
+    -    end
+    -    if meal_day?(date) && !Holidays.holiday?(date)
+    -      dates << date
+    -    end
+    -    date = date.tomorrow
+    -    scanned += 1
+       end
+       dates
+     end

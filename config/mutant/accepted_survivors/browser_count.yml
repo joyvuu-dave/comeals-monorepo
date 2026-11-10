@@ -1,0 +1,64 @@
+- subject: BrowserCount.add_one!
+  kind: same-answer
+  why: >-
+    The record is built only to run the validations, and is never saved.
+    Any whole count above 0 passes them (`greater_than: 0`), and the
+    INSERT writes the count 1 itself, not the count of the record.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.add_one!(date:, browser:, major:, os:, device:, result:)
+    -  new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
+    +  new(date:, browser:, major:, os:, device:, result:, count: 2).validate!
+       connection.execute(sanitize_sql_array(["INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+     ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
+     DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n".squish, date, browser, major, os, device, result]))
+     end
+
+- subject: BrowserCount.add_one!
+  kind: same-answer
+  why: >-
+    `squish` only puts the SQL on one line. PostgreSQL reads the same
+    statement with the line breaks in it, and no placeholder or value is
+    inside a line break.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.add_one!(date:, browser:, major:, os:, device:, result:)
+       new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
+       connection.execute(sanitize_sql_array(["INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+     ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
+    -DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n".squish, date, browser, major, os, device, result]))
+    +DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n", date, browser, major, os, device, result]))
+     end
+
+- subject: BrowserCount.add_one!
+  kind: same-answer
+  why: >-
+    The record is built only to run the validations, and is never saved.
+    Any whole count above 0 passes them (`greater_than: 0`), and the
+    INSERT writes the count 1 itself, not the count of the record.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def self.add_one!(date:, browser:, major:, os:, device:, result:)
+    -  new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
+    +  new(date:, browser:, major:, os:, device:, result:, count: 167).validate!
+       connection.execute(sanitize_sql_array(["INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+     ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
+     DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n".squish, date, browser, major, os, device, result]))
+     end
+
+- subject: BrowserCount.by_month
+  kind: same-answer
+  why: >-
+    Without `Arel.sql`, Rails accepts this order string as it is, because
+    each part is a column name or an alias with ASC, DESC or NULLS LAST.
+    So it does not raise, and the SQL is the same.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def self.by_month
+       month = Arel.sql("date_trunc('month', date)::date")
+    -  select(month.as("month"), :browser, :major, :os, :device, :result, Arel.sql("sum(count)").as("loads")).group(month, :browser, :major, :os, :device, :result).order(Arel.sql("month DESC, loads DESC, browser, major DESC NULLS LAST, os, device, result"))
+    +  select(month.as("month"), :browser, :major, :os, :device, :result, Arel.sql("sum(count)").as("loads")).group(month, :browser, :major, :os, :device, :result).order("month DESC, loads DESC, browser, major DESC NULLS LAST, os, device, result")
+     end

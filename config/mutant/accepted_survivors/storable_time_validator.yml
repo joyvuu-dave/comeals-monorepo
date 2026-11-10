@@ -1,0 +1,25 @@
+- subject: StorableTimeValidator#validate_each
+  kind: same-answer
+  why: >-
+    The validator is used on `GuestRoomReservation#date` (a date column,
+    so a Date) and on `start_date` and `end_date` of Event and
+    CommonHouseReservation (datetime columns, so an
+    ActiveSupport::TimeWithZone, even when a DateTime is assigned).
+    `is_a?(Date)` and `instance_of?(Date)` differ only for a DateTime, and
+    no column here gives one.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def validate_each(record, attribute, value)
+       if value.nil?
+         return
+       end
+    -  if if value.is_a?(Date)
+    +  if if value.instance_of?(Date)
+         StorableTime.date?(value)
+       else
+         StorableTime.timestamp?(value)
+       end
+         return
+       end
+       record.errors.add(attribute, "is not a date the database can store")
+     end

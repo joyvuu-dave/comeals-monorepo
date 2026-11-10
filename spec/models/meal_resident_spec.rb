@@ -226,6 +226,25 @@ RSpec.describe MealResident do
 
       expect(mr.errors[:base]).to include('Meal has no open spots.')
     end
+
+    # Loading every sign-up and guest to count them gives the same number,
+    # so this example reads the statements. It runs for
+    # ClosedMealAttendanceFreeze#attendees_in_database too.
+    it 'counts the sign-ups and guests of a closed meal in the database, without loading them' do
+      other = create(:resident, community: community, unit: create(:unit, community: community))
+      create(:meal_resident, meal: meal, resident: other, community: community)
+      create(:guest, meal: meal, resident: other)
+      meal.update_columns(closed: true, closed_at: 1.hour.ago, max: 5)
+      mr = described_class.new(meal: meal, resident: resident)
+      statements = []
+      callback = ->(*, payload) { statements << payload[:sql] }
+      ActiveSupport::Notifications.subscribed(callback, 'sql.active_record') { mr.valid? }
+
+      expect(statements.grep(/\ASELECT \S+ FROM "(meal_residents|guests)"/)).to contain_exactly(
+        /\ASELECT COUNT\(\*\) FROM "meal_residents"/,
+        /\ASELECT COUNT\(\*\) FROM "guests"/
+      )
+    end
   end
 
   # The freeze is shared with Guest; the full table of moves is in

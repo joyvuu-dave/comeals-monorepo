@@ -1,0 +1,748 @@
+- subject: Community#schedule=
+  kind: same-answer
+  why: >-
+    `value` is read from the jsonb column, comes from the admin form's
+    params, or is written in code (the seed, a spec, the console). Its
+    lists are plain Arrays. Only a subclass gives a different answer for
+    `is_a?` and `instance_of?`, and nothing in the app or its gems makes a
+    subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def schedule=(value)
+       weeks = if value.is_a?(Hash)
+         value.keys.sort_by(&:to_i).map { |key|
+           value[key]
+         }
+       else
+         value
+       end
+       if weeks.is_a?(Array)
+         weeks = weeks.map { |week|
+    -      if week.is_a?(Array)
+    +      if week.instance_of?(Array)
+             normalize_schedule_week(week)
+           else
+             week
+           end
+         }
+       end
+       super(weeks)
+     end
+
+- subject: Community#schedule=
+  kind: same-answer
+  why: >-
+    `value` is read from the jsonb column, comes from the admin form's
+    params, or is written in code (the seed, a spec, the console). Its
+    lists are plain Arrays. Only a subclass gives a different answer for
+    `is_a?` and `instance_of?`, and nothing in the app or its gems makes a
+    subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def schedule=(value)
+       weeks = if value.is_a?(Hash)
+         value.keys.sort_by(&:to_i).map { |key|
+           value[key]
+         }
+       else
+         value
+       end
+    -  if weeks.is_a?(Array)
+    +  if weeks.instance_of?(Array)
+         weeks = weeks.map { |week|
+           if week.is_a?(Array)
+             normalize_schedule_week(week)
+           else
+             week
+           end
+         }
+       end
+       super(weeks)
+     end
+
+- subject: Community#schedule=
+  kind: same-answer
+  why: >-
+    Each key comes from `value.keys`, so it is always in the Hash, and
+    `fetch` and `[]` give the same value.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def schedule=(value)
+       weeks = if value.is_a?(Hash)
+         value.keys.sort_by(&:to_i).map { |key|
+    -      value[key]
+    +      value.fetch(key)
+         }
+       else
+         value
+       end
+       if weeks.is_a?(Array)
+         weeks = weeks.map { |week|
+           if week.is_a?(Array)
+             normalize_schedule_week(week)
+           else
+             week
+           end
+         }
+       end
+       super(weeks)
+     end
+
+- subject: Community#dinner_start_times=
+  kind: same-answer
+  why: >-
+    `value` comes from the admin form's params, the jsonb column, or code
+    (the seed, a spec, the console), and after the Hash branch it is a
+    plain Array. Only a subclass gives a different answer for `is_a?` and
+    `instance_of?`, and nothing in the app or its gems makes a subclass of
+    Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def dinner_start_times=(value)
+       times = if value.is_a?(Hash)
+         (0..6).map { |wday|
+           value[wday.to_s] || value[wday]
+         }
+       else
+         value
+       end
+    -  if times.is_a?(Array)
+    +  if times.instance_of?(Array)
+         times = times.map { |time|
+           time.presence || DINNER_START_DEFAULT
+         }
+       end
+       super(times)
+     end
+
+- subject: Community#dinner_start_time_on
+  kind: same-answer
+  why: >-
+    The one caller, `dinner_start_at`, is called on the community read
+    from the database. There `dinner_start_times` always has seven entries
+    (the shape validation and the CHECK
+    `communities_dinner_start_times_shape`), and `date.wday` is 0 to 6. So
+    the index is always there, and `[]`, `at` and `fetch` give the same
+    String.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def dinner_start_time_on(date)
+    -  dinner_start_times[date.wday]
+    +  dinner_start_times.at(date.wday)
+     end
+
+- subject: Community#dinner_start_time_on
+  kind: same-answer
+  why: >-
+    The one caller, `dinner_start_at`, is called on the community read
+    from the database. There `dinner_start_times` always has seven entries
+    (the shape validation and the CHECK
+    `communities_dinner_start_times_shape`), and `date.wday` is 0 to 6. So
+    the index is always there, and `[]`, `at` and `fetch` give the same
+    String.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def dinner_start_time_on(date)
+    -  dinner_start_times[date.wday]
+    +  dinner_start_times.fetch(date.wday)
+     end
+
+- subject: Community#dinner_start_at
+  kind: same-answer
+  why: >-
+    Without `to_i` the hour and minute stay Strings, like "18" and "05".
+    `TimeZone#local` passes them to `Time.utc`, which reads a String of
+    digits as the same number. Checked for every time from 00:00 to 23:59:
+    the same instant.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def dinner_start_at(date)
+    -  (hour, minute) = dinner_start_time_on(date).split(":").map(&:to_i)
+    +  (hour, minute) = dinner_start_time_on(date).split(":")
+       ActiveSupport::TimeZone[timezone].local(date.year, date.month, date.day, hour, minute)
+     end
+
+- subject: Community#dinner_start_at
+  kind: same-answer
+  why: >-
+    `each` returns the Array it was given, so the hour and minute stay
+    Strings, like "18" and "05". `TimeZone#local` passes them to
+    `Time.utc`, which reads a String of digits as the same number. Checked
+    for every time from 00:00 to 23:59: the same instant.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def dinner_start_at(date)
+    -  (hour, minute) = dinner_start_time_on(date).split(":").map(&:to_i)
+    +  (hour, minute) = dinner_start_time_on(date).split(":").each(&:to_i)
+       ActiveSupport::TimeZone[timezone].local(date.year, date.month, date.day, hour, minute)
+     end
+
+- subject: Community#averaged_meals
+  kind: same-answer
+  why: >-
+    `Meal.settleable_by` keeps only meals on or before the cutoff and
+    before `today:`. With today in `today:`, a meal before today is on or
+    before yesterday, so a cutoff of tomorrow keeps the same meals as a
+    cutoff of yesterday.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meals
+    -  meals.settleable_by(today - 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+    +  meals.settleable_by(today + 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+     end
+
+- subject: Community#averaged_meals
+  kind: same-answer
+  why: >-
+    `Meal.settleable_by` keeps only meals on or before the cutoff and
+    before `today:`. A nil cutoff (`..nil`) adds no bound, and "before
+    today" already keeps exactly the meals on or before yesterday.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meals
+    -  meals.settleable_by(today - 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+    +  meals.settleable_by(nil, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+     end
+
+- subject: Community#averaged_meals
+  kind: same-answer
+  why: >-
+    `Meal.settleable_by` keeps only meals on or before the cutoff and
+    before `today:`. With `today: nil`, `...nil` adds no bound (Rails
+    writes `1=1`), and the cutoff of yesterday already keeps exactly the
+    meals before today.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meals
+    -  meals.settleable_by(today - 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+    +  meals.settleable_by(today - 1, today: nil).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+     end
+
+- subject: Community#averaged_meals
+  kind: same-answer
+  why: >-
+    Left out, `today:` defaults to `Community.instance.today`. There is
+    only one community row, so that is the same date as `today` here.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meals
+    -  meals.settleable_by(today - 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+    +  meals.settleable_by(today - 1).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+     end
+
+- subject: Community#averaged_meals
+  kind: same-answer
+  why: >-
+    `Meal.settleable_by` keeps only meals on or before the cutoff and
+    before `today:`. With today in `today:`, a meal on or before today
+    that is also before today is on or before yesterday, so a cutoff of
+    today keeps the same meals.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meals
+    -  meals.settleable_by(today - 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+    +  meals.settleable_by(today, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+     end
+
+- subject: Community#averaged_meals
+  kind: same-answer
+  why: >-
+    `today - 0` is today. `Meal.settleable_by` keeps only meals on or
+    before the cutoff and before `today:`, so with today in both, it keeps
+    the meals on or before yesterday, the same as a cutoff of yesterday.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meals
+    -  meals.settleable_by(today - 1, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+    +  meals.settleable_by(today - 0, today:).not_cancelled.with_attendees.where(Meal.a_cost_not_entered.not)
+     end
+
+- subject: Community#averaged_meal_count
+  kind: same-answer
+  why: >-
+    `averaged_meals` is a relation that is not loaded. On such a relation
+    `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def averaged_meal_count
+    -  averaged_meals.count
+    +  averaged_meals.size
+     end
+
+- subject: Community#meals_left_out_of_averages
+  kind: same-answer
+  why: >-
+    Each of the four counted lists is a relation that is not loaded. On
+    such a relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def meals_left_out_of_averages
+       signed_up = meals.unreconciled.where(date: ...today).with_attendees
+       past = signed_up.not_cancelled
+    -  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+    +  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).size, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+     end
+
+- subject: Community#meals_left_out_of_averages
+  kind: same-answer
+  why: >-
+    Each of the four counted lists is a relation that is not loaded. On
+    such a relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def meals_left_out_of_averages
+       signed_up = meals.unreconciled.where(date: ...today).with_attendees
+       past = signed_up.not_cancelled
+    -  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+    +  { cancelled: signed_up.cancelled.size, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+     end
+
+- subject: Community#meals_left_out_of_averages
+  kind: same-answer
+  why: >-
+    Each of the four counted lists is a relation that is not loaded. On
+    such a relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def meals_left_out_of_averages
+       signed_up = meals.unreconciled.where(date: ...today).with_attendees
+       past = signed_up.not_cancelled
+    -  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+    +  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).size, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+     end
+
+- subject: Community#meals_left_out_of_averages
+  kind: same-answer
+  why: >-
+    Each of the four counted lists is a relation that is not loaded. On
+    such a relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def meals_left_out_of_averages
+       signed_up = meals.unreconciled.where(date: ...today).with_attendees
+       past = signed_up.not_cancelled
+    -  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).count }
+    +  { cancelled: signed_up.cancelled.count, no_cook: past.where.missing(:bills).count, cost_not_entered: past.where(Meal.a_cost_not_entered).count, nobody_to_charge: past.receipt_and_nobody_to_charge.where(Meal.a_cost_not_entered.not).size }
+     end
+
+- subject: Community#unreconciled_ave_cost
+  kind: same-answer
+  why: >-
+    With no start value, `sum` adds the costs to the Integer 0. Each
+    `effective_cost` is a BigDecimal (its type in MealLedger), and 0 plus
+    a BigDecimal is the same BigDecimal, so the total is the same.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def unreconciled_ave_cost
+       final = averaged_meals.preload(:meal_residents, :guests).to_a
+       total_multiplier = final.sum(&:multiplier)
+       if total_multiplier.zero?
+         return "--"
+       end
+       ledger = MealLedger.new(final)
+    -  total_cost = final.sum(BigDecimal("0")) { |meal|
+    +  total_cost = final.sum { |meal|
+         ledger.summary_for(meal).effective_cost
+       }
+       val = Multiplier::FULL * (total_cost / total_multiplier)
+       "$#{ActiveSupport::NumberHelper.number_to_rounded(val, precision: 2)}/adult"
+     end
+
+- subject: Community#unreconciled_ave_cost
+  kind: same-answer
+  why: >-
+    On an ActiveRecord relation, `to_a` is another name for `to_ary`: both
+    load the records and return the same Array.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def unreconciled_ave_cost
+    -  final = averaged_meals.preload(:meal_residents, :guests).to_a
+    +  final = averaged_meals.preload(:meal_residents, :guests).to_ary
+       total_multiplier = final.sum(&:multiplier)
+       if total_multiplier.zero?
+         return "--"
+       end
+       ledger = MealLedger.new(final)
+       total_cost = final.sum(BigDecimal("0")) { |meal|
+         ledger.summary_for(meal).effective_cost
+       }
+       val = Multiplier::FULL * (total_cost / total_multiplier)
+       "$#{ActiveSupport::NumberHelper.number_to_rounded(val, precision: 2)}/adult"
+     end
+
+- subject: Community#unreconciled_ave_number_of_attendees
+  kind: same-answer
+  why: >-
+    The list counted here is a relation that is not loaded. On such a
+    relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def unreconciled_ave_number_of_attendees
+       final = averaged_meals
+       meal_count = final.count
+       if meal_count.zero?
+         return "--"
+       end
+    -  mr_count = MealResident.where(meal_id: final).count
+    +  mr_count = MealResident.where(meal_id: final).size
+       g_count = Guest.where(meal_id: final).count
+       ((mr_count + g_count).to_f / meal_count).round(1)
+     end
+
+- subject: Community#unreconciled_ave_number_of_attendees
+  kind: same-answer
+  why: >-
+    The list counted here is a relation that is not loaded. On such a
+    relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def unreconciled_ave_number_of_attendees
+       final = averaged_meals
+       meal_count = final.count
+       if meal_count.zero?
+         return "--"
+       end
+       mr_count = MealResident.where(meal_id: final).count
+    -  g_count = Guest.where(meal_id: final).count
+    +  g_count = Guest.where(meal_id: final).size
+       ((mr_count + g_count).to_f / meal_count).round(1)
+     end
+
+- subject: Community#unreconciled_ave_number_of_attendees
+  kind: same-answer
+  why: >-
+    The list counted here is a relation that is not loaded. On such a
+    relation `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def unreconciled_ave_number_of_attendees
+       final = averaged_meals
+    -  meal_count = final.count
+    +  meal_count = final.size
+       if meal_count.zero?
+         return "--"
+       end
+       mr_count = MealResident.where(meal_id: final).count
+       g_count = Guest.where(meal_id: final).count
+       ((mr_count + g_count).to_f / meal_count).round(1)
+     end
+
+- subject: Community#calendar_cache_version
+  kind: same-answer
+  why: >-
+    `join` turns each item into text with `to_s`, so the Date gives the
+    same text as `today.to_s`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def calendar_cache_version(start_date, end_date)
+       from = Time.zone.parse(start_date.to_s).beginning_of_day
+       to = Time.zone.parse(end_date.to_s).end_of_day
+       sql = self.class.sanitize_sql_array([CALENDAR_CACHE_VERSION_SQL, { from:, to: }])
+       row = self.class.connection.select_one(sql)
+       values = row.values.map { |value|
+         if value.respond_to?(:strftime)
+           value.strftime("%Y%m%d%H%M%S%6N")
+         else
+           value
+         end
+       }
+    -  [today.to_s, ENV.fetch("HEROKU_RELEASE_VERSION", ""), *values].join("-")
+    +  [today, ENV.fetch("HEROKU_RELEASE_VERSION", ""), *values].join("-")
+     end
+
+- subject: Community#calendar_cache_version
+  kind: same-answer
+  why: >-
+    `join` flattens a nested Array, so `values` inside the list gives the
+    same text as `*values`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def calendar_cache_version(start_date, end_date)
+       from = Time.zone.parse(start_date.to_s).beginning_of_day
+       to = Time.zone.parse(end_date.to_s).end_of_day
+       sql = self.class.sanitize_sql_array([CALENDAR_CACHE_VERSION_SQL, { from:, to: }])
+       row = self.class.connection.select_one(sql)
+       values = row.values.map { |value|
+         if value.respond_to?(:strftime)
+           value.strftime("%Y%m%d%H%M%S%6N")
+         else
+           value
+         end
+       }
+    -  [today.to_s, ENV.fetch("HEROKU_RELEASE_VERSION", ""), *values].join("-")
+    +  [today.to_s, ENV.fetch("HEROKU_RELEASE_VERSION", ""), values].join("-")
+     end
+
+- subject: Community#calendar_cache_version
+  kind: same-answer
+  why: >-
+    `join` writes nil as empty text, so a nil default gives the same text
+    as the default "".
+  diff: |
+    @@ -1,14 +1,14 @@
+     def calendar_cache_version(start_date, end_date)
+       from = Time.zone.parse(start_date.to_s).beginning_of_day
+       to = Time.zone.parse(end_date.to_s).end_of_day
+       sql = self.class.sanitize_sql_array([CALENDAR_CACHE_VERSION_SQL, { from:, to: }])
+       row = self.class.connection.select_one(sql)
+       values = row.values.map { |value|
+         if value.respond_to?(:strftime)
+           value.strftime("%Y%m%d%H%M%S%6N")
+         else
+           value
+         end
+       }
+    -  [today.to_s, ENV.fetch("HEROKU_RELEASE_VERSION", ""), *values].join("-")
+    +  [today.to_s, ENV.fetch("HEROKU_RELEASE_VERSION", nil), *values].join("-")
+     end
+
+- subject: Community#normalize_schedule_week
+  kind: same-answer
+  why: >-
+    A field is dropped when it is empty after the strip. A field of only
+    spaces is empty after `strip`, `lstrip` or `rstrip`, and a field with
+    any other character is not empty after any of them.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def normalize_schedule_week(week)
+       days = week.reject { |day|
+    -    day.to_s.strip.empty?
+    +    day.to_s.rstrip.empty?
+       }.map { |day|
+         Integer(day.to_s, exception: false)
+       }.uniq
+       if days.all?(Integer)
+         days.sort
+       else
+         days
+       end
+     end
+
+- subject: Community#normalize_schedule_week
+  kind: same-answer
+  why: >-
+    A field is dropped when it is empty after the strip. A field of only
+    spaces is empty after `strip`, `lstrip` or `rstrip`, and a field with
+    any other character is not empty after any of them.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def normalize_schedule_week(week)
+       days = week.reject { |day|
+    -    day.to_s.strip.empty?
+    +    day.to_s.lstrip.empty?
+       }.map { |day|
+         Integer(day.to_s, exception: false)
+       }.uniq
+       if days.all?(Integer)
+         days.sort
+       else
+         days
+       end
+     end
+
+- subject: Community#normalize_schedule_week
+  kind: same-answer
+  why: >-
+    After `Integer(..., exception: false)` each item is an Integer or nil.
+    `all?` with no argument is false only when an item is nil (0 is true
+    in Ruby), and `all?(Integer)` is false only for an item that is not an
+    Integer, which here means nil. So both give the same answer.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def normalize_schedule_week(week)
+       days = week.reject { |day|
+         day.to_s.strip.empty?
+       }.map { |day|
+         Integer(day.to_s, exception: false)
+       }.uniq
+    -  if days.all?(Integer)
+    +  if days.all?
+         days.sort
+       else
+         days
+       end
+     end
+
+- subject: Community#child_ages_ordered
+  kind: same-answer
+  why: >-
+    `self.free_below_age` and `free_below_age()` call the same public
+    reader on the same object, so both give the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def child_ages_ordered
+    -  free_below_age = self.free_below_age
+    +  free_below_age = free_below_age()
+       full_price_age = self.full_price_age
+       if free_below_age.nil? || full_price_age.nil?
+         return
+       end
+       if free_below_age <= full_price_age
+         return
+       end
+       errors.add(:free_below_age, "must be at or below the full-price age — a child eats free before they pay half price")
+     end
+
+- subject: Community#child_ages_ordered
+  kind: same-answer
+  why: >-
+    `self.full_price_age` and `full_price_age()` call the same public
+    reader on the same object, so both give the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def child_ages_ordered
+       free_below_age = self.free_below_age
+    -  full_price_age = self.full_price_age
+    +  full_price_age = full_price_age()
+       if free_below_age.nil? || full_price_age.nil?
+         return
+       end
+       if free_below_age <= full_price_age
+         return
+       end
+       errors.add(:free_below_age, "must be at or below the full-price age — a child eats free before they pay half price")
+     end
+
+- subject: Community#dinner_start_times_shape
+  kind: same-answer
+  why: >-
+    `dinner_start_times` is read from the jsonb column, or is what
+    `dinner_start_times=` stored: a plain Array (from `map`) of plain
+    Strings from params or code. Only a subclass gives a different answer
+    for `is_a?` and `instance_of?`, and nothing in the app or its gems
+    makes a subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def dinner_start_times_shape
+       valid = dinner_start_times.is_a?(Array) && dinner_start_times.length == 7 && dinner_start_times.all? { |time|
+    -    time.is_a?(String) && DINNER_START_TIME_PATTERN.match?(time)
+    +    time.instance_of?(String) && DINNER_START_TIME_PATTERN.match?(time)
+       }
+       if valid
+         return
+       end
+       errors.add(:dinner_start_times, "must be seven times, Sunday to Saturday, each HH:MM on a 24-hour clock")
+     end
+
+- subject: Community#dinner_start_times_shape
+  kind: same-answer
+  why: >-
+    `dinner_start_times` is read from the jsonb column, or is what
+    `dinner_start_times=` stored: a plain Array (from `map`) of plain
+    Strings from params or code. Only a subclass gives a different answer
+    for `is_a?` and `instance_of?`, and nothing in the app or its gems
+    makes a subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def dinner_start_times_shape
+    -  valid = dinner_start_times.is_a?(Array) && dinner_start_times.length == 7 && dinner_start_times.all? { |time|
+    +  valid = dinner_start_times.instance_of?(Array) && dinner_start_times.length == 7 && dinner_start_times.all? { |time|
+         time.is_a?(String) && DINNER_START_TIME_PATTERN.match?(time)
+       }
+       if valid
+         return
+       end
+       errors.add(:dinner_start_times, "must be seven times, Sunday to Saturday, each HH:MM on a 24-hour clock")
+     end
+
+- subject: Community#schedule_shape
+  kind: same-answer
+  why: >-
+    `schedule` is read from the jsonb column, or is what `schedule=`
+    stored: plain Arrays (from `map`) of plain Integers or Strings from
+    params or code. Only a subclass gives a different answer for `is_a?`
+    and `instance_of?`, and nothing in the app or its gems makes a
+    subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def schedule_shape
+    -  unless schedule.is_a?(Array) && schedule.length.between?(1, MealSchedule::MAX_WEEKS)
+    +  unless schedule.instance_of?(Array) && schedule.length.between?(1, MealSchedule::MAX_WEEKS)
+         errors.add(:schedule, "must have between 1 and #{MealSchedule::MAX_WEEKS} weeks")
+         return
+       end
+       unless schedule.all? { |week|
+         week.is_a?(Array) && week.all? { |day|
+           day.is_a?(Integer) && day.between?(0, 6)
+         }
+       }
+         errors.add(:schedule, "days must be 0 (Sunday) through 6 (Saturday)")
+         return
+       end
+       if schedule.flatten.empty?
+         errors.add(:schedule, "must include at least one meal day")
+       end
+     end
+
+- subject: Community#schedule_shape
+  kind: same-answer
+  why: >-
+    `schedule` is read from the jsonb column, or is what `schedule=`
+    stored: plain Arrays (from `map`) of plain Integers or Strings from
+    params or code. Only a subclass gives a different answer for `is_a?`
+    and `instance_of?`, and nothing in the app or its gems makes a
+    subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def schedule_shape
+       unless schedule.is_a?(Array) && schedule.length.between?(1, MealSchedule::MAX_WEEKS)
+         errors.add(:schedule, "must have between 1 and #{MealSchedule::MAX_WEEKS} weeks")
+         return
+       end
+       unless schedule.all? { |week|
+    -    week.is_a?(Array) && week.all? { |day|
+    +    week.instance_of?(Array) && week.all? { |day|
+           day.is_a?(Integer) && day.between?(0, 6)
+         }
+       }
+         errors.add(:schedule, "days must be 0 (Sunday) through 6 (Saturday)")
+         return
+       end
+       if schedule.flatten.empty?
+         errors.add(:schedule, "must include at least one meal day")
+       end
+     end
+
+- subject: Community#schedule_shape
+  kind: same-answer
+  why: >-
+    `schedule` is read from the jsonb column, or is what `schedule=`
+    stored: plain Arrays (from `map`) of plain Integers or Strings from
+    params or code. Only a subclass gives a different answer for `is_a?`
+    and `instance_of?`, and nothing in the app or its gems makes a
+    subclass of Array, String or Integer that reaches this code.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def schedule_shape
+       unless schedule.is_a?(Array) && schedule.length.between?(1, MealSchedule::MAX_WEEKS)
+         errors.add(:schedule, "must have between 1 and #{MealSchedule::MAX_WEEKS} weeks")
+         return
+       end
+       unless schedule.all? { |week|
+         week.is_a?(Array) && week.all? { |day|
+    -      day.is_a?(Integer) && day.between?(0, 6)
+    +      day.instance_of?(Integer) && day.between?(0, 6)
+         }
+       }
+         errors.add(:schedule, "days must be 0 (Sunday) through 6 (Saturday)")
+         return
+       end
+       if schedule.flatten.empty?
+         errors.add(:schedule, "must include at least one meal day")
+       end
+     end
+
+- subject: Community#backfill_orphan_admin_users
+  kind: same-answer
+  why: >-
+    This runs once, after the one community row is created. No other
+    community row exists then (the singleton guard), and the foreign key
+    on admin_users.community_id lets it point only at an existing row, so
+    every admin user has a nil community_id at that moment. The filter
+    matches every row.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def backfill_orphan_admin_users
+    -  AdminUser.where(community_id: nil).update_all(community_id: id)
+    +  AdminUser.update_all(community_id: id)
+     end

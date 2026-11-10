@@ -1,0 +1,12 @@
+- subject: GuestRoomReservation#storable_date?
+  kind: same-answer
+  why: >-
+    `self.date` and `date()` call the same public reader on the same
+    object, so both give the same value.
+  diff: |
+    @@ -1,4 +1,4 @@
+     def storable_date?
+    -  date = self.date
+    +  date = date()
+       !date.nil? && StorableTime.date?(date)
+     end

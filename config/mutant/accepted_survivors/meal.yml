@@ -1,0 +1,55 @@
+- subject: Meal#conditionally_set_closed_at
+  kind: same-answer
+  why: >-
+    `closed` is a boolean attribute, so Rails casts it to true, false or
+    nil. Of these only true is true in an `if`, so `closed` and `closed ==
+    true` agree.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def conditionally_set_closed_at
+    -  if closed == true && closed_was == false
+    +  if closed && closed_was == false
+         self.closed_at=Time.current
+       end
+       if closed == false && closed_was == true
+         self.closed_at=nil
+       end
+     end
+
+- subject: Meal#conditionally_set_closed_at
+  kind: same-answer
+  why: >-
+    `closed_was` is the value of a boolean attribute, so it is true, false
+    or nil. Of these only true is true in an `if`, so `closed_was` and
+    `closed_was == true` agree.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def conditionally_set_closed_at
+       if closed == true && closed_was == false
+         self.closed_at=Time.current
+       end
+    -  if closed == false && closed_was == true
+    +  if closed == false && closed_was
+         self.closed_at=nil
+       end
+     end
+
+- subject: Meal#total_audits
+  kind: same-answer
+  why: >-
+    The second key is read only for two audits with the same `created_at`.
+    Both are Audited::Audit records, and ActiveRecord compares two records
+    of one class by `to_key`, which is `[id]`. So sorting by the audit
+    gives the same order as sorting by its id.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def total_audits
+       shown = audits.reject { |audit|
+         changed = audit.audited_changes.keys
+         changed.any? && (changed - COLUMNS_GONE).empty?
+       }
+       (associated_audits + shown).sort_by { |audit|
+    -    [audit.created_at, audit.id]
+    +    [audit.created_at, audit]
+       }.reverse
+     end

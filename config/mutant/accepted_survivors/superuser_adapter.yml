@@ -1,0 +1,43 @@
+- subject: SuperuserAdapter#token_authorized?
+  kind: same-answer
+  why: >-
+    ActiveAdmin::Page has no subclass, in the app or in the ActiveAdmin
+    gem (`ActiveAdmin::Page.descendants` is empty). So `is_a?` and
+    `instance_of?` agree.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def token_authorized?(action, subject)
+       unless READ_ACTIONS.include?(action)
+         return false
+       end
+    -  if subject.is_a?(ActiveAdmin::Page)
+    +  if subject.instance_of?(ActiveAdmin::Page)
+         return TOKEN_READABLE_PAGES.include?(subject.name)
+       end
+       model = model_name(subject)
+       if model.nil?
+         return true
+       end
+       TOKEN_READABLE_MODELS.include?(model)
+     end
+
+- subject: SuperuserAdapter#model_name
+  kind: same-answer
+  why: >-
+    Ruby refuses to make a subclass of Class (`Class.new(Class)` raises
+    TypeError). So every object that `is_a?(Class)` is also
+    `instance_of?(Class)`.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def model_name(subject)
+    -  klass = if subject.is_a?(Class)
+    +  klass = if subject.instance_of?(Class)
+         subject
+       else
+         subject.class
+       end
+       unless klass.ancestors.include?(ActiveRecord::Base)
+         return nil
+       end
+       klass.name
+     end

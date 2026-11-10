@@ -1,0 +1,86 @@
+- subject: Rotation.recolor_community
+  kind: same-answer
+  why: >-
+    The index is `index % COLORS.length`, so it is always from 0 to the
+    last color. `[]`, `at` and `fetch` give the same color.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def self.recolor_community
+       changed_rotation_ids = []
+       Rotation.order(:id).each_with_index { |rotation, index|
+    -    new_color = COLORS[index % COLORS.length]
+    +    new_color = COLORS.fetch(index % COLORS.length)
+         if rotation.color == new_color
+           next
+         end
+         rotation.update!(color: new_color)
+         changed_rotation_ids << rotation.id
+       }
+       changed_rotation_ids
+     end
+
+- subject: Rotation.recolor_community
+  kind: same-answer
+  why: >-
+    Its one caller is `self.class.recolor_community` in a Rotation, and
+    Rotation has no subclass, so `self` is Rotation here.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def self.recolor_community
+       changed_rotation_ids = []
+    -  Rotation.order(:id).each_with_index { |rotation, index|
+    +  self.order(:id).each_with_index { |rotation, index|
+         new_color = COLORS[index % COLORS.length]
+         if rotation.color == new_color
+           next
+         end
+         rotation.update!(color: new_color)
+         changed_rotation_ids << rotation.id
+       }
+       changed_rotation_ids
+     end
+
+- subject: Rotation.recolor_community
+  kind: same-answer
+  why: >-
+    The index is `index % COLORS.length`, so it is always from 0 to the
+    last color. `[]`, `at` and `fetch` give the same color.
+  diff: |
+    @@ -1,12 +1,12 @@
+     def self.recolor_community
+       changed_rotation_ids = []
+       Rotation.order(:id).each_with_index { |rotation, index|
+    -    new_color = COLORS[index % COLORS.length]
+    +    new_color = COLORS.at(index % COLORS.length)
+         if rotation.color == new_color
+           next
+         end
+         rotation.update!(color: new_color)
+         changed_rotation_ids << rotation.id
+       }
+       changed_rotation_ids
+     end
+
+- subject: Rotation#set_place_value
+  kind: same-answer
+  why: >-
+    Without `Arel.sql`, Rails accepts `MIN(meals.date) NULLS LAST` as it
+    is, because a function of one column with NULLS LAST is on its list of
+    safe order strings. So it does not raise, and the SQL is the same.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def set_place_value
+       renumbered = []
+    -  ordered = Rotation.left_joins(:meals).group("rotations.id").order(Arel.sql("MIN(meals.date) NULLS LAST"), :id).pluck(:id, :place_value)
+    +  ordered = Rotation.left_joins(:meals).group("rotations.id").order("MIN(meals.date) NULLS LAST", :id).pluck(:id, :place_value)
+       ordered.each_with_index { |(rot_id, place_value), index|
+         if place_value == index.+(1)
+           next
+         end
+         Rotation.where(id: rot_id).update_all(place_value: index + 1, updated_at: Time.current)
+         renumbered << rot_id
+       }
+       Meal.where(rotation_id: renumbered).pluck(:date).each { |date|
+         LiveUpdate.calendar(date)
+       }
+     end

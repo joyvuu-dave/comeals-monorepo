@@ -1,0 +1,15 @@
+- subject: ReconciledMealImmutability#reconciled_in_database?
+  kind: same-answer
+  why: >-
+    `correcting` is the text of a database setting or nil, and `id.to_s`
+    is a String. For two Strings `eql?` is `==`. nil is not `eql?` to a
+    String, just as nil `!=` a String is true. So both give the same
+    answer.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def reconciled_in_database?(id)
+       row = T.let(Meal.where(id:).pick(:reconciliation_id, Arel.sql(CORRECTING)), T.nilable([T.untyped, T.untyped]))
+       (reconciliation_id, correcting) = row
+    -  reconciliation_id.present? && correcting != id.to_s
+    +  reconciliation_id.present? && !correcting.eql?(id.to_s)
+     end

@@ -1,0 +1,56 @@
+- subject: HasPhoneNumber#normalize_phone
+  kind: same-answer
+  why: >-
+    `self.phone` and `phone()` call the same public reader on the same
+    object, so both give the same value.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def normalize_phone
+    -  phone = self.phone
+    +  phone = phone()
+       if phone.blank?
+         self.phone=nil
+       else
+         parsed = Phonelib.parse(phone)
+         if parsed.valid?
+           self.phone=parsed.e164
+         end
+       end
+     end
+
+- subject: HasPhoneNumber#normalize_phone
+  kind: same-answer
+  why: >-
+    The number is valid here, and the `to_s` of a valid Phonelib number is
+    its E.164 form. The phone column is a string, and Rails casts a value
+    for a string column with `to_s`, so the same text is stored.
+  diff: |
+    @@ -1,11 +1,11 @@
+     def normalize_phone
+       phone = self.phone
+       if phone.blank?
+         self.phone=nil
+       else
+         parsed = Phonelib.parse(phone)
+         if parsed.valid?
+    -      self.phone=parsed.e164
+    +      self.phone=parsed
+         end
+       end
+     end
+
+- subject: HasPhoneNumber#phone_must_be_a_real_number
+  kind: same-answer
+  why: >-
+    `self.phone` and `phone()` call the same public reader on the same
+    object, so both give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def phone_must_be_a_real_number
+    -  phone = self.phone
+    +  phone = phone()
+       if phone.nil? || Phonelib.valid?(phone)
+         return
+       end
+       errors.add(:phone, "does not look like a real phone number. Enter it with the area code " "(510-555-2671). For a number outside the US, start with + and the " "country code (+44 20 7946 0958).")
+     end

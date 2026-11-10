@@ -1,0 +1,12 @@
+- subject: AttendanceVersion.of
+  kind: same-answer
+  why: >-
+    `meal` is always a Meal record. In a `where` hash Rails reads the id
+    of a record, so `meal_id: meal` and `meal_id: meal.id` run the same
+    SQL.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def self.of(meal, resident_id)
+    -  where(meal_id: meal.id, resident_id:).pick(:version) || NONE
+    +  where(meal_id: meal, resident_id:).pick(:version) || NONE
+     end

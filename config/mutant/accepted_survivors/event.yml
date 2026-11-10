@@ -1,0 +1,113 @@
+- subject: Event#starts_and_ends_on_one_day
+  kind: same-answer
+  why: >-
+    `self.end_date` and `end_date()` call the same public reader on the
+    same object, so both give the same value.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def starts_and_ends_on_one_day
+       start_date = self.start_date
+    -  end_date = self.end_date
+    +  end_date = end_date()
+       if allday || start_date.nil? || end_date.nil?
+         return
+       end
+       unless times_set_or_changed?
+         return
+       end
+       community = T.must(self.community)
+       unless community.date_of(start_date) == community.date_of(end_date)
+         errors.add(:base, SAME_DAY)
+       end
+     end
+
+- subject: Event#starts_and_ends_on_one_day
+  kind: same-answer
+  why: >-
+    `self.start_date` and `start_date()` call the same public reader on
+    the same object, so both give the same value.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def starts_and_ends_on_one_day
+    -  start_date = self.start_date
+    +  start_date = start_date()
+       end_date = self.end_date
+       if allday || start_date.nil? || end_date.nil?
+         return
+       end
+       unless times_set_or_changed?
+         return
+       end
+       community = T.must(self.community)
+       unless community.date_of(start_date) == community.date_of(end_date)
+         errors.add(:base, SAME_DAY)
+       end
+     end
+
+- subject: Event#end_date_or_allday
+  kind: same-answer
+  why: >-
+    `end_date` is read from a datetime column, so it is a time or nil
+    (Rails casts an empty String to nil). A time is true and `present?`;
+    nil is neither. So the two tests agree.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def end_date_or_allday
+    -  if end_date.present? || allday
+    +  if end_date || allday
+         return
+       end
+       errors.add(:base, "Event must end or be all day")
+     end
+
+- subject: Event#start_date_is_before_end_date
+  kind: same-answer
+  why: >-
+    `self.start_date` and `start_date()` call the same public reader on
+    the same object, so both give the same value.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def start_date_is_before_end_date
+    -  start_date = self.start_date
+    +  start_date = start_date()
+       end_date = self.end_date
+       if allday || end_date.nil? || start_date.nil?
+         return
+       end
+       if start_date < end_date
+         return
+       end
+       if start_date == end_date && !times_set_or_changed?
+         return
+       end
+       if start_date == end_date && T.must(community).midnight?(start_date)
+         return
+       end
+       errors.add(:base, END_BEFORE_START)
+     end
+
+- subject: Event#start_date_is_before_end_date
+  kind: same-answer
+  why: >-
+    `self.end_date` and `end_date()` call the same public reader on the
+    same object, so both give the same value.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def start_date_is_before_end_date
+       start_date = self.start_date
+    -  end_date = self.end_date
+    +  end_date = end_date()
+       if allday || end_date.nil? || start_date.nil?
+         return
+       end
+       if start_date < end_date
+         return
+       end
+       if start_date == end_date && !times_set_or_changed?
+         return
+       end
+       if start_date == end_date && T.must(community).midnight?(start_date)
+         return
+       end
+       errors.add(:base, END_BEFORE_START)
+     end

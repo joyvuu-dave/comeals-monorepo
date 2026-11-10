@@ -1,0 +1,141 @@
+- subject: CommonHouseReservation#start_date_is_before_end_date
+  kind: same-answer
+  why: >-
+    `self.start_date` and `start_date()` call the same public reader on
+    the same object, so both give the same value.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def start_date_is_before_end_date
+    -  start_date = self.start_date
+    +  start_date = start_date()
+       end_date = self.end_date
+       if start_date.nil? || end_date.nil?
+         return
+       end
+       if start_date < end_date
+         return
+       end
+       if start_date == end_date && !times_set_or_changed?
+         return
+       end
+       if start_date == end_date && T.must(community).midnight?(start_date)
+         return
+       end
+       errors.add(:base, END_BEFORE_START)
+     end
+
+- subject: CommonHouseReservation#start_date_is_before_end_date
+  kind: same-answer
+  why: >-
+    `self.end_date` and `end_date()` call the same public reader on the
+    same object, so both give the same value.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def start_date_is_before_end_date
+       start_date = self.start_date
+    -  end_date = self.end_date
+    +  end_date = end_date()
+       if start_date.nil? || end_date.nil?
+         return
+       end
+       if start_date < end_date
+         return
+       end
+       if start_date == end_date && !times_set_or_changed?
+         return
+       end
+       if start_date == end_date && T.must(community).midnight?(start_date)
+         return
+       end
+       errors.add(:base, END_BEFORE_START)
+     end
+
+- subject: CommonHouseReservation#starts_and_ends_on_one_day
+  kind: same-answer
+  why: >-
+    `self.start_date` and `start_date()` call the same public reader on
+    the same object, so both give the same value.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def starts_and_ends_on_one_day
+    -  start_date = self.start_date
+    +  start_date = start_date()
+       end_date = self.end_date
+       if start_date.nil? || end_date.nil?
+         return
+       end
+       unless times_set_or_changed?
+         return
+       end
+       community = T.must(self.community)
+       unless community.date_of(start_date) == community.date_of(end_date)
+         errors.add(:base, SAME_DAY)
+       end
+     end
+
+- subject: CommonHouseReservation#starts_and_ends_on_one_day
+  kind: same-answer
+  why: >-
+    `self.end_date` and `end_date()` call the same public reader on the
+    same object, so both give the same value.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def starts_and_ends_on_one_day
+       start_date = self.start_date
+    -  end_date = self.end_date
+    +  end_date = end_date()
+       if start_date.nil? || end_date.nil?
+         return
+       end
+       unless times_set_or_changed?
+         return
+       end
+       community = T.must(self.community)
+       unless community.date_of(start_date) == community.date_of(end_date)
+         errors.add(:base, SAME_DAY)
+       end
+     end
+
+- subject: CommonHouseReservation#period_is_free
+  kind: same-answer
+  why: >-
+    `self.end_date` and `end_date()` call the same public reader on the
+    same object, so both give the same value.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def period_is_free
+       start_date = self.start_date
+    -  end_date = self.end_date
+    +  end_date = end_date()
+       unless start_date && end_date && StorableTime.timestamp?(start_date) && StorableTime.timestamp?(end_date)
+         return
+       end
+       unless start_date < end_date
+         return
+       end
+       if CommonHouseReservation.where.not(id:).where(start_date: ...end_date).where("end_date > start_date").exists?(["end_date > ?", start_date])
+         errors.add(:base, TAKEN)
+       end
+     end
+
+- subject: CommonHouseReservation#period_is_free
+  kind: same-answer
+  why: >-
+    `self.start_date` and `start_date()` call the same public reader on
+    the same object, so both give the same value.
+  diff: |
+    @@ -1,13 +1,13 @@
+     def period_is_free
+    -  start_date = self.start_date
+    +  start_date = start_date()
+       end_date = self.end_date
+       unless start_date && end_date && StorableTime.timestamp?(start_date) && StorableTime.timestamp?(end_date)
+         return
+       end
+       unless start_date < end_date
+         return
+       end
+       if CommonHouseReservation.where.not(id:).where(start_date: ...end_date).where("end_date > start_date").exists?(["end_date > ?", start_date])
+         errors.add(:base, TAKEN)
+       end
+     end

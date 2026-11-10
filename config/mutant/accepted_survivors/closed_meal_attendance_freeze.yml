@@ -1,0 +1,49 @@
+- subject: ClosedMealAttendanceFreeze#attendees_in_database
+  kind: same-answer
+  why: >-
+    Each `where` is a relation that is not loaded. On such a relation
+    `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def attendees_in_database(meal)
+    -  MealResident.where(meal_id: meal.id).count + Guest.where(meal_id: meal.id).count
+    +  MealResident.where(meal_id: meal.id).size + Guest.where(meal_id: meal.id).count
+     end
+
+- subject: ClosedMealAttendanceFreeze#attendees_in_database
+  kind: same-answer
+  why: >-
+    `meal` is always a Meal record. In a `where` hash Rails reads the id
+    of a record, so `meal_id: meal` and `meal_id: meal.id` run the same
+    SQL.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def attendees_in_database(meal)
+    -  MealResident.where(meal_id: meal.id).count + Guest.where(meal_id: meal.id).count
+    +  MealResident.where(meal_id: meal).count + Guest.where(meal_id: meal.id).count
+     end
+
+- subject: ClosedMealAttendanceFreeze#attendees_in_database
+  kind: same-answer
+  why: >-
+    Each `where` is a relation that is not loaded. On such a relation
+    `size` runs the same `SELECT COUNT(*)` as `count`.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def attendees_in_database(meal)
+    -  MealResident.where(meal_id: meal.id).count + Guest.where(meal_id: meal.id).count
+    +  MealResident.where(meal_id: meal.id).count + Guest.where(meal_id: meal.id).size
+     end
+
+- subject: ClosedMealAttendanceFreeze#attendees_in_database
+  kind: same-answer
+  why: >-
+    `meal` is always a Meal record. In a `where` hash Rails reads the id
+    of a record, so `meal_id: meal` and `meal_id: meal.id` run the same
+    SQL.
+  diff: |
+    @@ -1,3 +1,3 @@
+     def attendees_in_database(meal)
+    -  MealResident.where(meal_id: meal.id).count + Guest.where(meal_id: meal.id).count
+    +  MealResident.where(meal_id: meal.id).count + Guest.where(meal_id: meal).count
+     end

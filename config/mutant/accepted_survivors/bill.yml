@@ -1,0 +1,30 @@
+- subject: Bill#amount_in_whole_cents
+  kind: same-answer
+  why: >-
+    `self.amount` and `amount()` call the same public reader on the same
+    object, so both give the same value.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def amount_in_whole_cents
+    -  amount = self.amount
+    +  amount = amount()
+       if amount.nil? || amount == amount.round(2)
+         return
+       end
+       errors.add(:amount, "must be whole cents")
+     end
+
+- subject: Bill#refuse_no_cost_with_an_amount
+  kind: same-answer
+  why: >-
+    `self.amount` and `amount()` call the same public reader on the same
+    object, so both give the same value.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def refuse_no_cost_with_an_amount
+    -  amount = self.amount
+    +  amount = amount()
+       if no_cost && !amount.nil? && amount.positive?
+         errors.add(:base, NO_COST_MEANS_NO_AMOUNT)
+       end
+     end
