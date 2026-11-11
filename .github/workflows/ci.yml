@@ -278,14 +278,16 @@ jobs:
   # seconds. The second step checks every proof again on 20 solver seeds,
   # so a proof that passes only on some seeds fails in the change that
   # made it so ("A proof must pass on every solver seed").
-  # Mutant on the methods this push or pull request changed
-  # (docs/mutation-testing.md, "Accepted survivors"). It fails on a
-  # survivor that config/mutant/accepted_survivors/ does not list, and
-  # on an entry for a changed method that no longer survives. It cannot
-  # see a spec made weaker while the code stayed the same: no method
-  # changed, so nothing is mutated. The weekly full run (mutant.yml)
-  # catches that. A change to a money method can take an hour here: each
-  # of its survivors runs the 600 to 900 examples that prove the method.
+  # Mutant on the methods this push or pull request changed, and on the
+  # methods whose spec files changed or were deleted, so an example made
+  # weaker is caught here too (docs/mutation-testing.md, "Accepted
+  # survivors"). It fails on a survivor that
+  # config/mutant/accepted_survivors/ does not list, and on an entry for a
+  # method that ran whose mutation no longer survives. A change to
+  # spec/support, a factory or rails_helper can weaken any example; the
+  # weekly full run (mutant.yml) catches that. A change to a money method
+  # or its spec can take an hour here: each of its survivors runs the 600
+  # to 900 examples that prove the method.
   mutant-changed:
     runs-on: ubuntu-26.04
     timeout-minutes: 360
@@ -323,12 +325,17 @@ jobs:
         with:
           bundler-cache: true
       - run: bin/rails db:schema:load
-      - name: Choose the changed methods
+      # The methods that changed, and the methods whose examples changed or
+      # were deleted (bin/mutant-spec-subjects says how it finds them).
+      - name: Choose the methods
         run: |
           set -euo pipefail
-          MUTANT=1 bundle exec mutant environment subject list --since "$BASE" > all-subjects.txt
-          grep -E '^[A-Z][^ ]*[#.][^ ]+$' all-subjects.txt > subjects.txt || true
-          echo "$(wc -l < subjects.txt) methods changed since $BASE:"
+          MUTANT=1 bundle exec mutant environment subject list --since "$BASE" > changed.txt
+          MUTANT=1 bundle exec mutant environment subject list > all-subjects.txt
+          grep -E '^[A-Z][^ ]*[#.][^ ]+$' changed.txt > methods.txt || true
+          bin/mutant-spec-subjects "$BASE" all-subjects.txt > examples.txt
+          sort -u methods.txt examples.txt > subjects.txt
+          echo "$(wc -l < methods.txt) methods changed since $BASE, and the examples of $(wc -l < examples.txt) methods:"
           cat subjects.txt
       - name: Mutate
         run: |
@@ -336,7 +343,7 @@ jobs:
           # A method name like same? or [] must not be read as a file pattern.
           set -f
           if [ ! -s subjects.txt ]; then
-            echo "No method in .mutant.yml's subjects changed."
+            echo "No method in .mutant.yml's subjects, or its examples, changed."
             exit 0
           fi
           # shellcheck disable=SC2046 # one subject per word

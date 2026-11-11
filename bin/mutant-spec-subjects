@@ -1,0 +1,71 @@
+#!/usr/bin/env ruby
+# frozen_string_literal: true
+
+# Names the methods whose examples changed since a commit, so the
+# mutant-changed job in CI runs mutant on them as well as on the methods
+# that changed. `mutant --since` sees only a change to a method. An
+# example made weaker, or deleted, changes no method, and every mutation
+# it used to kill would then live with nothing to say so until the
+# Saturday run.
+#
+# For each spec file that changed or was deleted since <base>, the
+# classes it proves are the ones mutant would run it for:
+# - the row for the file in spec/support/mutant/specs.rb, when it has
+#   one (a row replaces mutant's own choice, and a file mutant never
+#   runs proves nothing);
+# - otherwise the first word of each top-level describe (`RSpec.describe
+#   Settlement` or `RSpec.describe 'Settlement#adjust!'`), the way
+#   mutant-rspec picks them.
+# A deleted file is read as it was at <base>.
+#
+# Prints, one a line, each method in <subjects file> (the output of
+# `mutant environment subject list`) that one of those names covers: a
+# class covers its own methods and those of the classes inside it, as in
+# mutant. A change to spec/support, a factory or rails_helper can weaken
+# any example, and is left to the Saturday run.
+#
+# Usage: bin/mutant-spec-subjects <base commit> <subjects file>
+#
+# Ruby's standard library only. Run from the root of the repository.
+
+require 'open3'
+
+unless ARGV.size == 2
+  warn 'Usage: bin/mutant-spec-subjects <base commit> <subjects file>'
+  exit 2
+end
+base, subjects_path = ARGV
+
+def git(*args)
+  out, status = Open3.capture2('git', *args)
+  abort "git #{args.join(' ')} failed" unless status.success?
+  out
+end
+
+load File.expand_path('spec/support/mutant/specs.rb')
+
+DESCRIBE = /^RSpec\.describe\s+(?:'([^']*)'|"([^"]*)"|([A-Z][\w:]*))/
+
+def names_in(text)
+  text.scan(DESCRIBE).map { |groups| groups.compact.first.split.first.to_s }
+      .grep(/\A[A-Z][\w:]*(?:[#.]\S+)?\z/)
+end
+
+def names_for(path, base)
+  return [] if MUTANT_SIG_CHECK_SPECS.include?(path)
+  return MUTANT_SPECS.fetch(path) if MUTANT_SPECS.key?(path)
+
+  names_in(File.exist?(path) ? File.read(path) : git('show', "#{base}:#{path}"))
+end
+
+def covers?(name, subject)
+  return subject == name if name.match?(/[#.]/)
+
+  subject.start_with?("#{name}#", "#{name}.", "#{name}::")
+end
+
+changed = git('diff', '--name-only', '--no-renames', '--diff-filter=MD', base, '--', 'spec')
+          .lines(chomp: true).grep(/_spec\.rb\z/)
+names = changed.flat_map { |path| names_for(path, base) }.uniq
+subjects = File.readlines(subjects_path, chomp: true).grep(/\A[A-Z]\S*[#.]\S+\z/)
+puts subjects.select { |subject| names.any? { |name| covers?(name, subject) } }.uniq.sort

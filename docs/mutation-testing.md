@@ -29,12 +29,15 @@ whose machine was stopped leaves no artifact at all; the report names it
 `bin/mutant` takes. The repository is public, so the machines cost
 nothing; GitHub Pro runs 40 jobs at once, and a job may run 6 hours.
 
-CI also runs mutant on every push to `main` and every pull request, on
-the methods that changed (the `mutant-changed` job in
-`.github/workflows/ci.yml`, with mutant's `--since`). It is part of CI,
-so the deploy's green gate waits for it. It cannot see a spec made
-weaker while the code stayed the same, because then no method changed
-and nothing is mutated. The Saturday run catches that.
+CI also runs mutant on every push to `main` and every pull request (the
+`mutant-changed` job in `.github/workflows/ci.yml`). It runs on the
+methods that changed, which mutant's `--since` finds, and on the
+methods whose spec files changed or were deleted, which
+`bin/mutant-spec-subjects` finds. So an example made weaker while the
+code stayed the same is caught too. It is part of CI, so the deploy's
+green gate waits for it. A change to `spec/support`, a factory or
+`rails_helper` can weaken any example, and only the Saturday run
+catches that.
 
 On one laptop the whole run no longer fits in a night. On 2026-10-15 it
 was 768 subjects and 35,121 mutations, and a laptop with six workers did

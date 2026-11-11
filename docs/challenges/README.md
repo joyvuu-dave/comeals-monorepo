@@ -105,7 +105,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 26  | [Backups that can be restored and read](0026-backups-that-can-be-restored.md)                          | operations  | open   | 2026-11-07 |
 | 27  | [Prove the money math](0027-prove-the-money-math.md)                                                   | proof       | done   | 2026-11-10 |
 | 28  | [Model the concurrency rules](0028-model-the-concurrency-rules.md)                                     | proof       | open   | 2026-11-07 |
-| 29  | [A test catches every code change](0029-every-mutant-is-caught.md)                                     | proof       | done   | 2026-11-10 |
+| 29  | [A test catches every code change](0029-every-mutant-is-caught.md)                                     | proof       | done   | 2026-11-11 |
 | 30  | [Tests that break the network, the database and the clock](0030-tests-that-break-things-on-purpose.md) | proof       | open   | 2026-11-07 |
 | 31  | [Replay any failure exactly](0031-replay-any-failure-exactly.md)                                       | proof       | open   | 2026-11-07 |
 | 32  | [Everyone can use it](0032-everyone-can-use-it.md)                                                     | quality     | open   | 2026-11-07 |
