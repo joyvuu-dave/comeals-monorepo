@@ -8,8 +8,8 @@
     @@ -1,6 +1,6 @@
      def current_admin_user_custom
        if read_only_admin_token?
-    -    return AdminUser.find(ENV.fetch("READ_ONLY_ADMIN_ID", nil).to_s)
-    +    return AdminUser.find(ENV.fetch("READ_ONLY_ADMIN_ID", nil))
+    -    return @read_only_admin_user ||= AdminUser.find(ENV.fetch("READ_ONLY_ADMIN_ID", nil).to_s)
+    +    return @read_only_admin_user ||= AdminUser.find(ENV.fetch("READ_ONLY_ADMIN_ID", nil))
        end
        current_admin_user
      end

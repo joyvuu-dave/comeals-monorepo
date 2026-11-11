@@ -4919,3 +4919,16 @@ again (42936726105, 4,264 mutations, 87 alive): `ApiController*`,
 `Api::V1::ProfilesController*` and `AuditDescription*`. Five of the 19 new survivors were killed by examples that give
 the history a day or a close time held as a number, and a close time
 held as `true`. The other 14 are entries.
+
+### 2026-11-11, the zone wrappers and the read-only admin
+
+`ApiController#set_community_timezone` ran alone after every API request
+got the community's zone (42984717788): 42 mutations, 5 alive. Three
+were the guard for a zone name Rails does not know, which no example
+stored; two were checks around `Time.use_zone`, which runs the block in
+the app's zone when given nil. Both wrappers, this one and
+`ApplicationController#use_community_timezone`, became one line, and
+each got an example with such a name. Run again with
+`ApplicationController#current_admin_user_custom`, which now reads the
+read-only admin once a request (42985346402): 92 mutations, 1 alive, the
+`.to_s` on an ENV value that was on the list before.
