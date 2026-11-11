@@ -42,6 +42,17 @@ RSpec.describe 'Admin forms and the community zone' do
     expect(event.end_date).to eq(new_york.local(2026, 3, 8, 12, 0))
   end
 
+  # Community validates the name, but psql or update_column skips the
+  # model. The community form must still open, so the zone can be put
+  # right there.
+  it 'opens the community form when the stored zone is a name Rails does not know' do
+    community.update_column(:timezone, 'Not/A_Zone')
+
+    get "/communities/#{community.id}/edit"
+
+    expect(response).to have_http_status(:ok)
+  end
+
   # The page also prints created_at and updated_at, so the check reads the
   # two date rows, not the whole page. The clock is fixed so that those
   # two rows cannot print 15:00 or 18:00 by chance either.

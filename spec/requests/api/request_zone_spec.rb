@@ -46,6 +46,14 @@ RSpec.describe 'ApiController#set_community_timezone' do
     expect(zone_seen(headers: { 'Authorization' => "Bearer #{token}" })).to eq('Asia/Tokyo')
   end
 
+  # Community validates the name, but psql or update_column skips the
+  # model. Every request must still answer, not raise.
+  it 'runs in the app zone when the stored zone is a name Rails does not know' do
+    community.update_column(:timezone, 'Not/A_Zone')
+
+    expect(zone_seen).to eq('America/Los_Angeles')
+  end
+
   it 'runs in the app zone when there is no community yet' do
     expect(zone_seen).to eq('America/Los_Angeles')
   end

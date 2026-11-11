@@ -42,11 +42,11 @@ class ApplicationController < ActionController::Base
     redirect_to '/'
   end
 
+  # The same as ApiController#set_community_timezone: with no community,
+  # or a zone name Rails does not know, Time.use_zone(nil) runs the block
+  # in the app's zone.
   def use_community_timezone(&)
-    zone = ActiveSupport::TimeZone[Community.first&.timezone.to_s]
-    return yield if zone.nil?
-
-    Time.use_zone(zone, &)
+    Time.use_zone(ActiveSupport::TimeZone[Community.first&.timezone.to_s], &)
   end
 
   # The request did not come from a page this session gave out, so the

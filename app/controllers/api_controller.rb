@@ -367,11 +367,11 @@ class ApiController < ActionController::API
   # one, so a public action that shows a time shows it the way the rest
   # of the app does. The zone comes from the one community, which every
   # login belongs to (the Common House login belongs to no community
-  # row). Before 2026-11-11 only a request with a token got it.
+  # row). Before 2026-11-11 only a request with a token got it. With no
+  # community, or a zone name Rails does not know (only a write that
+  # skips the model can store one), TimeZone[] is nil, and
+  # Time.use_zone(nil) runs the block in the app's zone.
   def set_community_timezone(&)
-    tz = Community.first&.timezone.presence
-    return Time.use_zone(tz, &) if tz && ActiveSupport::TimeZone[tz]
-
-    yield
+    Time.use_zone(ActiveSupport::TimeZone[Community.first&.timezone.to_s], &)
   end
 end
