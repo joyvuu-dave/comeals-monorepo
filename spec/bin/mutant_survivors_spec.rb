@@ -57,6 +57,21 @@ RSpec.describe 'bin/mutant-survivors' do
     expect(out).to include('No mutant session in .mutant/results')
   end
 
+  # A Linux-only entry is checked only on Linux (the Mutant workflow). On
+  # a Mac its mutation is killed, and that is right, so the entry is not
+  # stale there: the report counts it and passes.
+  it 'passes, and counts, a Linux-only entry whose mutation was killed on another platform' do
+    entry = MutantSurvivors::Entry.new(subject: 'Foo#bar', kind: 'same-answer', why: 'Linux sorts.',
+                                       diff: "@@ x\n", only_on: 'linux')
+    killed = MutantSurvivors::Mutation.new(subject: 'Foo#bar', diff: "@@ x\n", alive: false)
+
+    comparison = MutantSurvivors.compare([killed], [entry], full: false, here: 'darwin')
+
+    expect(comparison.passed?).to be(true)
+    expect(MutantSurvivors.report_lines(comparison))
+      .to include('Entries for another platform that did not survive here: 1.')
+  end
+
   it 'refuses an option it does not know' do
     out, status = run_ruby_script(script, '--fast', env: env)
 
