@@ -1,42 +1,14 @@
 - subject: SnapshotRead.take_snapshot
   kind: same-answer
   why: >-
-    Every caller passes a whole number of seconds: NIGHTLY_WAIT is 5 minutes, and the specs pass 1.minute or
-    42.seconds. For a whole number of seconds, `Duration#to_s` gives the same digits as `to_i` ("300").
+    wait_limit is a Duration: the sig says so, and sigs raise. A Duration times 1000 is a Duration, and its
+    `ceil` is the ceil of its number of seconds times 1000, the same whole number as from the Float.
   diff: |
     @@ -1,6 +1,6 @@
      def self.take_snapshot(connection, wait_limit)
        statement_limit = connection.select_value("SHOW statement_timeout")
-    -  connection.execute("SET LOCAL statement_timeout = '#{wait_limit.to_i}s'")
-    +  connection.execute("SET LOCAL statement_timeout = '#{wait_limit}s'")
-       connection.execute("SELECT 1")
-       connection.execute("SET LOCAL statement_timeout = #{connection.quote(statement_limit)}")
-     end
-- subject: SnapshotRead.take_snapshot
-  kind: same-answer
-  why: >-
-    `to_int` and `Integer()` on a Duration both pass to its value's `to_int`, which gives the same whole
-    number of seconds as `to_i`, for whole and for fractional values.
-  diff: |
-    @@ -1,6 +1,6 @@
-     def self.take_snapshot(connection, wait_limit)
-       statement_limit = connection.select_value("SHOW statement_timeout")
-    -  connection.execute("SET LOCAL statement_timeout = '#{wait_limit.to_i}s'")
-    +  connection.execute("SET LOCAL statement_timeout = '#{wait_limit.to_int}s'")
-       connection.execute("SELECT 1")
-       connection.execute("SET LOCAL statement_timeout = #{connection.quote(statement_limit)}")
-     end
-- subject: SnapshotRead.take_snapshot
-  kind: same-answer
-  why: >-
-    `to_int` and `Integer()` on a Duration both pass to its value's `to_int`, which gives the same whole
-    number of seconds as `to_i`, for whole and for fractional values.
-  diff: |
-    @@ -1,6 +1,6 @@
-     def self.take_snapshot(connection, wait_limit)
-       statement_limit = connection.select_value("SHOW statement_timeout")
-    -  connection.execute("SET LOCAL statement_timeout = '#{wait_limit.to_i}s'")
-    +  connection.execute("SET LOCAL statement_timeout = '#{Integer(wait_limit)}s'")
+    -  connection.execute("SET LOCAL statement_timeout = '#{(wait_limit.to_f * 1000).ceil}ms'")
+    +  connection.execute("SET LOCAL statement_timeout = '#{(wait_limit * 1000).ceil}ms'")
        connection.execute("SELECT 1")
        connection.execute("SET LOCAL statement_timeout = #{connection.quote(statement_limit)}")
      end

@@ -418,25 +418,6 @@
          token.presence
        end
      end
-- subject: ApiController#set_community_timezone
-  kind: same-answer
-  why: >-
-    ActiveSupport::TimeZone[''] is nil, so an empty timezone column fails the check on the next line with or without
-    .presence, and the request runs in the app zone either way.
-  diff: |
-    @@ -1,11 +1,11 @@
-     def set_community_timezone(&)
-       if bearer_token_from_header || token_param
-         tz = (if current_login
-           Community.first
-    -    end)&.timezone.presence
-    +    end)&.timezone
-         if tz && ActiveSupport::TimeZone[tz]
-           return Time.use_zone(tz, &)
-         end
-       end
-       yield
-     end
 - subject: ApiController#current_resident_api
   kind: same-answer
   why: >-
@@ -450,4 +431,61 @@
     +  if login.instance_of?(Resident)
          login
        end
+     end
+- subject: ApiController#set_community_timezone
+  kind: same-answer
+  why: >-
+    No action that a request with no token can reach reads Time.zone. The iCal feeds, the login, password and Common
+    House token actions, confirm_email and the browser reports read times as instants, or in the community's zone
+    through Community#today and #dinner_start_at. So the zone such a request runs in changes no answer. The check
+    only saves the community read on those requests.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def set_community_timezone(&)
+    -  if bearer_token_from_header || token_param
+    +  if true
+         tz = Community.first&.timezone.presence
+         if tz && ActiveSupport::TimeZone[tz]
+           return Time.use_zone(tz, &)
+         end
+       end
+       yield
+     end
+- subject: ApiController#set_community_timezone
+  kind: same-answer
+  why: >-
+    ActiveSupport::TimeZone[''] is nil, so an empty timezone column fails the check on the next line with or without
+    .presence, and the request runs in the app zone either way.
+  diff: |
+    @@ -1,9 +1,6 @@
+     def set_community_timezone(&)
+    -  if bearer_token_from_header || token_param
+    -    tz = Community.first&.timezone.presence
+    -    if tz && ActiveSupport::TimeZone[tz]
+    -      return Time.use_zone(tz, &)
+    -    end
+    -  end
+    +  (tz = Community.first&.timezone.presence; if tz && ActiveSupport::TimeZone[tz]
+    +    return Time.use_zone(tz, &)
+    +  end)
+       yield
+     end
+- subject: ApiController#set_community_timezone
+  kind: same-answer
+  why: >-
+    No action that a request with no token can reach reads Time.zone. The iCal feeds, the login, password and Common
+    House token actions, confirm_email and the browser reports read times as instants, or in the community's zone
+    through Community#today and #dinner_start_at. So the zone such a request runs in changes no answer. The check
+    only saves the community read on those requests.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def set_community_timezone(&)
+       if bearer_token_from_header || token_param
+    -    tz = Community.first&.timezone.presence
+    +    tz = Community.first&.timezone
+         if tz && ActiveSupport::TimeZone[tz]
+           return Time.use_zone(tz, &)
+         end
+       end
+       yield
      end

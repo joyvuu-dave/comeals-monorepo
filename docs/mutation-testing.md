@@ -4895,3 +4895,24 @@ changed an amount was already killed. The four Linux-only survivors in
 `LargestRemainderSplit.call` (2026-10-16) stay: on Linux, Ruby's sort
 already keeps tied items in the order given, so dropping the tie-break
 gives the same shares, and no spec can tell the two apart.
+
+### 2026-11-10, every class, with the list of accepted survivors
+
+The Mutant workflow, every subject in 36 pieces. On main
+(42892140239): 40,600 mutations, 753 alive, in 261 methods. Piece 33
+stopped with `Parser::SyntaxError`: a Faker class's `.name` gives fake
+text, and when that text looks like `Scope.method`, mutant 0.17.1
+raises instead of skipping it (mbj/mutant#1690).
+`config/mutant/method_name_check.rb` makes mutant skip such a name.
+
+On this branch (42918055270): 41,495 mutations, 658 alive, and every
+piece finished. The examples added after the first run killed 114
+survivors. The others are entries in `config/mutant/accepted_survivors/`,
+each with its reason ("Accepted survivors", above).
+
+Methods in six places changed after that run started, so these ran
+again (42936726105, 4,264 mutations, 87 alive): `ApiController*`,
+`Resident#children_i_can_edit`, `SnapshotRead*`, `RetryOnConflict*`,
+`Api::V1::ProfilesController*` and `AuditDescription*`. Five of the 19 new survivors were killed by examples that give
+the history a day or a close time held as a number, and a close time
+held as `true`. The other 14 are entries.

@@ -779,6 +779,7 @@ RSpec.describe AuditDescription do
                  ['Meal', { 'closed' => [] }], ['Meal', { 'description' => '' }], ['Meal', { 'max' => 4 }],
                  ['Meal', { 'rotation_id' => '' }], ['Meal', { 'date' => '2026-11-06' }],
                  ['Meal', { 'reconciliation_id' => 6 }], ['Meal', { 'closed_at' => '2023-03-07T00:15:00.000Z' }],
+                 ['Meal', { 'closed_at' => true }],
                  ['MealResident', { 'multiplier' => 2 }], ['Bill', { 'no_cost' => true }],
                  ['Bill', { 'resident_id' => resident.id }]] +
                 %w[late vegetarian].product([true, [], [false], [true]]).map do |field, value|
@@ -830,10 +831,12 @@ RSpec.describe AuditDescription do
 
     # A day or a close time that is not ISO 8601 text has no right words.
     # The history must still answer, because a history that raises shows
-    # nothing at all.
+    # nothing at all. A number is not text, and Date.iso8601 and
+    # Time.iso8601 raise TypeError on one, not the error they raise on text.
     it 'falls back for a day or a close time that is not ISO 8601 text, without raising' do
       community # a close time is shown in the community's zone
-      changes = [{ 'date' => ['2026-11-06', 'next week'] }, { 'closed_at' => [nil, '2023-03-07 00:15'] }]
+      changes = [{ 'date' => ['2026-11-06', 'next week'] }, { 'closed_at' => [nil, '2023-03-07 00:15'] },
+                 { 'date' => [5, 6] }, { 'closed_at' => [nil, 5] }]
       rows = changes.each_with_index.map { |change, index| stored('Meal', 'update', change, id: 990_095 + index) }
       describer = described_class.for(rows)
 

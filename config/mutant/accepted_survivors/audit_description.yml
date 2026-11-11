@@ -750,108 +750,6 @@
     +    close_time_words(changes.fetch("closed_at"))
        end
      end
-- subject: AuditDescription#close_time_words
-  kind: same-answer
-  why: >-
-    `to` is read from a jsonb column. When it is a String, `to_str` and `to_s` give the same text. Any other
-    jsonb value (a number, true, a list or an object) makes both forms raise: `to_str` does not exist on it,
-    and its `to_s` is not ISO 8601 text, so `Time.iso8601` refuses it.
-  diff: |
-    @@ -1,12 +1,12 @@
-     def close_time_words(change)
-       to = change[1]
-       if to.nil?
-         return "Close time cleared"
-       end
-    -  at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-    +  at = Time.iso8601(to.to_str).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-       if change[0].nil?
-         "Close time set to #{at}"
-       else
-         "Close time changed to #{at}"
-       end
-     end
-- subject: AuditDescription#close_time_words
-  kind: same-answer
-  why: >-
-    `to` is read from a jsonb column. When it is a String, `to_s` returns the same String. Any other jsonb
-    value makes both forms raise: `Time.iso8601` refuses a value that is not a String, and the `to_s` of a
-    number, true, a list or an object is not ISO 8601 text.
-  diff: |
-    @@ -1,12 +1,12 @@
-     def close_time_words(change)
-       to = change[1]
-       if to.nil?
-         return "Close time cleared"
-       end
-    -  at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-    +  at = Time.iso8601(to).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-       if change[0].nil?
-         "Close time set to #{at}"
-       else
-         "Close time changed to #{at}"
-       end
-     end
-- subject: AuditDescription#close_time_words
-  kind: same-answer
-  why: >-
-    The only caller passes the change after checking that it is an Array, and `Array#at` with a whole number
-    gives the same item as `Array#[]`.
-  diff: |
-    @@ -1,12 +1,12 @@
-     def close_time_words(change)
-    -  to = change[1]
-    +  to = change.at(1)
-       if to.nil?
-         return "Close time cleared"
-       end
-       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-       if change[0].nil?
-         "Close time set to #{at}"
-       else
-         "Close time changed to #{at}"
-       end
-     end
-- subject: AuditDescription#close_time_words
-  kind: same-answer
-  why: >-
-    The only caller passes the change after checking that it is an Array, and `Array#at` with a whole number
-    gives the same item as `Array#[]`.
-  diff: |
-    @@ -1,12 +1,12 @@
-     def close_time_words(change)
-       to = change[1]
-       if to.nil?
-         return "Close time cleared"
-       end
-       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-    -  if change[0].nil?
-    +  if change.at(0).nil?
-         "Close time set to #{at}"
-       else
-         "Close time changed to #{at}"
-       end
-     end
-- subject: AuditDescription#close_time_words
-  kind: same-answer
-  why: >-
-    The only caller passes the change after checking that it is an Array, and the line runs only when its
-    second item is not nil, so the Array has at least two items and `fetch(0)` gives the same item as `[0]`.
-  diff: |
-    @@ -1,12 +1,12 @@
-     def close_time_words(change)
-       to = change[1]
-       if to.nil?
-         return "Close time cleared"
-       end
-       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
-    -  if change[0].nil?
-    +  if change.fetch(0).nil?
-         "Close time set to #{at}"
-       else
-         "Close time changed to #{at}"
-       end
-     end
 - subject: AuditDescription#describe_bill_update
   kind: same-answer
   why: >-
@@ -895,26 +793,6 @@
          return "no longer marked as no cost"
        end
        "no longer marked as no cost, so the #{number_to_currency(amount)} now counts in the meal's cost"
-     end
-- subject: AuditDescription#amount_change
-  kind: same-answer
-  why: >-
-    The line runs only when `changes["amount"]` is not nil, so the key is there, and `fetch` gives the same
-    value as `[]`.
-  diff: |
-    @@ -1,12 +1,12 @@
-     def amount_change(changes)
-       unless changes["amount"].nil?
-    -    return changes["amount"]
-    +    return changes.fetch("amount")
-       end
-       cents = changes["amount_cents"]
-       unless cents.instance_of?(Array) && cents.all?(Integer)
-         return nil
-       end
-       cents.map { |amount|
-         BigDecimal(amount) / 100
-       }
      end
 - subject: AuditDescription#describe_meal_resident_update
   kind: same-answer
@@ -1609,6 +1487,152 @@
            end
            amount = amount_change(changes)
            if amount.instance_of?(Array)
+             amount_now[record] = dollars(amount.last)
+           end
+         end
+       }
+     end
+- subject: AuditDescription#describe_bill_update
+  kind: same-answer
+  why: >-
+    amount_change gives an Array or nil, and this line reads amounts only when they are not nil. `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def describe_bill_update(audit)
+       changes = audit.audited_changes
+       amounts = amount_change(changes)
+    -  what = [amounts && "changed from #{number_to_currency(amounts[0])} to #{number_to_currency(amounts[1])}", no_cost_change(audit, if amounts.nil?
+    +  what = [amounts && "changed from #{number_to_currency(amounts.at(0))} to #{number_to_currency(amounts[1])}", no_cost_change(audit, if amounts.nil?
+         @amount_before[audit.id]
+       else
+         nil
+       end)].compact
+       move = moved(changes)
+       if move
+         return ["Bill moved #{move}", *what].join(" and ")
+       end
+       if what.empty?
+         return "unknown bill changed"
+       end
+       "Bill for #{name_before(audit)} #{what.join(" and ")}"
+     end
+- subject: AuditDescription#describe_bill_update
+  kind: same-answer
+  why: >-
+    amount_change gives an Array or nil, and this line reads amounts only when they are not nil. `Array#at` with a
+    whole number gives the same item as `Array#[]`.
+  diff: |
+    @@ -1,17 +1,17 @@
+     def describe_bill_update(audit)
+       changes = audit.audited_changes
+       amounts = amount_change(changes)
+    -  what = [amounts && "changed from #{number_to_currency(amounts[0])} to #{number_to_currency(amounts[1])}", no_cost_change(audit, if amounts.nil?
+    +  what = [amounts && "changed from #{number_to_currency(amounts[0])} to #{number_to_currency(amounts.at(1))}", no_cost_change(audit, if amounts.nil?
+         @amount_before[audit.id]
+       else
+         nil
+       end)].compact
+       move = moved(changes)
+       if move
+         return ["Bill moved #{move}", *what].join(" and ")
+       end
+       if what.empty?
+         return "unknown bill changed"
+       end
+       "Bill for #{name_before(audit)} #{what.join(" and ")}"
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    The only caller passes the change after checking that it is an Array, and `Array#at` with a whole number gives
+    the same item as `Array#[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def close_time_words(change)
+    -  to = change[1]
+    +  to = change.at(1)
+       if to.nil?
+         return "Close time cleared"
+       end
+       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+       if change[0].nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     rescue ArgumentError
+       nil
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    The only caller passes the change after checking that it is an Array, and `Array#at` with a whole number gives
+    the same item as `Array#[]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def close_time_words(change)
+       to = change[1]
+       if to.nil?
+         return "Close time cleared"
+       end
+       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+    -  if change[0].nil?
+    +  if change.at(0).nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     rescue ArgumentError
+       nil
+     end
+- subject: AuditDescription#close_time_words
+  kind: same-answer
+  why: >-
+    The only caller passes the change after checking that it is an Array, and the line runs only when its second
+    item is not nil, so the Array has at least two items and `fetch(0)` gives the same item as `[0]`.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def close_time_words(change)
+       to = change[1]
+       if to.nil?
+         return "Close time cleared"
+       end
+       at = Time.iso8601(to.to_s).in_time_zone(community_zone).strftime("%a %b %-d, %Y, %-l:%M %P")
+    -  if change[0].nil?
+    +  if change.fetch(0).nil?
+         "Close time set to #{at}"
+       else
+         "Close time changed to #{at}"
+       end
+     rescue ArgumentError
+       nil
+     end
+- subject: AuditDescription#walk
+  kind: same-answer
+  why: >-
+    amount_change gives an Array or nil, never false, so `if amount` is the same check as `if
+    amount.instance_of?(Array)`.
+  diff: |
+    @@ -1,22 +1,22 @@
+     def walk(trail)
+       named_now = {}
+       amount_now = {}
+       trail.each_with_object([{}, {}]) { |audit, (named, amounts)|
+         record = audit.auditable_type, audit.auditable_id
+         changes = audit.audited_changes
+         if audit.action == "create"
+           named_now[record] = changes["resident_id"]
+           amount_now[record] = created_amount(changes)
+         else
+           named[audit.id] = named_now[record]
+           amounts[audit.id] = amount_now[record]
+           if changes["resident_id"].instance_of?(Array)
+             named_now[record] = changes["resident_id"].last
+           end
+           amount = amount_change(changes)
+    -      if amount.instance_of?(Array)
+    +      if amount
              amount_now[record] = dollars(amount.last)
            end
          end

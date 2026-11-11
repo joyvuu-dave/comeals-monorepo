@@ -1,62 +1,4 @@
 ---
-- subject: Resident#children_i_can_edit
-  kind: same-answer
-  why: >-
-    On a relation, `to_ary` is the same method as `to_a`: both load the rows and give
-    an Array.
-  diff: |
-    @@ -1,6 +1,6 @@
-     def children_i_can_edit
-       if child?
-         return []
-       end
-    -  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, :id).to_a.select(&:child?)
-    +  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, :id).to_ary.select(&:child?)
-     end
-- subject: Resident#children_i_can_edit
-  kind: same-answer
-  why: >-
-    The unique index on lower(name) means no two residents have the same name, and
-    PostgreSQL never sorts two different names as equal. So the second sort key never
-    decides the order, and `nil` there adds nothing.
-  diff: |
-    @@ -1,6 +1,6 @@
-     def children_i_can_edit
-       if child?
-         return []
-       end
-    -  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, :id).to_a.select(&:child?)
-    +  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, nil).to_a.select(&:child?)
-     end
-- subject: Resident#children_i_can_edit
-  kind: same-answer
-  why: >-
-    The unique index on lower(name) means no two residents have the same name, and
-    PostgreSQL never sorts two different names as equal. So the order by id after
-    the name never decides the order.
-  diff: |
-    @@ -1,6 +1,6 @@
-     def children_i_can_edit
-       if child?
-         return []
-       end
-    -  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, :id).to_a.select(&:child?)
-    +  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name).to_a.select(&:child?)
-     end
-- subject: Resident#children_i_can_edit
-  kind: same-answer
-  why: >-
-    `select` with a block on a relation loads the rows and gives an Array of the rows
-    the block picks, the same as `to_a.select`.
-  diff: |
-    @@ -1,6 +1,6 @@
-     def children_i_can_edit
-       if child?
-         return []
-       end
-    -  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, :id).to_a.select(&:child?)
-    +  Resident.where(unit_id:, active: true, email: nil).where.not(id:).order(:name, :id).select(&:child?)
-     end
 - subject: Resident#name_unique_with_helpful_message
   kind: same-answer
   why: "`self.name` and `name()` call the same public method on the same object."
@@ -104,4 +46,59 @@
        else
          1
        end)
+     end
+- subject: Resident#children_i_can_edit
+  kind: same-answer
+  why: >-
+    `select` with a block on a relation loads the rows and gives an Array of the rows the block picks, the same as
+    `to_a.select`.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def children_i_can_edit
+       if child?
+         return []
+       end
+    -  Resident.where(unit_id:, active: true, email: nil).order(:name, :id).to_a.select(&:child?)
+    +  Resident.where(unit_id:, active: true, email: nil).order(:name, :id).select(&:child?)
+     end
+- subject: Resident#children_i_can_edit
+  kind: same-answer
+  why: >-
+    On a relation, `to_ary` is the same method as `to_a`: both load the rows and give an Array.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def children_i_can_edit
+       if child?
+         return []
+       end
+    -  Resident.where(unit_id:, active: true, email: nil).order(:name, :id).to_a.select(&:child?)
+    +  Resident.where(unit_id:, active: true, email: nil).order(:name, :id).to_ary.select(&:child?)
+     end
+- subject: Resident#children_i_can_edit
+  kind: same-answer
+  why: >-
+    The unique index on lower(name) means no two residents have the same name, and PostgreSQL never sorts two
+    different names as equal. So the second sort key never decides the order, and `nil` there adds nothing.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def children_i_can_edit
+       if child?
+         return []
+       end
+    -  Resident.where(unit_id:, active: true, email: nil).order(:name, :id).to_a.select(&:child?)
+    +  Resident.where(unit_id:, active: true, email: nil).order(:name, nil).to_a.select(&:child?)
+     end
+- subject: Resident#children_i_can_edit
+  kind: same-answer
+  why: >-
+    The unique index on lower(name) means no two residents have the same name, and PostgreSQL never sorts two
+    different names as equal. So the order by id after the name never decides the order.
+  diff: |
+    @@ -1,6 +1,6 @@
+     def children_i_can_edit
+       if child?
+         return []
+       end
+    -  Resident.where(unit_id:, active: true, email: nil).order(:name, :id).to_a.select(&:child?)
+    +  Resident.where(unit_id:, active: true, email: nil).order(:name).to_a.select(&:child?)
      end
