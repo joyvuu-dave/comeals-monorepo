@@ -46,3 +46,14 @@
     -  time.in_time_zone(@old_zone).utc_offset != time.in_time_zone(@new_zone).utc_offset
     +  !time.in_time_zone(@old_zone).utc_offset.eql?(time.in_time_zone(@new_zone).utc_offset)
      end
+- subject: ZoneChange#all_day_moved_count
+  kind: same-answer
+  why: "Both sides are Dates. Date#eql? is true for two Dates exactly when == is, so `!eql?` and `!=` agree."
+  diff: |
+    @@ -1,5 +1,5 @@
+     def all_day_moved_count
+       all_day_starts.count { |start|
+    -    day_in(@old_zone, start) != day_in(@new_zone, start)
+    +    !day_in(@old_zone, start).eql?(day_in(@new_zone, start))
+       }
+     end

@@ -211,3 +211,315 @@
     +    { resident_id:, stored: stored[resident_id]&.to_s("F"), source: source[resident_id] }
        }
      end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_ary
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(nil, :meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(:meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(:bills, nil, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(:bills, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(:bills, :meal_residents, nil).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: "goldiloader is on for the whole app, so the bills, sign-ups and guests of these meals are loaded for all of them at once whether or not preload names them, and preload changes no result. `to_ary` and `to_a` both give the loaded records as an Array."
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+    -  meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+    +  meals = reconciliation.meals.preload(:bills, :meal_residents).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+           { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: 'The findings go only into ledger_check_runs.details, a jsonb column, and into a log line through to_json. Both write a Date as "2026-11-10" and a BigDecimal as "12.34567891" (Rails writes a BigDecimal in F notation), the same text as `Date#to_s` and `to_s("F")`; checked in rails runner on 2026-11-10.'
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+       meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+    -      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+    +      { meal_id:, meal_date: dates.fetch(meal_id), resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: 'The findings go only into ledger_check_runs.details, a jsonb column, and into a log line through to_json. Both write a Date as "2026-11-10" and a BigDecimal as "12.34567891" (Rails writes a BigDecimal in F notation), the same text as `Date#to_s` and `to_s("F")`; checked in rails runner on 2026-11-10.'
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+       meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+    -      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+    +      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected, source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: 'The findings go only into ledger_check_runs.details, a jsonb column, and into a log line through to_json. Both write a Date as "2026-11-10" and a BigDecimal as "12.34567891" (Rails writes a BigDecimal in F notation), the same text as `Date#to_s` and `to_s("F")`; checked in rails runner on 2026-11-10.'
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+       meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+    -      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+    +      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s, source: actual.to_s("F") }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: 'The findings go only into ledger_check_runs.details, a jsonb column, and into a log line through to_json. Both write a Date as "2026-11-10" and a BigDecimal as "12.34567891" (Rails writes a BigDecimal in F notation), the same text as `Date#to_s` and `to_s("F")`; checked in rails runner on 2026-11-10.'
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+       meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+    -      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+    +      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end
+- subject: LedgerVerification#dinner_check
+  kind: same-answer
+  why: 'The findings go only into ledger_check_runs.details, a jsonb column, and into a log line through to_json. Both write a Date as "2026-11-10" and a BigDecimal as "12.34567891" (Rails writes a BigDecimal in F notation), the same text as `Date#to_s` and `to_s("F")`; checked in rails runner on 2026-11-10.'
+  diff: |
+    @@ -1,18 +1,18 @@
+     def dinner_check(reconciliation)
+       unless MealCharge.for_reconciliation(reconciliation).exists?
+         return nil
+       end
+       meals = reconciliation.meals.preload(:bills, :meal_residents, :guests).to_a
+       dates = meals.to_h { |meal|
+         [T.must(meal.id), meal.date]
+       }
+       differences = SettledDinnerDifference.for(meals).sort.flat_map { |meal_id, people|
+         people.sort.map { |resident_id, (expected, actual)|
+    -      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s("F") }
+    +      { meal_id:, meal_date: dates.fetch(meal_id).to_s, resident_id:, stored: expected.to_s("F"), source: actual.to_s }
+         }
+       }
+       if differences.empty?
+         return nil
+       end
+       detail(reconciliation, "dinners", differences)
+     end

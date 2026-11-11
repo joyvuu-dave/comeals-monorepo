@@ -460,3 +460,19 @@
          reasons.join("\n")
        end
      end
+- subject: ProfileUpdate.save
+  kind: same-answer
+  why: "The outcome is a String (a refusal message) or a ProfileUpdate result, and no class inherits from String here, so `instance_of?(String)` and `is_a?(String)` agree."
+  diff: |
+    @@ -1,10 +1,10 @@
+     def self.save(resident_id, fields)
+       outcome = T.let(nil, T.nilable(T.any(Saved, String)))
+       Resident.transaction {
+         outcome = save_in_transaction(Resident.find(resident_id), fields)
+    -    if outcome.is_a?(String)
+    +    if outcome.instance_of?(String)
+           raise(ActiveRecord::Rollback)
+         end
+       }
+       T.must(outcome)
+     end

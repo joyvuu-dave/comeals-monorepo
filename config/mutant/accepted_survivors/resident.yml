@@ -87,3 +87,21 @@
        end
        errors.add(:birthday, "cannot be after today.")
      end
+- subject: Resident#age_on
+  kind: same-answer
+  why: "`birthday()` with parentheses calls the reader, the same as `self.birthday`, so the local variable gets the same value."
+  diff: |
+    @@ -1,12 +1,12 @@
+     def age_on(date)
+    -  birthday = self.birthday
+    +  birthday = birthday()
+       if birthday.nil?
+         return nil
+       end
+       had_birthday = date.month > birthday.month || (date.month == birthday.month && date.day >= birthday.day)
+       date.year - birthday.year - (if had_birthday
+         0
+       else
+         1
+       end)
+     end

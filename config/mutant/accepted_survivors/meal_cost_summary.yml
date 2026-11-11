@@ -53,3 +53,27 @@
          T.must(credit.amount)
        }, unit_cost: T.must(first.unit_cost), subsidized: charges.any?(&:subsidized?))
      end
+- subject: MealCostSummary.now
+  kind: same-answer
+  why: "summary_for reads only the meal it is given. The list given to MealLedger.new is read only by #lines and the totals, which this does not call, so an empty list or a list holding nil gives the same summary."
+  diff: |
+    @@ -1,6 +1,6 @@
+     def self.now(meal)
+       unless meal.reconciled? && meal.meal_corrections.any?
+         return self.for(meal)
+       end
+    -  MealLedger.new([meal]).summary_for(meal)
+    +  MealLedger.new([]).summary_for(meal)
+     end
+- subject: MealCostSummary.now
+  kind: same-answer
+  why: "summary_for reads only the meal it is given. The list given to MealLedger.new is read only by #lines and the totals, which this does not call, so an empty list or a list holding nil gives the same summary."
+  diff: |
+    @@ -1,6 +1,6 @@
+     def self.now(meal)
+       unless meal.reconciled? && meal.meal_corrections.any?
+         return self.for(meal)
+       end
+    -  MealLedger.new([meal]).summary_for(meal)
+    +  MealLedger.new([nil]).summary_for(meal)
+     end

@@ -21,3 +21,23 @@
        end
        sentences.join(" ")
      end
+- subject: SettlementPreviewHelper#dinner_cancelling_words
+  kind: same-answer
+  why: 'A meal date is a Date, and Date#to_s is the ISO 8601 text "YYYY-MM-DD", the same as Date#iso8601.'
+  diff: |
+    @@ -1,14 +1,14 @@
+     def dinner_cancelling_words(result)
+       sentences = ["Marked #{pluralize(result.cancelled.size, "dinner")} as cancelled."]
+       result.left_alone.each { |left|
+    -    sentences << "Left alone: #{T.must(left.meal.date).iso8601}, because #{left.reason}."
+    +    sentences << "Left alone: #{T.must(left.meal.date)}, because #{left.reason}."
+       }
+       if result.gone.positive?
+         sentences << "#{pluralize(result.gone, "dinner")} on the list #{if result.gone == 1
+       "was"
+     else
+       "were"
+     end} " "deleted after the list was shown."
+       end
+       sentences.join(" ")
+     end
