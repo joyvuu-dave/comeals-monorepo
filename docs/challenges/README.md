@@ -79,7 +79,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | --- | ------------------------------------------------------------------------------------------------------ | ----------- | ------ | ---------- |
 | 1   | [An email change can take over an account](0001-email-change-account-takeover.md)                      | security    | open   | 2026-11-07 |
 | 2   | [Keep every guarantee with no database locks we take ourselves](0002-no-explicit-database-locks.md)    | concurrency | open   | 2026-11-07 |
-| 3   | [The same guarantees on every database Rails supports](0003-any-database-rails-supports.md)            | portability | open   | 2026-11-10 |
+| 3   | [The same guarantees on every database Rails supports](0003-any-database-rails-supports.md)            | portability | open   | 2026-11-11 |
 | 4   | [Many people changing many things at once](0004-many-people-many-changes-at-once.md)                   | concurrency | open   | 2026-11-07 |
 | 5   | [Time zone rules change](0005-time-zone-rules-change.md)                                               | time        | open   | 2026-11-07 |
 | 6   | [Dates far in the future](0006-dates-far-in-the-future.md)                                             | time        | open   | 2026-11-07 |

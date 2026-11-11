@@ -37,10 +37,12 @@
 # of TransactionRollbackError still answers it. Until 2026-10-09 a
 # refused push enqueue (LiveUpdate.push) was dropped after one try.
 #
-# The block runs with Rails' query cache off. A request runs with the cache
-# on, and a query the request ran before this block (ApiController finds
-# the signed-in resident) would be answered from the cache inside the
-# block's transaction, with no SQL. PostgreSQL never sees that read, so it
+# The block runs with Rails' query cache off. config/database.yml turns
+# the cache off for every request and job, for the reason below; this
+# also turns it off for a caller inside an ActiveRecord::Base.cache
+# block. With the cache on, a query the request ran before this block
+# (ApiController finds the signed-in resident) would be answered from the
+# cache inside the block's transaction, with no SQL. PostgreSQL never sees that read, so it
 # cannot find a conflict with it: the block decides from a row another
 # transaction has changed since, and its write goes through, or fails on
 # a CHECK as a 500. ProfilesController#email_link did that until

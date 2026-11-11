@@ -34,12 +34,40 @@ RSpec.describe 'database configuration' do
       it 'bounds every lock wait at 5 seconds' do
         expect(variables_for(env)['lock_timeout']).to eq('5s')
       end
+
+      it 'has no query cache' do
+        config = ActiveRecord::Base.configurations.configs_for(env_name: env).first
+        expect(config.configuration_hash[:query_cache]).to be(false)
+      end
     end
   end
 
   describe 'the production environment' do
     it 'kills a session idling inside an open transaction after 5 minutes' do
       expect(variables_for('production')['idle_in_transaction_session_timeout']).to eq('5min')
+    end
+  end
+
+  # Rails turns on its query cache for each request and each job: a read
+  # that runs again gets the first answer, and PostgreSQL never sees it.
+  # At SERIALIZABLE that breaks the conflict check. PostgreSQL can only
+  # find a conflict through reads it ran, so a write in a later
+  # transaction that decides from a cached read commits over another
+  # transaction's write with no error. `query_cache: false` stops the
+  # executor from turning it on.
+  describe 'a request or a job' do
+    it 'sends every read to the database, even one it ran before' do
+      reads = []
+      count = ->(*, payload) { reads << payload[:cached] if payload[:name] == 'Community Load' }
+
+      ActiveSupport::Notifications.subscribed(count, 'sql.active_record') do
+        Rails.application.executor.wrap do
+          Community.first
+          Community.transaction { Community.first }
+        end
+      end
+
+      expect(reads).to eq([nil, nil])
     end
   end
 

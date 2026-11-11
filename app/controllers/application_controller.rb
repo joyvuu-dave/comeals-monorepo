@@ -70,8 +70,11 @@ class ApplicationController < ActionController::Base
     authenticate_admin_user!
   end
 
+  # The read-only admin is read once a request: the time zone wrapper,
+  # ActiveAdmin and the audited gem each ask for it, and with no query
+  # cache (config/database.yml) each ask was a read of its own.
   def current_admin_user_custom
-    return AdminUser.find(ENV.fetch('READ_ONLY_ADMIN_ID', nil).to_s) if read_only_admin_token?
+    return @read_only_admin_user ||= AdminUser.find(ENV.fetch('READ_ONLY_ADMIN_ID', nil).to_s) if read_only_admin_token?
 
     current_admin_user
   end

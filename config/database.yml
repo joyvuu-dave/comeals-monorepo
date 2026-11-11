@@ -40,6 +40,17 @@ default: &default
   # one connection per thread plus one for the trim thread.
   pool: <%= ENV.fetch("RAILS_DB_POOL") { 2 } %>
 
+  # No query cache, in any environment. Rails turns it on for each request
+  # and each job, and then a read that runs again gets the first answer
+  # without reaching PostgreSQL. At SERIALIZABLE (below) PostgreSQL finds a
+  # conflict only through the reads it ran, so a write that decides from a
+  # cached read can commit over another transaction's write with no error.
+  # `false` here stops the executor from turning it on. (Any other value,
+  # nil included, is the cache's size.) In the request and admin specs the
+  # cache answered under 3% of the reads (2026-11-11), so this costs little.
+  # spec/config/database_config_spec.rb pins it.
+  query_cache: false
+
   # Every environment runs at SERIALIZABLE (ADR 0005). This was in the test
   # block alone while the retry work was built and proved; it is here now, so
   # development and production run the same way.
