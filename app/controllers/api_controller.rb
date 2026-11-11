@@ -368,9 +368,9 @@ class ApiController < ActionController::API
   # of the app does. The zone comes from the one community, which every
   # login belongs to (the Common House login belongs to no community
   # row). Before 2026-11-11 only a request with a token got it. With no
-  # community, or a zone name Rails does not know (only a write that
-  # skips the model can store one), TimeZone[] is nil, and
-  # Time.use_zone(nil) runs the block in the app's zone.
+  # community, TimeZone[''] is nil, and Time.use_zone(nil) runs the block
+  # in the app's zone. The stored zone is always one Rails knows: a CHECK
+  # (communities_timezone_supported) holds it to SUPPORTED_TIMEZONES.
   def set_community_timezone(&)
     Time.use_zone(ActiveSupport::TimeZone[Community.first&.timezone.to_s], &)
   end

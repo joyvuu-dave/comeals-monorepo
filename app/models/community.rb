@@ -102,6 +102,9 @@ class Community < ApplicationRecord
   end
 
   validates :name, presence: true, uniqueness: { case_sensitive: false }
+  # Mirrored by the communities_timezone_supported CHECK, which names the
+  # same zones; spec/db/communities_timezone_check_spec.rb fails when the
+  # two lists differ.
   validates :timezone, inclusion: { in: SUPPORTED_TIMEZONES.values }
   validates :cap,
             numericality: {

@@ -4,7 +4,7 @@ title: Pricing rules that change over time
 area: money
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-11
 watches:
   - app/models/community.rb
   - app/models/meal_resident.rb

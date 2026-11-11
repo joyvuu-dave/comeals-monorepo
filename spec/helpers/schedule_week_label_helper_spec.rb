@@ -46,8 +46,10 @@ RSpec.describe ScheduleWeekLabelHelper do
       end
     end
 
+    # A re-rendered form can carry a name that failed validation. It is
+    # never saved: communities_timezone_supported refuses it.
     it "falls back to the app's zone when the community's is not one" do
-      community.update_column(:timezone, 'Nowhere/Land')
+      community.timezone = 'Nowhere/Land'
       travel_to Time.utc(2026, 8, 9, 2) do
         expect(helper.schedule_week_rows(community, 1)).to eq([{ slot: 0, label: 'Week of Aug 2 (this week)' }])
       end

@@ -1053,7 +1053,8 @@ CREATE TABLE public.communities (
     CONSTRAINT communities_dinner_start_times_shape CHECK (public.comeals_valid_dinner_start_times(dinner_start_times)),
     CONSTRAINT communities_meals_per_rotation_range CHECK (((meals_per_rotation >= 1) AND (meals_per_rotation <= 100))),
     CONSTRAINT communities_schedule_shape CHECK (public.comeals_valid_meal_schedule(schedule)),
-    CONSTRAINT communities_singleton_guard_is_zero CHECK ((singleton_guard = 0))
+    CONSTRAINT communities_singleton_guard_is_zero CHECK ((singleton_guard = 0)),
+    CONSTRAINT communities_timezone_supported CHECK (((timezone)::text = ANY (ARRAY['Pacific/Honolulu'::text, 'America/Juneau'::text, 'America/Los_Angeles'::text, 'America/Denver'::text, 'America/Phoenix'::text, 'America/Chicago'::text, 'America/New_York'::text, 'America/Halifax'::text, 'Europe/London'::text, 'Europe/Paris'::text, 'Europe/Berlin'::text, 'Europe/Helsinki'::text, 'Asia/Tokyo'::text, 'Australia/Sydney'::text, 'Pacific/Auckland'::text])))
 );
 
 
@@ -4474,6 +4475,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261111120000'),
 ('20261106120000'),
 ('20261104120000'),
 ('20261103120000'),

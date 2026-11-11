@@ -43,8 +43,7 @@ class ApplicationController < ActionController::Base
   end
 
   # The same as ApiController#set_community_timezone: with no community,
-  # or a zone name Rails does not know, Time.use_zone(nil) runs the block
-  # in the app's zone.
+  # Time.use_zone(nil) runs the block in the app's zone.
   def use_community_timezone(&)
     Time.use_zone(ActiveSupport::TimeZone[Community.first&.timezone.to_s], &)
   end

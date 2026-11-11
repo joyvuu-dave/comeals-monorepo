@@ -74,7 +74,9 @@ Community
 - `cap` DECIMAL(12,8) — cost cap per multiplier unit. NULL means no cap. The
   model requires $0.01 to $9,999.99 in whole cents. Database CHECKs:
   `communities_cap_positive_or_null` and `communities_cap_whole_cents`.
-- `timezone` — one of `SUPPORTED_TIMEZONES`, e.g. "America/Los_Angeles"
+- `timezone` — one of `SUPPORTED_TIMEZONES`, e.g. "America/Los_Angeles".
+  Database CHECK: `communities_timezone_supported`, the same list. Adding a
+  zone to the model needs a migration that changes the CHECK.
 - `dinner_start_times` (jsonb) — seven `"HH:MM"` strings, Sunday first,
   default 19:00. `Community#dinner_start_at(date)` turns one into an
   instant in the community's zone. The `communities_dinner_start_times_shape`
