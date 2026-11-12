@@ -55,6 +55,7 @@ module NonTransactionalCleanup
     browser_counts
     bills_save_keys
     guest_add_keys
+    request_keys
     meal_residents
     guests
     meal_charges

@@ -13,6 +13,7 @@ import useDeleteFlow from "../../../app/frontend/src/components/modal_form/use_d
 function renderFlow(overrides = {}) {
   const props = {
     url: "/api/v1/events/7",
+    requestKey: "delete-event-7",
     message: "Delete this event?",
     loadingAction: null,
     setLoadingAction: vi.fn(),
@@ -39,7 +40,10 @@ describe("useDeleteFlow", () => {
     expect(hook.result.current.confirmProps.isOpen).toBe(true);
 
     await act(async () => hook.result.current.confirmProps.onConfirm());
-    expect(axios.delete).toHaveBeenCalledWith("/api/v1/events/7");
+    // The key is the caller's, built from the record's id (ADR 0015).
+    expect(axios.delete).toHaveBeenCalledWith("/api/v1/events/7", {
+      headers: { "Idempotency-Key": '"delete-event-7"' },
+    });
     expect(props.setLoadingAction).toHaveBeenCalledWith("delete");
     expect(props.setLoadingAction).toHaveBeenLastCalledWith(null);
     expect(props.onDeleted).toHaveBeenCalledTimes(1);

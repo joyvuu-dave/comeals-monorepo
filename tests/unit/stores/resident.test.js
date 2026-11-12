@@ -1784,6 +1784,8 @@ describe("Resident model", () => {
         url: "/api/v1/meals/1/residents/10/guests/102",
         withCredentials: true,
         timeout: 35000,
+        // The guest's id is the key: a guest is removed once (ADR 0015).
+        headers: { "Idempotency-Key": '"remove-guest-102"' },
         data: { socket_id: "test", push_token: expect.any(String) },
       });
     });

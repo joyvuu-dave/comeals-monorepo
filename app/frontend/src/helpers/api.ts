@@ -277,6 +277,10 @@ export const api = {
           });
         },
 
+        // The Idempotency-Key is the guest's id (ADR 0015): a guest is
+        // removed once and its id is never used again, so every send of
+        // this remove is the same request. A remove that got no answer
+        // and is sent again is answered as done, not "doesn't exist".
         remove(
           mealId: number,
           residentId: number,
@@ -288,6 +292,7 @@ export const api = {
             url: `/api/v1/meals/${mealId}/residents/${residentId}/guests/${guestId}`,
             withCredentials: true,
             timeout: SIGNUP_TIMEOUT_MS,
+            headers: { "Idempotency-Key": `"remove-guest-${guestId}"` },
             data: { socket_id: socketId, push_token: pushToken },
           });
         },

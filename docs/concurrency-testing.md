@@ -13,6 +13,11 @@ processes production does have (a rake task in its own dyno, the jobs on
 the worker dyno, an admin in a browser) are enough to trigger some of them
 (ADR 0003).
 
+The storms in layers 3 and 4 run with nothing broken. `bin/faults` runs
+layer 4 while database connections drop, PostgreSQL restarts and the
+clock moves, and loses some answers to writes so the phone sends them
+again (`docs/fault-testing.md`).
+
 ## The five layers
 
 ### 1. No process-wide mutable state — `spec/concurrency/process_wide_state_spec.rb`

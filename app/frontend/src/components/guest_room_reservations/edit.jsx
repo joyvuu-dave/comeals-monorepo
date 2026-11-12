@@ -7,6 +7,7 @@ import useFormMessages from "../../helpers/use_form_messages";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
+import useRequestKey from "../../helpers/use_request_key";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
@@ -33,6 +34,7 @@ const GuestRoomReservationsEdit = observer(
     const [loadingAction, setLoadingAction] = useState(null);
 
     const mountedRef = useMountedRef();
+    const keyed = useRequestKey();
 
     const formMessages = useFormMessages(setErrorShown);
 
@@ -83,12 +85,15 @@ const GuestRoomReservationsEdit = observer(
       e.preventDefault();
       setLoadingAction("submit");
       axios
-        .patch(`/api/v1/guest-room-reservations/${eventId}/update`, {
-          resident_id: residentId,
-          // Submit is disabled until the fetch has set the day, and the
-          // picker never clears it, so there is always a day here.
-          date: day,
-        })
+        .patch(
+          `/api/v1/guest-room-reservations/${eventId}/update`,
+          ...keyed({
+            resident_id: residentId,
+            // Submit is disabled until the fetch has set the day, and the
+            // picker never clears it, so there is always a day here.
+            date: day,
+          }),
+        )
         .then(function () {
           if (!mountedRef.current) return;
           setLoadingAction(null);
@@ -111,6 +116,7 @@ const GuestRoomReservationsEdit = observer(
 
     const deleteFlow = useDeleteFlow({
       url: `/api/v1/guest-room-reservations/${eventId}/delete`,
+      requestKey: `delete-guest-room-reservation-${eventId}`,
       message: "Do you really want to delete this reservation?",
       loadingAction: loadingAction,
       setLoadingAction: setLoadingAction,

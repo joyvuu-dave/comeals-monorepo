@@ -4,6 +4,7 @@
 module Api
   module V1
     class MealsController < ApiController
+      include KeyedWrites
       extend T::Sig
 
       # What an action hands to render: { json:, status: }.
@@ -30,6 +31,10 @@ module Api
       # Before the settled check, so a bills save or a guest add sent again
       # after its first try was written is not told that nothing was saved.
       before_action :answer_if_key_seen, only: %i[update_bills create_guest]
+      # A guest remove's Idempotency-Key (ADR 0015), by the same rules as a
+      # calendar write's. Before the settled check and set_guest, so a
+      # remove sent again is not told the guest does not exist.
+      before_action :answer_if_request_key_seen, only: [:destroy_guest]
       before_action :reject_if_reconciled, only: %i[
         create_meal_resident destroy_meal_resident update_meal_resident
         create_guest destroy_guest
@@ -168,6 +173,11 @@ module Api
       # The model guards (ClosedMealAttendanceFreeze, ReconciledMealImmutability)
       # are the source of truth; a blocked destroy surfaces here as a 400.
       sig { void }
+      #
+      # A remove sent again with the same Idempotency-Key gets the first
+      # answer (KeyedWrites, through render_write_under_lock). A guest has
+      # no version the way attendance does (ADR 0012), so without the key
+      # it was answered 404.
       def destroy_guest
         render_write_under_lock do
           guest.destroy!
@@ -299,10 +309,15 @@ module Api
       #
       # before_settled_check is with_meal_lock's: only a guest add passes
       # one.
+      #
+      # The write runs in `keyed` (KeyedWrites): for a guest remove sent
+      # with an Idempotency-Key, the key's row is written in the same
+      # transaction. Every other write here reads no such key, and runs as
+      # it is.
       sig { params(before_settled_check: SettledCheck, blk: T.proc.returns(Rendering)).void }
       # rubocop:disable Style/ArgumentsForwarding -- the sig above has to name the block
       def render_write_under_lock(before_settled_check: nil, &blk)
-        render(**T.must(with_meal_lock(before_settled_check: before_settled_check, &blk)))
+        render(**T.must(with_meal_lock(before_settled_check: before_settled_check) { keyed(&blk) }))
         # rubocop:enable Style/ArgumentsForwarding
       rescue ActiveRecord::RecordInvalid, ActiveRecord::RecordNotDestroyed => e
         render json: { message: e.record.errors.full_messages.join("\n") }, status: :bad_request

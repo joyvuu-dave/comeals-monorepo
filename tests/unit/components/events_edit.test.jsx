@@ -23,6 +23,7 @@ import { cookies } from "../mocks/js_cookie.js";
 cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
+import { KEYED, deleteKeyed } from "../helpers/request_key.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -128,18 +129,22 @@ describe("EventsEdit", () => {
     fireEvent.change(title, { target: { value: "Annual Meeting" } });
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
-    expect(axios.patch).toHaveBeenCalledWith("/api/v1/events/70/update", {
-      title: "Annual Meeting",
-      description: "Monthly community meeting",
-      start_year: 2026,
-      start_month: 1,
-      start_day: 28,
-      start_hours: "19",
-      start_minutes: "00",
-      end_hours: "21",
-      end_minutes: "00",
-      all_day: false,
-    });
+    expect(axios.patch).toHaveBeenCalledWith(
+      "/api/v1/events/70/update",
+      {
+        title: "Annual Meeting",
+        description: "Monthly community meeting",
+        start_year: 2026,
+        start_month: 1,
+        start_day: 28,
+        start_hours: "19",
+        start_minutes: "00",
+        end_hours: "21",
+        end_minutes: "00",
+        all_day: false,
+      },
+      KEYED,
+    );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });
@@ -170,6 +175,7 @@ describe("EventsEdit", () => {
         start_month: 2,
         start_day: 3,
       }),
+      KEYED,
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
@@ -196,7 +202,10 @@ describe("EventsEdit", () => {
     const buttons = screen.getAllByRole("button", { name: "Delete" });
     armAndClick(buttons[buttons.length - 1]);
 
-    expect(axios.delete).toHaveBeenCalledWith("/api/v1/events/70/delete");
+    expect(axios.delete).toHaveBeenCalledWith(
+      "/api/v1/events/70/delete",
+      deleteKeyed("delete-event-70"),
+    );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
     });

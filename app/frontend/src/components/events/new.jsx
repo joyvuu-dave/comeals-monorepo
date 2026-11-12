@@ -6,6 +6,7 @@ import { useStore } from "../../helpers/store_context";
 import useFormMessages from "../../helpers/use_form_messages";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
+import useRequestKey from "../../helpers/use_request_key";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import TimeSelect from "../modal_form/time_select";
@@ -24,6 +25,7 @@ function EventsNew({ handleCloseModal, setDirty, setErrorShown }) {
   const [allDay, setAllDay] = useState(false);
   const [loading, setLoading] = useState(false);
   const mountedRef = useMountedRef();
+  const keyed = useRequestKey();
   const formMessages = useFormMessages(setErrorShown);
   const showError = formMessages.showError;
 
@@ -31,12 +33,15 @@ function EventsNew({ handleCloseModal, setDirty, setErrorShown }) {
     e.preventDefault();
     setLoading(true);
     axios
-      .post(`/api/v1/events`, {
-        title: title,
-        description: description,
-        ...buildStartEndPayload(day, startTime, endTime),
-        all_day: allDay,
-      })
+      .post(
+        `/api/v1/events`,
+        ...keyed({
+          title: title,
+          description: description,
+          ...buildStartEndPayload(day, startTime, endTime),
+          all_day: allDay,
+        }),
+      )
       .then(function () {
         if (!mountedRef.current) return;
         setLoading(false);

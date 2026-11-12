@@ -1,12 +1,12 @@
 # The production schedule (config/recurring.yml), squeezed for bin/storm
 # with STORM_SOLID_QUEUE=1 (Storm::JobsProcess passes it as
 # SOLID_QUEUE_RECURRING_SCHEDULE). Each task runs every STORM_SQ_EVERY
-# seconds (7 by default, 7 at least), and task i runs at the seconds
+# seconds (8 by default, 8 at least: one second for each task), and task i runs at the seconds
 # that leave i after dividing by that number, so no two tasks come due
 # in the same second. The scheduler then needs one connection for a
 # task at a time, as in production, and the pool of 12 still holds
 # (spec/config/procfile_spec.rb counts it).
-<% every = [Integer(ENV.fetch('STORM_SQ_EVERY', '7')), 7].max %>
+<% every = [Integer(ENV.fetch('STORM_SQ_EVERY', '8')), 8].max %>
 <% at = ->(i) { "#{i}-59/#{every} * * * * * UTC" } %>
 test:
   refresh_balances:
@@ -30,3 +30,6 @@ test:
   delete_expired_guest_add_keys:
     command: "GuestAddKey.delete_expired"
     schedule: "<%= at.(6) %>"
+  delete_expired_request_keys:
+    command: "RequestKey.delete_expired"
+    schedule: "<%= at.(7) %>"

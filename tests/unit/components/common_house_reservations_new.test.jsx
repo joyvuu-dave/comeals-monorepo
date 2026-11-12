@@ -13,6 +13,7 @@ import { MemoryRouter, Routes, Route } from "react-router";
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
+import { KEYED } from "../helpers/request_key.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -136,6 +137,7 @@ describe("CommonHouseReservationsNew", () => {
         end_minutes: "15",
         title: "Book Club",
       },
+      KEYED,
     );
     // Success clears the new reservation's month from the cache and
     // closes the modal.

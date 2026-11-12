@@ -18,6 +18,7 @@ bin/prod                   # Builds the production bundle, serves it from Rails 
 bin/check                  # Full health check: tests, linters, security, freshness
 bin/mutant                 # Mutation testing: one class or one stage here; every class is the Mutant workflow (Saturdays), changed methods are CI's mutant-changed job (not in bin/check). Every survivor must be in config/mutant/accepted_survivors/ with its reason (docs/mutation-testing.md)
 bin/storm                  # Real-server concurrency storm: many Puma threads, many clients (not in bin/check; docs/concurrency-testing.md)
+bin/faults                 # The storm while connections drop, PostgreSQL restarts and the clock moves, on a PostgreSQL of its own (a short run is in bin/check; docs/fault-testing.md)
 bin/dafny-verify           # Check the Dafny proofs of the money rules in proofs/ (a bin/check step; docs/proofs.md)
 bin/tla-check              # Check the TLA+ models of the concurrency rules in models/ (a bin/check step; docs/models.md)
 ```

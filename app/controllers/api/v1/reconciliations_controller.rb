@@ -6,7 +6,10 @@ module Api
     class ReconciliationsController < ApiController
       extend T::Sig
 
+      include KeyedWrites
+
       before_action :authenticate, :require_reconciler
+      before_action :answer_if_request_key_seen, only: [:create]
 
       # GET /api/v1/reconciliations/preview?cutoff=YYYY-MM-DD
       #
@@ -47,26 +50,39 @@ module Api
         cutoff = YearMonthDay.parse(params.require(:cutoff))
         # A person is waiting, so three quick tries and then the 409 below,
         # not the rake task's minutes of waiting (SettleAndNotify::REQUEST).
-        settlement = SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST)
-        reconciliation = settlement.reconciliation
-        # Both dates are NOT NULL on a saved row, which this is.
-        render json: { id: reconciliation.id, date: T.must(reconciliation.date).iso8601,
-                       cutoff_date: T.must(reconciliation.end_date).iso8601,
-                       meal_count: settlement.meal_count },
-               status: :created
+        # The Idempotency-Key, when the request has one, is written in the
+        # settlement's transaction, with the answer (KeyedWrites).
+        answer = T.let(nil, T.nilable(T::Hash[Symbol, T.untyped]))
+        SettleAndNotify.call(cutoff: cutoff, retries: SettleAndNotify::REQUEST,
+                             also: ->(settlement) { keep_request_key(answer = created(settlement)) })
+        render(**T.must(answer))
       rescue Date::Error, ActionController::ParameterMissing
         render json: { message: 'cutoff must be a date, YYYY-MM-DD' }, status: :bad_request
       rescue ActiveRecord::RecordInvalid => e
-        render json: { message: in_the_callers_words(e.record.errors) }, status: :bad_request
+        render(**(seen_request_key || { json: { message: in_the_callers_words(e.record.errors) },
+                                        status: :bad_request }))
       rescue Settlement::Contested, ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
         # Another settlement or a meal write got there first. Nothing was
-        # saved; the same request can be sent again.
-        render json: { message: 'Someone else was changing these meals at the same time. ' \
-                                'Nothing was saved. Try again.' },
-               status: :conflict
+        # saved; the same request can be sent again. The one that got
+        # there first may be this request sent a moment earlier with the
+        # same key, so that key is looked up again.
+        render(**(seen_request_key || { json: { message: 'Someone else was changing these meals at the same ' \
+                                                         'time. Nothing was saved. Try again.' },
+                                        status: :conflict }))
       end
 
       private
+
+      # The 201 for a saved settlement, built from what it read inside its
+      # own transaction. Both dates are NOT NULL on a saved row, which
+      # this is.
+      sig { params(settlement: Settlement).returns(T::Hash[Symbol, T.untyped]) }
+      def created(settlement)
+        reconciliation = settlement.reconciliation
+        { json: { id: reconciliation.id, date: T.must(reconciliation.date).iso8601,
+                  cutoff_date: T.must(reconciliation.end_date).iso8601, meal_count: settlement.meal_count },
+          status: :created }
+      end
 
       # The caller sends `cutoff`; the row stores it as end_date, and the
       # row's own full message would say "End date", a name the caller never

@@ -4,7 +4,11 @@
 module Api
   module V1
     class GuestRoomReservationsController < ApiController
+      include KeyedWrites
+
       before_action :authenticate
+      # Before set_resource, so a delete sent again is not answered 404.
+      before_action :answer_if_request_key_seen, only: %i[create update destroy]
       before_action :set_resource, only: %i[show update destroy]
 
       # GET /api/v1/guest-room-reservations/:id

@@ -107,16 +107,21 @@ answers it with its HTML error page, or with
 accepts only JSON. An error from Heroku's router, in front of the app,
 is an HTML page too.
 
-| Status | Meaning                                                                                                                                              |
-| ------ | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `400`  | The request was understood but refused. The `message` says why. Bad input, a rule of the meal (closed, full, reconciled), or a wrong id in the body. |
-| `401`  | No token or a bad token.                                                                                                                             |
-| `403`  | The token is good, but this resident may not do this. Only the settlement endpoints answer it; see "Reconciliations".                                |
-| `404`  | The record in the URL does not exist, or `/meals/next` found no meal.                                                                                |
-| `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again. A bills save has one more `409`; see "Bills".                  |
-| `422`  | A bills save or a guest add came with an `Idempotency-Key` that was already used for a different one. Nothing was saved. See "Bills" and "Guests".   |
-| `429`  | Rate limit.                                                                                                                                          |
-| `503`  | The server had no free database connection, or a password reset was saved but its email could not be sent. Try again later.                          |
+| Status | Meaning                                                                                                                                                 |
+| ------ | ------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `400`  | The request was understood but refused. The `message` says why. Bad input, a rule of the meal (closed, full, reconciled), or a wrong id in the body.    |
+| `401`  | No token or a bad token.                                                                                                                                |
+| `403`  | The token is good, but this resident may not do this. Only the settlement endpoints answer it; see "Reconciliations".                                   |
+| `404`  | The record in the URL does not exist, or `/meals/next` found no meal.                                                                                   |
+| `409`  | Two writes to the same meal collided. Nothing was saved. Send the same request again. A bills save has one more `409`; see "Bills".                     |
+| `422`  | A write came with an `Idempotency-Key` that was already used for a different request. Nothing was saved. See "Bills", "Guests" and "Writes sent again". |
+| `429`  | Rate limit.                                                                                                                                             |
+| `503`  | The server had no free database connection, could not reach its database, or saved a password reset but could not send its email. Try again later.      |
+
+A `503` that says the server could not reach its database comes with a
+`Retry-After` header. A write answered this way may or may not have been
+saved: the connection can drop while the database is saving it. Send it
+again with the same `Idempotency-Key` (see "Writes sent again").
 
 Other than `/meals/next`, a `404` is only for the record named in the URL
 path. A wrong id in the body (say, an unknown `resident_id` in a bill) is
@@ -652,7 +657,53 @@ preview first. `400` when the cutoff is later than 14 days before today, or ther
 nothing to settle; when every meal with a bill up to the cutoff is held
 back, the `message` gives those meals' dates. `409` when another
 settlement or a meal write got there first — nothing was saved, send the
-same request again.
+same request again. A settlement takes an `Idempotency-Key` (see "Writes
+sent again"): a settlement whose answer was lost, sent again with the
+same key, gets the first `201` instead of a `400` that says there is
+nothing to settle.
+
+## Writes sent again
+
+A write whose answer did not arrive (a timeout, a dropped connection, or a
+`503` from a lost database connection) may or may not have been saved.
+These writes take an optional `Idempotency-Key` header, so that sending
+one again is safe:
+
+- create, update and delete of an event, a guest room reservation and a
+  common house reservation;
+- removing a guest (`DELETE /meals/:meal_id/residents/:resident_id/guests/:guest_id`);
+- a settlement (`POST /reconciliations`).
+
+The header's value follows the same rules as a bills save's (see
+"Bills"): a quoted string of 1 to 255 printable characters.
+
+```
+POST /events
+Idempotency-Key: "8e03978e-40d5-43e8-bc93-6894a57f9324"
+```
+
+- Make a new key for each new change. When you send the same change
+  again, send it with the same key. For a delete, a key built from the
+  record's id works, since a record is deleted only once.
+- The server keeps the key of each of these writes it saved, for 7 days,
+  per signed-in resident (or the Common House screen). The same key with
+  the same request writes nothing more: the answer is the status and
+  body the first send got, with the header `Idempotent-Replayed: true`.
+  This holds for a delete too: the second send gets the first send's
+  `200`, not a `404`.
+- "The same request" is the same method, path and parameters. `token`,
+  `socket_id` and `push_token` are left out, so a new Pusher connection
+  does not make it another request.
+- The same key with another request is refused with `422`, and nothing
+  is saved.
+- A header that is not a quoted string returns `400`.
+- A write that was refused keeps no key, so the same key may be sent
+  again.
+- With no header, a write works as before, and each send is a new write.
+
+Sign-ups, take-offs and Late or Veg changes do not take this header; they
+carry an attendance version instead (see "The attendance version"). A
+bills save and a guest add need their own key (see "Bills" and "Guests").
 
 ## Bills as records
 

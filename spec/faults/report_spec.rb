@@ -16,7 +16,8 @@ RSpec.describe Faults::Report do
                resend.new(:post, '/api/v1/guest-room-reservations', 200, 400, '{"message":"taken"}'),
                resend.new(:patch, '/api/v1/meals/1/closed', 200, 200, '{}'),
                resend.new(:post, '/api/v1/meals/1/residents/2', 400, 400, '{}'),
-               resend.new(:post, '/api/v1/events', 200, 503, JSON.generate(message: DatabaseUnreachable::MESSAGE))]
+               resend.new(:post, '/api/v1/events', 200, 503, JSON.generate(message: DatabaseUnreachable::MESSAGE)),
+               resend.new(:delete, '/api/v1/meals/1/residents/2', 200, 404, '{}')]
 
     expect(described_class.error_for_a_saved_write(resends))
       .to eq(['POST /api/v1/guest-room-reservations: answered 400 when sent again after 200 (2x): ' \

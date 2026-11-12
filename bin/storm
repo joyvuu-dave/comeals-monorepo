@@ -38,7 +38,7 @@ set -euo pipefail
 # in the jobs log, the jobs process still alive. More knobs:
 #
 #   STORM_SOLID_QUEUE=1 STORM_SQ_HEARTBEAT=1 bin/storm   # beat every second (production: 60)
-#   STORM_SQ_EVERY=7       every recurring task every 7 s (the least)
+#   STORM_SQ_EVERY=8       every recurring task every 8 s (the least)
 #   STORM_JOBS_PROCESSES=2 two bin/jobs, as during a deploy's overlap
 #   STORM_SQ_POLL=0.1      the dispatcher's and the worker's poll (production: 5)
 #

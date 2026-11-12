@@ -7,6 +7,7 @@ import { useStore } from "../../helpers/store_context";
 import useFormMessages from "../../helpers/use_form_messages";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
+import useRequestKey from "../../helpers/use_request_key";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import { sixMonthsAfter } from "../modal_form/last_day";
@@ -25,6 +26,7 @@ const GuestRoomReservationsNew = observer(
     const [day, setDay] = useState(null);
     const [loading, setLoading] = useState(false);
     const mountedRef = useMountedRef();
+    const keyed = useRequestKey();
     const formMessages = useFormMessages(setErrorShown);
     const showError = formMessages.showError;
 
@@ -40,10 +42,13 @@ const GuestRoomReservationsNew = observer(
       e.preventDefault();
       setLoading(true);
       axios
-        .post(`/api/v1/guest-room-reservations`, {
-          resident_id: residentId,
-          date: day,
-        })
+        .post(
+          `/api/v1/guest-room-reservations`,
+          ...keyed({
+            resident_id: residentId,
+            date: day,
+          }),
+        )
         .then(function () {
           if (!mountedRef.current) return;
           setLoading(false);

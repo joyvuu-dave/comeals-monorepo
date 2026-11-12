@@ -17,6 +17,7 @@ import { cookies } from "../mocks/js_cookie.js";
 cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
+import { KEYED, deleteKeyed } from "../helpers/request_key.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -124,6 +125,7 @@ describe("GuestRoomReservationsEdit", () => {
     expect(axios.patch).toHaveBeenCalledWith(
       "/api/v1/guest-room-reservations/60/update",
       { resident_id: "2", date: "2026-01-25" },
+      KEYED,
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
@@ -153,6 +155,7 @@ describe("GuestRoomReservationsEdit", () => {
     expect(axios.patch).toHaveBeenCalledWith(
       "/api/v1/guest-room-reservations/60/update",
       { resident_id: 1, date: "2026-02-03" },
+      KEYED,
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
@@ -180,6 +183,7 @@ describe("GuestRoomReservationsEdit", () => {
 
     expect(axios.delete).toHaveBeenCalledWith(
       "/api/v1/guest-room-reservations/60/delete",
+      deleteKeyed("delete-guest-room-reservation-60"),
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);

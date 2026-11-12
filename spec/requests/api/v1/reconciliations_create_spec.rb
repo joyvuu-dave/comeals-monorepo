@@ -205,6 +205,57 @@ RSpec.describe 'POST /api/v1/reconciliations' do
     expect(response).to have_http_status(:conflict)
   end
 
+  # A settle whose answer was lost, sent again (challenge 30, ADR 0015).
+  # Without a key the second send finds nothing left to settle and is
+  # answered 400, which tells the reconciler the settle failed when it
+  # worked. With the first send's key it gets the first send's answer.
+  describe 'sent again with the same Idempotency-Key' do
+    def settle_with_key(cutoff, key)
+      post '/api/v1/reconciliations', params: { cutoff: cutoff.to_s },
+                                      headers: { 'Authorization' => "Bearer #{token}", 'Idempotency-Key' => key }
+      [response.status, response.parsed_body, response.headers['Idempotent-Replayed']]
+    end
+
+    it 'settles once and answers the second send with the first answer, marked as replayed' do
+      settleable_meal
+
+      first = settle_with_key(latest, '"settle-1"')
+      second = settle_with_key(latest, '"settle-1"')
+
+      expect(first.values_at(0, 2)).to eq([201, nil])
+      expect(second).to eq([201, first[1], 'true'])
+      expect(Reconciliation.count).to eq(1)
+      expect(ReconciliationMailer).to have_received(:reconciliation_notify_email).once
+    end
+
+    it 'refuses the same key with another cutoff with 422' do
+      settleable_meal
+
+      settle_with_key(latest, '"settle-1"')
+      status, body, = settle_with_key(latest - 1, '"settle-1"')
+
+      expect(status).to eq(422)
+      expect(body[:message]).to eq(RequestKey::OTHER_REQUEST)
+    end
+
+    it 'keeps no key for a settle that was refused' do
+      settle_with_key(latest, '"settle-1"')
+
+      expect(response).to have_http_status(:bad_request)
+      expect(RequestKey.count).to eq(0)
+    end
+
+    it 'keeps no key when the settlement rolled back' do
+      settleable_meal
+      allow(Settlement).to receive(:settle!).and_raise(ActiveRecord::SerializationFailure, 'could not serialize')
+
+      settle_with_key(latest, '"settle-1"')
+
+      expect(response).to have_http_status(:conflict)
+      expect(RequestKey.count).to eq(0)
+    end
+  end
+
   # The settle button is a person waiting, and the web dyno serves one
   # request at a time (config/puma.rb). The nightly task's ten tries sleep
   # two to four minutes all told, which would hold the only thread and stop

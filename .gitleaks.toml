@@ -73,6 +73,13 @@ regexes = ['''8e03978e-40d5-43e8-bc93-6894a57f9324''']
 # that a token saved before a change still signs in after it. It is
 # signed with a secret_key_base the spec makes up, not with production's,
 # for a resident id no community has.
+# The Idempotency-Key of a guest remove or a calendar delete is built
+# from the record's id (ADR 0015), and the unit tests name the key they
+# expect. It is not a secret: anyone can read it from the page's code.
+[[allowlists]]
+description = "The Idempotency-Key of a guest remove or a calendar delete, built from the record's id (ADR 0015)"
+regexes = ['''^(remove-guest|delete-event|delete-guest-room-reservation|delete-common-house-reservation)-[0-9]+$''']
+
 [[allowlists]]
 description = "The saved sign-in token in jwt_auth_spec.rb, signed with a made-up test secret"
 regexes = ['''eyJyZXNpZGVudF9pZCI6MTAwMDA0MiwiaWF0IjoxNzkyMTA4ODAwLjI1LCJpc3MiOiJjb21lYWxzIn0''']

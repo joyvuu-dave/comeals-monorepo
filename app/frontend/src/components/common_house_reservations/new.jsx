@@ -7,6 +7,7 @@ import { useStore } from "../../helpers/store_context";
 import useFormMessages from "../../helpers/use_form_messages";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
+import useRequestKey from "../../helpers/use_request_key";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import TimeSelect from "../modal_form/time_select";
@@ -30,6 +31,7 @@ const CommonHouseReservationsNew = observer(
     const [endTime, setEndTime] = useState("");
     const [loading, setLoading] = useState(false);
     const mountedRef = useMountedRef();
+    const keyed = useRequestKey();
     const formMessages = useFormMessages(setErrorShown);
     const showError = formMessages.showError;
 
@@ -45,11 +47,14 @@ const CommonHouseReservationsNew = observer(
       e.preventDefault();
       setLoading(true);
       axios
-        .post(`/api/v1/common-house-reservations`, {
-          resident_id: residentId,
-          ...buildStartEndPayload(day, startTime, endTime),
-          title: title,
-        })
+        .post(
+          `/api/v1/common-house-reservations`,
+          ...keyed({
+            resident_id: residentId,
+            ...buildStartEndPayload(day, startTime, endTime),
+            title: title,
+          }),
+        )
         .then(function () {
           if (!mountedRef.current) return;
           setLoading(false);

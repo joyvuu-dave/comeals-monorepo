@@ -42,6 +42,11 @@ shared: &shared
   delete_expired_guest_add_keys:
     command: "GuestAddKey.delete_expired"
     schedule: 43 * * * * UTC
+  # A calendar write's or a settlement's Idempotency-Key is kept 7 days
+  # too (RequestKey).
+  delete_expired_request_keys:
+    command: "RequestKey.delete_expired"
+    schedule: 45 * * * * UTC
 
 development:
   <<: *shared

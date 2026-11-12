@@ -17,6 +17,7 @@ import { cookies } from "../mocks/js_cookie.js";
 cookies.current = { timezone: "America/Los_Angeles" };
 
 import axios from "axios";
+import { KEYED, deleteKeyed } from "../helpers/request_key.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -158,6 +159,7 @@ describe("CommonHouseReservationsEdit", () => {
         end_minutes: "00",
         title: "Book Club",
       },
+      KEYED,
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
@@ -189,6 +191,7 @@ describe("CommonHouseReservationsEdit", () => {
         start_month: 2,
         start_day: 3,
       }),
+      KEYED,
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);
@@ -214,6 +217,7 @@ describe("CommonHouseReservationsEdit", () => {
 
     expect(axios.delete).toHaveBeenCalledWith(
       "/api/v1/common-house-reservations/50/delete",
+      deleteKeyed("delete-common-house-reservation-50"),
     );
     await vitestWaitFor(() => {
       expect(handleCloseModal).toHaveBeenCalledTimes(1);

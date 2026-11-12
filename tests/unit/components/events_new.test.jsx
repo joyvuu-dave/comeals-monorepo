@@ -7,6 +7,7 @@ import { MemoryRouter, Routes, Route } from "react-router";
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
+import { KEYED } from "../helpers/request_key.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -99,18 +100,22 @@ describe("EventsNew", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    expect(axios.post).toHaveBeenCalledWith("/api/v1/events", {
-      title: "Movie Night",
-      description: "",
-      start_year: 2026,
-      start_month: 3,
-      start_day: 20,
-      start_hours: "18",
-      start_minutes: "00",
-      end_hours: "20",
-      end_minutes: "30",
-      all_day: false,
-    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "/api/v1/events",
+      {
+        title: "Movie Night",
+        description: "",
+        start_year: 2026,
+        start_month: 3,
+        start_day: 20,
+        start_hours: "18",
+        start_minutes: "00",
+        end_hours: "20",
+        end_minutes: "30",
+        all_day: false,
+      },
+      KEYED,
+    );
 
     // Success clears the new event's month from the cache and closes
     // the modal.
@@ -211,5 +216,36 @@ describe("EventsNew", () => {
       expect(handleCloseModal).not.toHaveBeenCalled();
     }
     expect(toastStore.toasts).toHaveLength(0);
+  });
+  // ADR 0015: a Create that got no answer, pressed again with the same
+  // fields, sends the same key, so the server does not save the event
+  // twice. A Create after a change is a new request with a new key.
+  it("sends the same key when Create is pressed again, and a new one after a change", async () => {
+    const lost = new Error("Network Error");
+    axios.post
+      .mockRejectedValueOnce(lost)
+      .mockRejectedValueOnce(lost)
+      .mockRejectedValueOnce(lost);
+    renderForm();
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Movie Night" },
+    });
+
+    const create = screen.getByRole("button", { name: "Create" });
+    fireEvent.click(create);
+    await vitestWaitFor(() => expect(create).toBeEnabled());
+    fireEvent.click(create);
+    await vitestWaitFor(() => expect(create).toBeEnabled());
+    fireEvent.change(screen.getByLabelText("Title"), {
+      target: { value: "Movie Night!" },
+    });
+    fireEvent.click(create);
+    await vitestWaitFor(() => expect(axios.post).toHaveBeenCalledTimes(3));
+
+    const keys = axios.post.mock.calls.map(
+      ([, , config]) => config.headers["Idempotency-Key"],
+    );
+    expect(keys[1]).toBe(keys[0]);
+    expect(keys[2]).not.toBe(keys[0]);
   });
 });

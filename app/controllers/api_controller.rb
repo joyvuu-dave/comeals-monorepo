@@ -316,11 +316,17 @@ class ApiController < ActionController::API
   # refuses when two of them race — and before this the refusal was a 500
   # (spec/requests/api/v1/calendar_writes_retry_spec.rb).
   def render_retrying_on_conflict(&)
-    render(**RetryOnConflict.call(&))
+    render(**RetryOnConflict.call { keyed(&) })
   rescue ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
     render json: { message: 'Someone else was changing the calendar at the same time. ' \
                             'Nothing was saved. Try again.' },
            status: :conflict
+  end
+
+  # A write with no Idempotency-Key. KeyedWrites replaces this in the
+  # controllers that read the key, to save the key with the write.
+  def keyed
+    yield
   end
 
   # Resolve both @current_resident_api and @current_api_key in one pass,

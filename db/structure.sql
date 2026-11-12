@@ -1624,6 +1624,44 @@ ALTER SEQUENCE public.reconciliations_id_seq OWNED BY public.reconciliations.id;
 
 
 --
+-- Name: request_keys; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.request_keys (
+    id bigint NOT NULL,
+    sender text NOT NULL,
+    key text NOT NULL,
+    request_sha256 text NOT NULL,
+    status smallint NOT NULL,
+    body jsonb NOT NULL,
+    created_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT request_keys_key_printable CHECK ((key ~ '^[ -~]{1,255}$'::text)),
+    CONSTRAINT request_keys_sender_names_a_login CHECK ((sender ~ '^(Resident|CommonHouseLogin):[1-9][0-9]*$'::text)),
+    CONSTRAINT request_keys_sha256_is_hex CHECK ((request_sha256 ~ '^[0-9a-f]{64}$'::text)),
+    CONSTRAINT request_keys_status_saved_something CHECK (((status >= 200) AND (status <= 299)))
+);
+
+
+--
+-- Name: request_keys_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE public.request_keys_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+
+--
+-- Name: request_keys_id_seq; Type: SEQUENCE OWNED BY; Schema: public; Owner: -
+--
+
+ALTER SEQUENCE public.request_keys_id_seq OWNED BY public.request_keys.id;
+
+
+--
 -- Name: resident_balances; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2579,6 +2617,13 @@ ALTER TABLE ONLY public.reconciliations ALTER COLUMN id SET DEFAULT nextval('pub
 
 
 --
+-- Name: request_keys id; Type: DEFAULT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_keys ALTER COLUMN id SET DEFAULT nextval('public.request_keys_id_seq'::regclass);
+
+
+--
 -- Name: resident_balances id; Type: DEFAULT; Schema: public; Owner: -
 --
 
@@ -2938,6 +2983,14 @@ ALTER TABLE ONLY public.reconciliation_balances
 
 ALTER TABLE ONLY public.reconciliations
     ADD CONSTRAINT reconciliations_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: request_keys request_keys_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.request_keys
+    ADD CONSTRAINT request_keys_pkey PRIMARY KEY (id);
 
 
 --
@@ -3479,6 +3532,20 @@ CREATE INDEX index_reconciliation_balances_on_resident_id ON public.reconciliati
 --
 
 CREATE INDEX index_reconciliation_balances_on_unit_id ON public.reconciliation_balances USING btree (unit_id);
+
+
+--
+-- Name: index_request_keys_on_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_request_keys_on_created_at ON public.request_keys USING btree (created_at);
+
+
+--
+-- Name: index_request_keys_on_sender_and_key; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE UNIQUE INDEX index_request_keys_on_sender_and_key ON public.request_keys USING btree (sender, key);
 
 
 --
@@ -4475,6 +4542,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261112180000'),
 ('20261111120000'),
 ('20261106120000'),
 ('20261104120000'),

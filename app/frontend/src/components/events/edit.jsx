@@ -7,6 +7,7 @@ import useFormMessages from "../../helpers/use_form_messages";
 import ConfirmModal from "../app/confirm_modal";
 import useDirtyReport from "../../helpers/use_dirty_report";
 import useMountedRef from "../../helpers/use_mounted_ref";
+import useRequestKey from "../../helpers/use_request_key";
 import ModalFormHeader from "../modal_form/header";
 import FormMessages from "../modal_form/form_messages";
 import ModalFormFooter from "../modal_form/footer";
@@ -33,6 +34,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty, setErrorShown }) {
   const [loadingAction, setLoadingAction] = useState(null);
 
   const mountedRef = useMountedRef();
+  const keyed = useRequestKey();
 
   const formMessages = useFormMessages(setErrorShown);
 
@@ -93,12 +95,15 @@ function EventsEdit({ eventId, handleCloseModal, setDirty, setErrorShown }) {
     e.preventDefault();
     setLoadingAction("submit");
     axios
-      .patch(`/api/v1/events/${eventId}/update`, {
-        title: title,
-        description: description,
-        ...buildStartEndPayload(day, startTime, endTime),
-        all_day: allDay,
-      })
+      .patch(
+        `/api/v1/events/${eventId}/update`,
+        ...keyed({
+          title: title,
+          description: description,
+          ...buildStartEndPayload(day, startTime, endTime),
+          all_day: allDay,
+        }),
+      )
       .then(function () {
         if (!mountedRef.current) return;
         setLoadingAction(null);
@@ -120,6 +125,7 @@ function EventsEdit({ eventId, handleCloseModal, setDirty, setErrorShown }) {
 
   const deleteFlow = useDeleteFlow({
     url: `/api/v1/events/${eventId}/delete`,
+    requestKey: `delete-event-${eventId}`,
     message: "Do you really want to delete this event?",
     loadingAction: loadingAction,
     setLoadingAction: setLoadingAction,

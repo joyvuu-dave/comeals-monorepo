@@ -80,17 +80,23 @@ class SettleAndNotify
   # The fingerprint is the admin form's: the settlement must match the
   # preview the admin saw, or it raises Settlement::Changed and nothing is
   # written (Settlement.fingerprint). The task and the API pass none.
+  #
+  # `also` runs inside the settlement's transaction, after the mail jobs
+  # are queued, with the settlement. The API passes it to write the
+  # request's Idempotency-Key with the settlement (KeyedWrites, ADR 0015),
+  # so the key is saved exactly when the settlement is.
   sig do
-    params(cutoff: Date, community: Community, retries: Retries, fingerprint: T.nilable(String))
+    params(cutoff: Date, community: Community, retries: Retries, fingerprint: T.nilable(String),
+           also: T.nilable(T.proc.params(settlement: Settlement).void))
       .returns(Settlement)
   end
-  def self.call(cutoff:, community: Community.instance, retries: BATCH, fingerprint: nil)
+  def self.call(cutoff:, community: Community.instance, retries: BATCH, fingerprint: nil, also: nil)
     # Only the settlement and its mail job are retried. The cache clear
     # and the recalculation run after the commit, so retrying past that
     # point would settle the next period by mistake (or fail because there
     # is nothing left).
     settlement = RetryOnConflict.call(attempts: retries.attempts, base_delay: retries.base_delay) do
-      settle_and_queue_mail(cutoff, fingerprint)
+      settle_and_queue_mail(cutoff, fingerprint, also)
     end
 
     after_commit_step('cache clear after settlement') { settlement.forget_cached_meals }
@@ -106,8 +112,11 @@ class SettleAndNotify
   # perform_later answers false, and raises nothing, when an adapter
   # refuses a job through ActiveJob's own EnqueueError; that rolls the
   # settlement back too.
-  sig { params(cutoff: Date, fingerprint: T.nilable(String)).returns(Settlement) }
-  def self.settle_and_queue_mail(cutoff, fingerprint)
+  sig do
+    params(cutoff: Date, fingerprint: T.nilable(String),
+           also: T.nilable(T.proc.params(settlement: Settlement).void)).returns(Settlement)
+  end
+  def self.settle_and_queue_mail(cutoff, fingerprint, also)
     Reconciliation.transaction do
       Settlement.settle!(cutoff: cutoff, fingerprint: fingerprint).tap do |settlement|
         unless NotifyCooksJob.perform_later(settlement.reconciliation)
@@ -116,6 +125,8 @@ class SettleAndNotify
         unless CommonHouseMailJob.perform_later(settlement.reconciliation)
           raise MailNotQueued, 'The common house mail could not be queued, so nothing was settled.'
         end
+
+        also&.call(settlement)
       end
     end
   end

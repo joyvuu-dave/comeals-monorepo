@@ -81,8 +81,6 @@ module Storm
 
     MEAL_WRITES = %i[signup leave toggle add_guest remove_guest bills close reopen max description].freeze
     ROW_WRITES = %i[signup leave toggle add_guest remove_guest bills].freeze
-    # The writes that need an Idempotency-Key header.
-    KEYED = %i[bills add_guest].freeze
     RECONCILER_ONLY = %i[preview settle].freeze
 
     attr_reader :log, :meal_sockets
@@ -155,12 +153,12 @@ module Storm
       @rng.rand < 0.5 ? @home : @plan.meals.sample(random: @rng)
     end
 
-    # A bills save and a guest add carry a new Idempotency-Key, as the
-    # page sends one (decision 6 of #135, S2): this client and request
-    # number, which no other request has.
+    # A KEYED write carries a new Idempotency-Key, as the page sends one
+    # (decision 6 of #135, S2, ADR 0015): this client and request number,
+    # which no other request has.
     def call(method, path, body, action)
       headers = { 'Authorization' => "Bearer #{@plan.tokens.fetch(@resident.id)}" }
-      headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if KEYED.include?(action)
+      headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if KEYED_ACTIONS.include?(action)
       login = action == :login
       note_sent(login)
       status, response = @transport.call(method, path, headers, body && JSON.generate(body), @ip)
@@ -422,4 +420,11 @@ module Storm
       [:post, '/api/v1/reconciliations', { cutoff: @plan.latest_cutoff.iso8601 }, nil]
     end
   end
+
+  # The client's writes that carry an Idempotency-Key, as the page sends
+  # one. A bills save and a guest add need one (#135, S2); the calendar
+  # writes, a guest remove and a settle take one (ADR 0015). Outside
+  # Client, which RuboCop's class length rule keeps to 270 lines.
+  KEYED_ACTIONS = %i[bills add_guest remove_guest event_create event_delete guest_room_create guest_room_delete
+                     common_house_create common_house_delete settle].freeze
 end

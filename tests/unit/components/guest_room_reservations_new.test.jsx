@@ -7,6 +7,7 @@ import { MemoryRouter, Routes, Route } from "react-router";
 vi.mock("axios", () => import("../mocks/axios.js"));
 
 import axios from "axios";
+import { KEYED } from "../helpers/request_key.js";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { messagesShown } from "../helpers/form_messages.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
@@ -96,10 +97,14 @@ describe("GuestRoomReservationsNew", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    expect(axios.post).toHaveBeenCalledWith("/api/v1/guest-room-reservations", {
-      resident_id: "2",
-      date: "2026-03-20",
-    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "/api/v1/guest-room-reservations",
+      {
+        resident_id: "2",
+        date: "2026-03-20",
+      },
+      KEYED,
+    );
     // Success clears the new reservation's month from the cache and
     // closes the modal.
     await vitestWaitFor(() => {
@@ -141,10 +146,14 @@ describe("GuestRoomReservationsNew", () => {
     fireEvent.change(screen.getByLabelText("Host"), { target: { value: "2" } });
     fireEvent.click(screen.getByRole("button", { name: "Create" }));
 
-    expect(axios.post).toHaveBeenCalledWith("/api/v1/guest-room-reservations", {
-      resident_id: "2",
-      date: null,
-    });
+    expect(axios.post).toHaveBeenCalledWith(
+      "/api/v1/guest-room-reservations",
+      {
+        resident_id: "2",
+        date: null,
+      },
+      KEYED,
+    );
   });
 
   it("a refused create shows the reason and keeps the form open", async () => {
