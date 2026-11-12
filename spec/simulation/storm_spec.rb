@@ -27,9 +27,14 @@ RSpec.describe Simulation::Storm, prosopite: false, server_notices: [ServerNotic
     expect(switches).to be > steps.size / 4
   end
 
-  it 'answers every request the way the API promises, and the books are right after' do
-    result = storm(5)
-    expect(result.requests).not_to be_empty
-    expect(result.problems).to be_empty, result.problems.first(20).join("\n")
+  # bin/check runs two seeds; SIM_SEEDS runs more, and SIM_SEED replays
+  # one (spec/support/simulation_seeds.rb).
+  SimulationSeeds.seeds(default: 2).each do |seed|
+    it "answers every request the way the API promises, and the books are right after (seed #{seed})",
+       simulation_seed: seed do
+      result = storm(seed)
+      expect(result.requests).not_to be_empty
+      expect(result.problems).to be_empty, result.problems.first(20).join("\n")
+    end
   end
 end

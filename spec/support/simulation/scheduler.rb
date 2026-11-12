@@ -95,6 +95,7 @@ module Simulation
       end
       Result.new(steps: @steps, values: @actors.to_h { |a| [a.name, a.value] })
     ensure
+      Trace.keep(@steps)
       @actors.each(&:stop)
       put_the_connections_back
     end
