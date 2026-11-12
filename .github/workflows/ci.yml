@@ -290,7 +290,10 @@ jobs:
   # to 900 examples that prove the method.
   mutant-changed:
     runs-on: ubuntu-26.04
-    timeout-minutes: 360
+    # The Mutate step stops mutant after 60 minutes and fails. This limit
+    # only catches a step that hangs: a job stopped by GitHub shows as
+    # cancelled, not failed.
+    timeout-minutes: 80
     services:
       postgres:
         image: postgres:18
@@ -327,15 +330,27 @@ jobs:
       - run: bin/rails db:schema:load
       # The methods that changed, and the methods whose examples changed or
       # were deleted (bin/mutant-spec-subjects says how it finds them).
+      # One spec file can name many classes (write_messages_spec.rb names
+      # seven), and a method takes 2 to 6 minutes. On 2026-11-11 one
+      # removed example chose 113 methods, and the job ran for 6 hours.
+      # So the methods found only through their examples run when there
+      # are 10 or fewer; above that they are listed, and the Saturday run
+      # mutates them.
       - name: Choose the methods
         run: |
           set -euo pipefail
           MUTANT=1 bundle exec mutant environment subject list --since "$BASE" > changed.txt
           MUTANT=1 bundle exec mutant environment subject list > all-subjects.txt
-          grep -E '^[A-Z][^ ]*[#.][^ ]+$' changed.txt > methods.txt || true
-          bin/mutant-spec-subjects "$BASE" all-subjects.txt > examples.txt
-          sort -u methods.txt examples.txt > subjects.txt
-          echo "$(wc -l < methods.txt) methods changed since $BASE, and the examples of $(wc -l < examples.txt) methods:"
+          grep -E '^[A-Z][^ ]*[#.][^ ]+$' changed.txt | sort -u > methods.txt || true
+          bin/mutant-spec-subjects "$BASE" all-subjects.txt | sort -u > examples.txt
+          comm -13 methods.txt examples.txt > examples-only.txt
+          if [ "$(wc -l < examples-only.txt)" -gt 10 ]; then
+            echo "::warning::The examples of $(wc -l < examples-only.txt) methods changed, more than 10. They are left to the Saturday run. To mutate them now, run the Mutant workflow with these subjects: $(tr '\n' ' ' < examples-only.txt)"
+            cp methods.txt subjects.txt
+          else
+            sort -u methods.txt examples-only.txt > subjects.txt
+          fi
+          echo "$(wc -l < methods.txt) methods changed since $BASE, and the examples of $(wc -l < examples-only.txt) more changed. Mutating:"
           cat subjects.txt
       - name: Mutate
         run: |
@@ -346,8 +361,17 @@ jobs:
             echo "No method in .mutant.yml's subjects, or its examples, changed."
             exit 0
           fi
+          # GitHub runs the step with bash -e, which would stop at a failed
+          # mutant run before the message below.
+          set +e
           # shellcheck disable=SC2046 # one subject per word
-          MUTANT_JOBS=4 bin/mutant -- $(cat subjects.txt) 2>&1 | tr '\r' '\n' | grep -v '^progress: '
+          timeout --kill-after=2m 60m env MUTANT_JOBS=4 bin/mutant -- $(cat subjects.txt) 2>&1 \
+            | tr '\r' '\n' | grep -v '^progress: '
+          status=${PIPESTATUS[0]}
+          if [ "$status" -eq 124 ] || [ "$status" -eq 137 ]; then
+            echo "::error::Mutant did not finish in 60 minutes. Run the Mutant workflow with these subjects: $(tr '\n' ' ' < subjects.txt)"
+          fi
+          exit "$status"
 
   proofs:
     runs-on: ubuntu-26.04

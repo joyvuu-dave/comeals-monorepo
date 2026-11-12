@@ -39,6 +39,19 @@ green gate waits for it. A change to `spec/support`, a factory or
 `rails_helper` can weaken any example, and only the Saturday run
 catches that.
 
+The job has two limits, because one spec file can name many classes and
+a method takes 2 to 6 minutes. On 2026-11-11 one removed example in
+`write_messages_spec.rb` chose 113 methods, and the job ran until
+GitHub cancelled it after 6 hours.
+
+- When the examples of more than 10 methods changed, and their code
+  did not, the job mutates only the methods whose code changed. It
+  prints a warning that lists the others; the Saturday run mutates
+  them, or you can run the Mutant workflow with that list now.
+- Mutant stops after 60 minutes, and the job fails with the list of
+  methods to run in the Mutant workflow. A push that changes the code
+  of many methods ends this way.
+
 On one laptop the whole run no longer fits in a night. On 2026-10-15 it
 was 768 subjects and 35,121 mutations, and a laptop with six workers did
 250 to 500 mutations an hour. Use `bin/mutant` here for one class or

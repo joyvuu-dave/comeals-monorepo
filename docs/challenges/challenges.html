@@ -1798,7 +1798,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>The Mutant workflow runs every class every Saturday (<code>.github/workflows/mutant.yml</code>), and fails when a piece leaves no result.</p>
 </li><li>
-<p>CI’s <code>mutant-changed</code> job mutates the methods each push to <code>main</code> changes, and the methods whose spec files it changes or deletes (<code>.github/workflows/ci.yml</code>, <code>bin/mutant-spec-subjects</code>), and the deploy waits for CI. A change to <code>spec/support</code>, a factory or <code>rails_helper</code> can weaken any example; only the Saturday run catches that.</p>
+<p>CI’s <code>mutant-changed</code> job mutates the methods each push to <code>main</code> changes, and the methods whose spec files it changes or deletes (<code>.github/workflows/ci.yml</code>, <code>bin/mutant-spec-subjects</code>), and the deploy waits for CI. When the examples of more than 10 methods change with no code change, those methods are left to the Saturday run, and mutant stops after 60 minutes with a failure (docs/mutation-testing.md). A change to <code>spec/support</code>, a factory or <code>rails_helper</code> can weaken any example; only the Saturday run catches that.</p>
 </li><li>
 <p>The full run of 2026-11-10 on this list: 41,495 mutations, 658 survivors, each one on the list (GitHub run 42918055270, and 42936726105 for the methods changed after it).</p>
 </li><li>
@@ -1830,6 +1830,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-10: The owner chose a list of accepted survivors that the report checks, a CI job on changed methods, and a weekly full run. Five helper agents went through the 753 survivors of that day’s full run: about 115 got new examples, the rest got entries. Mutant’s work on the survivors found a 500 on a profile email change that a query cache read caused (fixed in <code>RetryOnConflict</code>), two history bugs on hand-written audit rows, and a mutant crash on Faker names (<a href="https://github.com/mbj/mutant/issues/1690">github.com/mbj/mutant/issues/1690</a>). Done.</p>
 </li><li>
 <p>2026-11-11: The owner asked for the edge cases to be fixed, not written down. The <code>mutant-changed</code> job now also runs on the methods whose spec files changed or were deleted.</p>
+</li><li>
+<p>2026-11-11: That job ran for 6 hours on main, when one removed example chose 113 methods. The owner chose a limit on the methods found through examples, and a 60-minute stop that fails the job. The limit is 10, not the 20 first proposed: a method takes 2 to 6 minutes, so 20 would often pass 60 minutes.</p>
 </li></ul>
 </div>
 </details>
