@@ -7,6 +7,7 @@ require 'rails_helper'
 RSpec.describe Simulation::Determinism do
   include_context 'with no test transaction'
   include_context 'with a pool for a simulation', 8
+  include ActiveSupport::Testing::TimeHelpers
 
   let(:start) { Time.utc(2026, 11, 4, 1, 30) }
 
@@ -51,5 +52,24 @@ RSpec.describe Simulation::Determinism do
     started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
     sleep(0.05)
     expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be >= 0.05
+  end
+
+  # Rails' travel_to stubs Time.now by renaming it and puts it back the
+  # same way. A module prepended to Time for good made the put-back
+  # Time.now call itself forever, in every spec that used travel_to.
+  it 'leaves travel_to working, before and after a simulation' do
+    travel_to(start) { expect(Time.now.utc).to eq(start) }
+    expect(Time.now.utc).to be_within(60).of(Process.clock_gettime(Process::CLOCK_REALTIME).then { Time.at(it).utc })
+
+    run(4)
+    travel_to(start + 10) { expect(Time.now.utc).to eq(start + 10) }
+    expect(Time.now.utc).to be_within(60).of(Process.clock_gettime(Process::CLOCK_REALTIME).then { Time.at(it).utc })
+  end
+
+  it 'reads a travel_to time outside the simulation, and its own clock inside it' do
+    travel_to(start + 3600) do
+      expect(run(4).values.pluck(:before)).to all(be < start + 60)
+      expect(Time.now.utc).to eq(start + 3600)
+    end
   end
 end

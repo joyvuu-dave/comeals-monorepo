@@ -67,8 +67,10 @@ module Simulation
 
         begin
           @current = State.new(Clock.new(start), Random.new(seed), Concurrent::Set.new, nil)
+          put_back = TimeNow.install
           yield @current
         ensure
+          put_back&.call
           @current = nil
         end
       end
@@ -78,10 +80,18 @@ module Simulation
     # sleeper is set by the scheduler: it puts the calling actor aside.
     State = Struct.new(:clock, :random, :actor_threads, :sleeper)
 
+    # Time.now is replaced only while a simulation runs, and what was
+    # there is put back after, even a travel_to stub. Not a module
+    # prepended to Time for good, as sleep and rand are: travel_to stubs
+    # Time.now by renaming it and puts it back the same way, which copied
+    # the prepended method into Time, where its super called itself
+    # forever. That broke every spec that used travel_to.
     module TimeNow
-      def now(...)
-        state = Determinism.current
-        state ? state.clock.now.getlocal : super
+      def self.install
+        before = Time.method(:now)
+        clock = Determinism.current.clock
+        Time.define_singleton_method(:now) { |*| clock.now.getlocal }
+        -> { Time.define_singleton_method(:now, before) }
       end
     end
 
@@ -135,7 +145,6 @@ module Simulation
   end
 end
 
-Time.singleton_class.prepend(Simulation::Determinism::TimeNow)
 Object.prepend(Simulation::Determinism::Sleep)
 SecureRandom.singleton_class.prepend(Simulation::Determinism::SeededBytes)
 Object.prepend(Simulation::Determinism::SeededRand)
