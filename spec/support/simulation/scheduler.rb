@@ -54,8 +54,12 @@ module Simulation
     TURN_TIMEOUT = 60
     POLL = 0.001
 
-    def initialize(seed:)
+    # The clock starts here unless a start is given (Determinism).
+    START = Time.utc(2026, 1, 1, 12)
+
+    def initialize(seed:, start: START)
       @seed = seed
+      @start = start
       @rng = Random.new(seed)
       @actors = []
       @by_thread = Concurrent::Map.new
@@ -71,15 +75,27 @@ module Simulation
       check_the_pool
       @steps = []
       @sent = 0
-      ActiveSupport::Notifications.subscribed(Gate.new(@by_thread), 'sql.active_record') do
-        @actors.each { |actor| @by_thread[actor.start(self)] = actor }
-        # rubocop:disable-next Style/CombinableLoops -- every thread must be registered before any is awaited
-        @actors.each { |actor| await(actor) }
-        loop_until_done
+      Determinism.with(seed: @seed, start: @start) do |determinism|
+        @clock = determinism.clock
+        determinism.sleeper = ->(seconds) { @by_thread[Thread.current].sleep_until(@clock.at + seconds.to_r) }
+        ActiveSupport::Notifications.subscribed(Gate.new(@by_thread), 'sql.active_record') do
+          @actor_threads = determinism.actor_threads
+          start_actors
+          loop_until_done
+        end
       end
       Result.new(steps: @steps, values: @actors.to_h { |a| [a.name, a.value] })
     ensure
       @actors.each(&:stop)
+    end
+
+    # Called on the actor's own thread once its setup is done. From here
+    # on, the thread reads the simulation's clock and generator. Not
+    # before: opening a connection, and the first instrumented call on a
+    # thread, draw random bytes, and whether they happen depends on what
+    # earlier runs left in the pool.
+    def enter(thread)
+      @actor_threads << thread
     end
 
     # Called on the actor's own thread, before its first statement.
@@ -101,15 +117,26 @@ module Simulation
                            "it is #{size} (include_context 'with a pool for a simulation')"
     end
 
+    # Every thread is registered before any is awaited: an actor's first
+    # stop must already find itself in the map.
+    def start_actors
+      @actors.each { |actor| @by_thread[actor.start(self)] = actor }
+      @actors.each { |actor| await(actor) } # rubocop:disable Style/CombinableLoops
+    end
+
     def loop_until_done
       until @actors.all?(&:done?)
         wake_granted
+        wake_sleepers
         ready = @actors.select(&:ready?)
         if ready.empty?
+          next if jump_to_the_next_wake
+
           wait_for_a_blocked_actor
           next
         end
         actor = ready[@rng.rand(ready.size)]
+        @clock.advance(Determinism::TICK)
         actor.grant(@sent += 1)
         await(actor)
       end
@@ -154,6 +181,21 @@ module Simulation
         actor.unblock
         await(actor)
       end
+    end
+
+    # A sleeper whose time has come is ready again, in a fixed order.
+    def wake_sleepers
+      @actors.each { |actor| actor.wake if actor.sleeping? && actor.wake_at <= @clock.at }
+    end
+
+    # Nothing can run, and someone sleeps: nothing can happen before the
+    # earliest wake, so the clock goes straight there.
+    def jump_to_the_next_wake
+      sleepers = @actors.select(&:sleeping?)
+      return false if sleepers.empty?
+
+      @clock.move_to(sleepers.map(&:wake_at).min)
+      true
     end
 
     # Every actor left is waiting on a lock. Only PostgreSQL can end that
@@ -217,7 +259,7 @@ module Simulation
     #   blocked  its statement waits for a lock in PostgreSQL
     #   done     its work returned or raised
     class Actor
-      attr_reader :name, :arrivals, :checks, :pid, :value
+      attr_reader :name, :arrivals, :checks, :pid, :value, :wake_at
 
       def initialize(name, work)
         @name = name
@@ -232,6 +274,7 @@ module Simulation
 
       def ready? = @state == :ready
       def blocked? = @state == :blocked
+      def sleeping? = @state == :sleeping
       def done? = @state == :done
 
       # The thread starts and stops before it does anything, so the first
@@ -264,6 +307,10 @@ module Simulation
         @state = :running
       end
 
+      def wake
+        @state = :ready
+      end
+
       # --- on the scheduler's thread ---
 
       def arrive(arrival)
@@ -272,6 +319,8 @@ module Simulation
         when :ready then @state = :ready
         when :statement then @in_flight = [*rest, nil]
                              @state = :ready
+        when :sleep then @state = :sleeping
+                         @wake_at = rest.first
         when :done then @state = :done
                         @value = rest.first
         end
@@ -294,6 +343,11 @@ module Simulation
 
       def stop_before(sql, binds)
         @arrivals << [:statement, sql, binds]
+        wait_for_turn
+      end
+
+      def sleep_until(wake_at)
+        @arrivals << [:sleep, wake_at]
         wait_for_turn
       end
 
@@ -324,6 +378,8 @@ module Simulation
           @pid = raw.backend_pid
           before = scheduler.session_settings(raw)
           others = raw.set_notice_processor { |message| notice(message, others) }
+          ActiveSupport::Notifications.instrumenter
+          scheduler.enter(Thread.current)
           begin
             @value = @work.call
           ensure
