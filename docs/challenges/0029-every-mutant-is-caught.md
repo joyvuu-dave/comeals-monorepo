@@ -4,7 +4,7 @@ title: A test catches every code change
 area: proof
 status: done
 opened: 2026-11-07
-reviewed: 2026-11-11
+reviewed: 2026-11-12
 watches:
   - docs/mutation-testing.md
   - bin/lib/mutant_survivors.rb

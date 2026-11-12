@@ -54,7 +54,7 @@ jobs:
         part: [1, 2]
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -71,17 +71,25 @@ jobs:
       DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
     steps:
       - uses: actions/checkout@v6
-      # pg_dump refuses a server newer than itself, and the server is 18.
-      # spec/config/procfile_spec.rb runs db:migrate, which dumps the
-      # schema in the test environment. The ubuntu-26.04 image ships
-      # PostgreSQL 18. This fails early, with a clear message, if a later
-      # image ships an older one.
-      - name: Check that pg_dump is 18 or newer, to match the server
+      # pg_dump must be the same version as the server, minor version
+      # included. spec/config/procfile_spec.rb runs db:migrate, which dumps
+      # the schema, and spec/db/structure_sql_spec.rb compares a dump with
+      # db/structure.sql. pg_dump refuses a server newer than its own
+      # major version, and an older minor version can print lines a newer
+      # one leaves out: on 2026-11-12 the postgres:18 image moved to 18.7
+      # while the runner's pg_dump was 18.6, and the dump gained an
+      # "ALTER COLUMN ... SET (pg_attver=...)" line for every column. So
+      # every postgres image is pinned to the runner's pg_dump version,
+      # and this step fails, naming the version to pin, when the runner's
+      # pg_dump changes.
+      - name: Check that pg_dump is the server's version
         run: |
-          pg_dump --version
-          major=$(pg_dump --version | awk '{ print $3 }' | cut -d. -f1)
-          if [ "$major" -lt 18 ]; then
-            echo "pg_dump is version $major. The server is 18, and pg_dump refuses a server newer than itself." >&2
+          client=$(pg_dump --version | awk '{ print $3 }')
+          server=$(psql postgres://postgres:postgres@localhost:5432/comeals_test -tAc 'SHOW server_version' | awk '{ print $1 }')
+          echo "pg_dump ${client}, server ${server}"
+          if [ "$client" != "$server" ]; then
+            echo "pg_dump is ${client} and the server is ${server}. They must be the same version." \
+                 "Set every postgres image in .github/workflows to postgres:${client}." >&2
             exit 1
           fi
       - uses: ruby/setup-ruby@v1
@@ -239,7 +247,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -296,7 +304,7 @@ jobs:
     timeout-minutes: 80
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -405,7 +413,7 @@ jobs:
     timeout-minutes: 10
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -466,7 +474,7 @@ jobs:
     # comeals_admin_e2e database, so no schema-load step is needed here.
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -519,7 +527,7 @@ jobs:
     # needs Ruby and Postgres like node-e2e-tests does.
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
@@ -561,7 +569,7 @@ jobs:
     timeout-minutes: 25
     services:
       postgres:
-        image: postgres:18
+        image: postgres:18.6
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
