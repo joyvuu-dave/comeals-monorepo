@@ -106,5 +106,16 @@ RSpec.describe SimulationSeeds do
 
       expect(example.metadata[:extra_failure_lines]).to be_nil
     end
+
+    # RSpec keeps every example's metadata until the run ends. A run of
+    # 2000 seeds kept 2000 traces and grew past 1.7 GB.
+    it 'drops the trace of an example that passes' do
+      steps = self.steps
+      example = run_alone do
+        it('holds', simulation_seed: 9) { expect(Simulation::Trace.keep(steps)).to eq(steps) }
+      end
+
+      expect(example.metadata).not_to have_key(Simulation::Trace::KEY)
+    end
   end
 end

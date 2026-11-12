@@ -37,6 +37,16 @@ module SimulationSeeds
     "#{size}#{super(seed, path)}"
   end
 
+  # Only a failure needs its trace. RSpec keeps every example's metadata
+  # until the run ends, so a run of 2000 seeds that kept every trace grew
+  # past 1.7 GB.
+  def self.install(config)
+    super
+    config.after(:each, TAG) do |example|
+      example.metadata.delete(Simulation::Trace::KEY) unless example.exception
+    end
+  end
+
   def self.failure_lines(example, seed)
     lines = super
     steps = example.metadata[Simulation::Trace::KEY]
