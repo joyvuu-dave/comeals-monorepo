@@ -19,7 +19,7 @@ module Simulation
   #     seed. Seeding Ruby's shared generator with srand was not enough:
   #     other code in the process draws from it between two runs.
   #
-  # Outside a simulation all of them behave as normal. Not covered:
+  # Outside a simulation they are Ruby's own methods (Hooks, below). Not covered:
   # Process.clock_gettime (Rails times its own instrumentation with it,
   # and nothing the app decides reads it), and PostgreSQL's own clock
   # (now(), CURRENT_TIMESTAMP), which the seed data step handles.
@@ -67,7 +67,7 @@ module Simulation
 
         begin
           @current = State.new(Clock.new(start), Random.new(seed), Concurrent::Set.new, nil)
-          put_back = TimeNow.install
+          put_back = Hooks.install
           yield @current
         ensure
           put_back&.call
@@ -80,40 +80,59 @@ module Simulation
     # sleeper is set by the scheduler: it puts the calling actor aside.
     State = Struct.new(:clock, :random, :actor_threads, :sleeper)
 
-    # Time.now is replaced only while a simulation runs, and what was
-    # there is put back after, even a travel_to stub. Not a module
-    # prepended to Time for good, as sleep and rand are: travel_to stubs
-    # Time.now by renaming it and puts it back the same way, which copied
-    # the prepended method into Time, where its super called itself
+    # Every hook is in place only while a simulation runs, and what was
+    # there before is put back after, even a stub. A module prepended for
+    # good would stay in every spec of the test run: travel_to stubs
+    # Time.now by renaming it and puts it back the same way, and that
+    # copied a prepended Time.now into Time, where its super called itself
     # forever. That broke every spec that used travel_to.
-    module TimeNow
+    module Hooks
+      # Each hook as [class or module, method name, body]. A body gets
+      # Ruby's own method, bound to the receiver, then the arguments.
+      LIST = [
+        [Time.singleton_class, :now, ->(_ruby, *) { Determinism.current.clock.now.getlocal }],
+        [Object, :sleep, lambda do |ruby, seconds = nil|
+          state = Determinism.current
+          return Hooks.ruby(ruby, seconds) unless state&.actor_threads&.include?(Thread.current)
+          raise ArgumentError, 'an actor cannot sleep forever in a simulation' if seconds.nil?
+
+          state.sleeper.call(seconds)
+          seconds.round
+        end],
+        *[Object, Kernel.singleton_class, Random.singleton_class].map { [it, :rand, ->(*a) { Hooks.rand(*a) }] },
+        *%i[random_bytes gen_random random_number].map do |name|
+          [SecureRandom.singleton_class, name, ->(*a) { Hooks.public_send(name, *a) }]
+        end
+      ].freeze
+
+      # Puts every hook in place, and returns a proc that takes them away.
       def self.install
-        before = Time.method(:now)
-        clock = Determinism.current.clock
-        Time.define_singleton_method(:now) { |*| clock.now.getlocal }
-        -> { Time.define_singleton_method(:now, before) }
+        put_backs = LIST.map { |owner, name, body| swap(owner, name, body) }.reverse
+        -> { put_backs.each(&:call) }
       end
-    end
 
-    module Sleep
-      private
-
-      def sleep(seconds = nil)
-        state = Determinism.current
-        return super unless state&.actor_threads&.include?(Thread.current)
-        raise ArgumentError, 'an actor cannot sleep forever in a simulation' if seconds.nil?
-
-        state.sleeper.call(seconds)
-        seconds.round
+      def self.swap(owner, name, body)
+        own = owner.method_defined?(name, false) || owner.private_method_defined?(name, false)
+        ruby = owner.instance_method(name)
+        was_private = owner.private_method_defined?(name)
+        owner.define_method(name) { |*args, &block| body.call(ruby.bind(self), *args, &block) }
+        owner.send(:private, name) if was_private
+        lambda do
+          own ? owner.define_method(name, ruby) : owner.send(:remove_method, name)
+          owner.send(:private, name) if own && was_private
+        end
       end
-    end
 
-    # Kernel.rand and Random.rand take a maximum of 0 or nil to mean a
-    # float; Random#rand does not.
-    module SeededRand
-      def rand(max = nil)
+      # Ruby's own method, with the one argument the hook was given, or
+      # none. Not ruby.call(*argument): that would spread a Range into
+      # its values.
+      def self.ruby(ruby, argument) = argument.nil? ? ruby.call : ruby.call(argument)
+
+      # Kernel.rand and Random.rand take a maximum of 0 or nil to mean a
+      # float; Random#rand does not.
+      def self.rand(ruby, max = nil)
         random = Determinism.actor_random
-        return super unless random
+        return ruby(ruby, max) unless random
 
         if max.nil? || max == 0 # a Range has no zero?
           random.rand
@@ -121,32 +140,24 @@ module Simulation
           random.rand(max.is_a?(Range) ? max : max.abs)
         end
       end
-    end
 
-    # Only on an actor's thread: other threads in the process (Rails makes
-    # an id for each thread's instrumenter) would draw from the same
-    # generator at times the seed does not decide.
-    module SeededBytes
-      def random_bytes(size = nil)
+      # Only on an actor's thread: other threads in the process (Rails makes
+      # an id for each thread's instrumenter) would draw from the same
+      # generator at times the seed does not decide.
+      def self.random_bytes(ruby, size = nil)
         random = Determinism.actor_random
-        random ? random.bytes(size || 16) : super
+        random ? random.bytes(size || 16) : ruby(ruby, size)
       end
 
-      def gen_random(size)
+      def self.gen_random(ruby, size)
         random = Determinism.actor_random
-        random ? random.bytes(size) : super
+        random ? random.bytes(size) : ruby.call(size)
       end
 
-      def random_number(*)
+      def self.random_number(ruby, *)
         random = Determinism.actor_random
-        random ? random.rand(*) : super
+        random ? random.rand(*) : ruby.call(*)
       end
     end
   end
 end
-
-Object.prepend(Simulation::Determinism::Sleep)
-SecureRandom.singleton_class.prepend(Simulation::Determinism::SeededBytes)
-Object.prepend(Simulation::Determinism::SeededRand)
-Kernel.singleton_class.prepend(Simulation::Determinism::SeededRand)
-Random.singleton_class.prepend(Simulation::Determinism::SeededRand)
