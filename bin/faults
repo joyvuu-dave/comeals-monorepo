@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# ---------------------------------------------------------------------------
+# bin/faults — the storm, with things breaking while it runs (challenge 30)
+#
+# Starts a PostgreSQL of its own under tmp/faults (never the server the
+# worktrees and the development database share), a Puma from this
+# checkout, and a proxy between them, then runs the storm while database
+# connections are cut, the database cannot be reached for a moment,
+# PostgreSQL restarts, the server's clock jumps, and some answers to
+# writes are lost and sent again. Afterwards it checks the books and
+# that no write was saved twice or answered with an error after it was
+# saved. The whole thing: lib/tasks/test/faults.rake, spec/support/faults.
+#
+#   bin/faults                                       # 16 clients, 30 s
+#   FAULTS_SECONDS=120 FAULTS_CLIENTS=32 bin/faults
+#   FAULTS_SEED=7 bin/faults                         # other requests, faults in another order
+#   FAULTS_LOSE=0.2 bin/faults                       # lose a fifth of the answers to writes
+#   FAULTS_EVERY=0.5 bin/faults                      # a fault every half second
+#
+# The server's log: tmp/faults/server_app.log. PostgreSQL's:
+# tmp/faults/server/server.log.
+# ---------------------------------------------------------------------------
+
+cd "$(dirname "$0")/.."
+RAILS_ENV=test exec bundle exec rake test:faults

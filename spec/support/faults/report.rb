@@ -1,0 +1,39 @@
+# frozen_string_literal: true
+
+module Faults
+  # What a fault run found (challenge 30), beyond the storm's own checks:
+  #
+  #   - a write whose answer was lost, sent again, where the first send
+  #     worked (2xx) and the second was answered with an error: the
+  #     phone shows an error for a write that was saved;
+  #   - a write sent again that was saved twice: two events or two common
+  #     house bookings with the title one request gave them.
+  #
+  # And, as counts only, what the faults were and what they did.
+  module Report
+    # A path with its ids taken out, so the same route counts as one.
+    def self.route(method, path) = "#{method.upcase} #{path.gsub(%r{/\d+(?=/|\z)}, '/:id')}"
+
+    def self.error_for_a_saved_write(resends)
+      resends.select { ok?(it.first_status) && !ok?(it.second_status) }
+             .group_by { [route(it.verb, it.path), it.first_status, it.second_status] }
+             .map do |(route, first, second), list|
+        "#{route}: answered #{second} when sent again after #{first} (#{list.size}x): #{list.first.second_body[0, 160]}"
+      end
+    end
+
+    def self.saved_twice
+      twice = ->(relation) { relation.group(:title).having('count(*) > 1').count }
+      twice.call(Event.where('title LIKE ?', 'storm-event-%')).map { |title, n| "event #{title} saved #{n} times" } +
+        twice.call(CommonHouseReservation.where('title LIKE ?', 'storm-chr-%'))
+             .map { |title, n| "common house booking #{title} saved #{n} times" }
+    end
+
+    def self.resend_tally(resends)
+      resends.group_by { route(it.verb, it.path) }
+             .transform_values { |list| list.map { "#{it.first_status}->#{it.second_status}" }.tally }
+    end
+
+    def self.ok?(status) = status.is_a?(Integer) && status.between?(200, 299)
+  end
+end
