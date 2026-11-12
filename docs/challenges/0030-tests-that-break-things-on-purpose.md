@@ -4,7 +4,7 @@ title: Tests that break the network, the database and the clock
 area: proof
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-12
 watches:
   - docs/concurrency-testing.md
 ---
@@ -21,7 +21,7 @@ The browser sends a sign-up. The server commits it, but the network drops before
 
 ## Where we stand
 
-- Concurrency is tested at four layers (`docs/concurrency-testing.md`). None of them cuts a connection, stops the database, or moves the clock in the middle of a write.
+- Concurrency is tested at five layers (`docs/concurrency-testing.md`). None of them cuts a connection, stops the database, or moves the real clock in the middle of a write. The seeded simulation (layer 5) picks the order of statements and fakes the app's clock, but it breaks nothing on purpose.
 - Not checked: whether every write the browser retries is safe to send twice.
 
 ## Options

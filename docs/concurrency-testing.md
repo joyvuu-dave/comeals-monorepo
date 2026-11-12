@@ -13,7 +13,7 @@ processes production does have (a rake task in its own dyno, the jobs on
 the worker dyno, an admin in a browser) are enough to trigger some of them
 (ADR 0003).
 
-## The four layers
+## The five layers
 
 ### 1. No process-wide mutable state — `spec/concurrency/process_wide_state_spec.rb`
 
@@ -213,6 +213,65 @@ same report under `STORM_TALLY=1`. What one laptop showed on
 2026-09-12, 32 clients for 15 seconds against 16 threads x 2 workers:
 about 290 requests a second, p50 83 ms, p95 280 ms, slowest 650 ms —
 a baseline for this machine, not a promise about a dyno.
+
+### 5. The seeded simulation — `spec/simulation/`
+
+In `bin/check`. Layers 3 and 4 use real threads and the real clock, so a
+run that fails cannot be run again the same way: the next run takes a
+different order. This layer runs the same storm (`Storm::Run`: every
+client, the settler, the nightly jobs and the admin) under a scheduler
+that lets one SQL statement run at a time and picks whose from a seed
+(`spec/support/simulation/`, challenge 31). The same seed sends the same
+statements in the same order and gets the same answers, so a failing
+seed replays exactly.
+
+- **The scheduler** (`Simulation::Scheduler`) stops each actor before
+  every statement it sends (an `sql.active_record` subscriber). A
+  statement that waits for a lock is seen in `pg_locks`, and the others
+  go on. PostgreSQL's deadlock check runs on its own clock, so the
+  scheduler waits for it each time (the "still waiting" log line), and
+  the actor that closes a lock cycle is always the one refused. Rails
+  hands a connection back to the pool after each request, so every
+  connection in the pool is set up before the run, and the scheduler
+  follows whichever one an actor uses. `BEGIN` runs without a turn and
+  is left out of the trace: Rails sends it from inside the first
+  statement of a transaction, and PostgreSQL takes the snapshot at that
+  statement, not at `BEGIN`.
+- **The clock and randomness** (`Simulation::Determinism`): `Time.now`
+  reads a clock that moves one millisecond a turn; `sleep` puts the actor
+  aside until the clock reaches its time, and the clock jumps there when
+  nothing else can run, so no one waits in real time; `rand` and
+  `SecureRandom` on an actor's thread draw from a generator seeded by the
+  run's seed.
+- **The same start every run** (`Simulation::World`): every table is
+  emptied and its ids start again at 1, the data is planted on the
+  seeded clock, ANALYZE runs, and the cache is a fresh solid_cache store.
+
+`bin/check` runs two seeds of a storm of 4 clients for 1 simulated
+second (about 1,700 statements each). The settings:
+
+    SIM_SEEDS=2000 bundle exec rspec spec/simulation/storm_spec.rb    # seeds 1 to 2000
+    SIM_SEED=37 bundle exec rspec spec/simulation/storm_spec.rb       # seed 37 alone, replayed
+    SIM_CLIENTS=16 SIM_SECONDS=5 ...                                  # a bigger storm
+
+A failed seed prints the command that reruns it (with the storm size,
+when it was set), writes every statement of the run to
+`tmp/simulation/<example>.txt` (when it was sent, by whom, the SQL, its
+values, what it returned, whether it waited for a lock), and prints the
+last 20 under the failure.
+
+`spec/simulation/scheduler_planted_race_spec.rb` shows what the layer is
+for. It plants a real race in the meal cap (no meal lock, READ
+COMMITTED), and some seed fills a meal past its cap, the same way every
+time that seed runs; as the app is, no seed does.
+
+What the seed does not control yet: PostgreSQL's own clock (`now()`,
+`CURRENT_TIMESTAMP`), SCrypt's salt (`OpenSSL::Random`), Rails'
+connection check after 2 seconds idle (real time), a connection the pool
+closes and opens again during a run, the real Solid Queue worker, admin
+pages through a browser, other databases' SERIALIZABLE transactions on
+the same server (#218), and autovacuum changing a plan mid-run. None of
+these changes a trace today; each one could.
 
 ## What the storms found (2026-09-11)
 

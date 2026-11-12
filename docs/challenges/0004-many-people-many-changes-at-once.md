@@ -4,7 +4,7 @@ title: Many people changing many things at once
 area: concurrency
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-12
 watches:
   - docs/concurrency-testing.md
 ---
@@ -23,7 +23,7 @@ At 6 PM, 30 people sign up for dinners, 5 cooks enter costs, someone books the g
 
 - Puma runs 1 thread and 0 workers (AGENTS.md, Heroku section), so the web dyno handles one request at a time. That is for throughput, not safety.
 - Writes to one dinner wait on that dinner's row (`with_meal_lock`), so different dinners do not wait on each other.
-- Concurrency is tested at four layers, including an in-process storm in `bin/check` (`spec/concurrency/`) and `bin/storm` against a real multi-threaded Puma (`docs/concurrency-testing.md`).
+- Concurrency is tested at five layers, including an in-process storm in `bin/check` (`spec/concurrency/`), `bin/storm` against a real multi-threaded Puma, and a seeded simulation of the same storm whose failing seeds replay exactly (`spec/simulation/`; `docs/concurrency-testing.md`).
 - Not checked: how many requests a second the app handles before people notice a wait.
 
 ## Options
