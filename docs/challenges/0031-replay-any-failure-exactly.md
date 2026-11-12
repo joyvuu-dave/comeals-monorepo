@@ -31,3 +31,4 @@ A storm test fails once in 200 runs. The run used real threads, the real clock a
 ## History
 
 - 2026-11-07: Opened.
+- 2026-11-12: David chose option 1 with a readable record: a scheduler that lets one SQL statement run at a time and uses a seed to pick whose turn it is, with a fake clock, plus a printout of the steps of a failed run. It is to drive the whole storm API (every action `Storm::Client` sends), and `bin/check` runs a few seeds; one setting runs many, another replays one. Work started on branch `agent/replay-any-failure`.

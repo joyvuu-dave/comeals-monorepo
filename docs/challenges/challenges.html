@@ -1908,6 +1908,8 @@ UNIQUE (idempotency_key)</pre>
 <h3>History</h3>
 <ul><li>
 <p>2026-11-07: Opened.</p>
+</li><li>
+<p>2026-11-12: David chose option 1 with a readable record: a scheduler that lets one SQL statement run at a time and uses a seed to pick whose turn it is, with a fake clock, plus a printout of the steps of a failed run. It is to drive the whole storm API (every action <code>Storm::Client</code> sends), and <code>bin/check</code> runs a few seeds; one setting runs many, another replays one. Work started on branch <code>agent/replay-any-failure</code>.</p>
 </li></ul>
 </div>
 </details>
