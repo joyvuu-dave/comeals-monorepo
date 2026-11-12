@@ -72,6 +72,13 @@ module Comeals
     require_relative '../lib/spa_page_redirect'
     config.middleware.insert_before Rack::Sendfile, SpaPageRedirect
 
+    # An API request that loses its database connection is answered 503,
+    # not 500 (see the class comment). Inside Bugsnag::Rack, so the error
+    # reaches Bugsnag once, as handled; outside Rack::Attack, whose
+    # counters are in the database too.
+    require_relative '../lib/database_unreachable'
+    config.middleware.insert_before ActionDispatch::Callbacks, DatabaseUnreachable
+
     # Dump the schema as SQL. The database is the last line of defense
     # (AGENTS.md): reconciled-meal immutability lives in triggers, and
     # schema.rb cannot represent triggers, so a schema.rb-built database

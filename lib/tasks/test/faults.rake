@@ -103,7 +103,12 @@ namespace :test do
       expected, problems = result.problems.partition { it.match?(lost_connection) }
       # One line for each kind: the action, the status and the error class
       # (the first line of the answer, for an answer with none).
-      kinds = result.requests.select(&:problem).group_by do |e|
+      # A 503 that says the database could not be reached is the right
+      # answer while it cannot be (DatabaseUnreachable). Counted, not a problem.
+      unreachable, wrong = result.requests.select(&:problem).partition do |e|
+        e.status == 503 && e.problem.include?(DatabaseUnreachable::MESSAGE)
+      end
+      kinds = wrong.group_by do |e|
         [e.action, e.status, e.problem[/\((\w+(?:::\w+)*)\)/, 1] || e.problem.lines.first.to_s[0, 120].strip]
       end
       problems += kinds.map { |(action, status, kind), list| "#{action}: #{status} #{kind} (#{list.size}x)" }
@@ -114,6 +119,7 @@ namespace :test do
 
       puts "faults: #{driver.log.map(&:first).tally}"
       puts "background writes stopped by a lost database connection: #{expected.size}"
+      puts "requests answered 503, the database could not be reached: #{unreachable.size}"
       puts "requests: #{result.requests.size}, ok writes: #{result.ok_writes}, settlements: #{result.settlements}"
       result.tally.sort.each { |action, statuses| puts "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
       puts "answers lost and sent again: #{transport.resends.size}"

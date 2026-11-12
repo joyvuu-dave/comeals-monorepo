@@ -14,8 +14,10 @@ module Faults
     # A path with its ids taken out, so the same route counts as one.
     def self.route(method, path) = "#{method.upcase} #{path.gsub(%r{/\d+(?=/|\z)}, '/:id')}"
 
+    # A 503 from DatabaseUnreachable is not an error for the write: it says
+    # the server could not tell, and the phone sends it again.
     def self.error_for_a_saved_write(resends)
-      resends.select { ok?(it.first_status) && !ok?(it.second_status) }
+      resends.select { ok?(it.first_status) && !ok?(it.second_status) && !unreachable?(it) }
              .group_by { [route(it.verb, it.path), it.first_status, it.second_status] }
              .map do |(route, first, second), list|
         "#{route}: answered #{second} when sent again after #{first} (#{list.size}x): #{list.first.second_body[0, 160]}"
@@ -35,5 +37,9 @@ module Faults
     end
 
     def self.ok?(status) = status.is_a?(Integer) && status.between?(200, 299)
+
+    def self.unreachable?(resend)
+      resend.second_status == 503 && resend.second_body.include?('could not reach its database')
+    end
   end
 end
