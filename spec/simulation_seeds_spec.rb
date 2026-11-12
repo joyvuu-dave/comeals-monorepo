@@ -15,6 +15,18 @@ RSpec.describe SimulationSeeds do
       expect(described_class.seeds(default: 3, env: { 'SIM_SEED' => '77', 'SIM_SEEDS' => '5' })).to eq([77])
     end
 
+    # The weekly Seed search workflow runs new seeds each week.
+    it 'starts at SIM_FIRST_SEED when it is set' do
+      expect(described_class.seeds(default: 3, env: { 'SIM_FIRST_SEED' => '1001' })).to eq([1001, 1002, 1003])
+      expect(described_class.seeds(default: 3, env: { 'SIM_FIRST_SEED' => '0', 'SIM_SEEDS' => '2' })).to eq([0, 1])
+      expect(described_class.seeds(default: 3, env: { 'SIM_FIRST_SEED' => '1001', 'SIM_SEED' => '7' })).to eq([7])
+    end
+
+    it 'refuses a first seed that is not a whole number' do
+      expect { described_class.seeds(default: 3, env: { 'SIM_FIRST_SEED' => '-1' }) }
+        .to raise_error(ArgumentError, 'SIM_FIRST_SEED must be a whole number of 0 or more, like 1001; got "-1"')
+    end
+
     it 'refuses a setting that is not a whole number' do
       expect { described_class.seeds(default: 3, env: { 'SIM_SEEDS' => 'lots' }) }
         .to raise_error(ArgumentError, 'SIM_SEEDS must be a whole number of 1 or more, like 10000; got "lots"')

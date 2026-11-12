@@ -252,7 +252,15 @@ second (about 1,700 statements each). The settings:
 
     SIM_SEEDS=2000 bundle exec rspec spec/simulation/storm_spec.rb    # seeds 1 to 2000
     SIM_SEED=37 bundle exec rspec spec/simulation/storm_spec.rb       # seed 37 alone, replayed
+    SIM_FIRST_SEED=1001 SIM_SEEDS=500 ...                             # seeds 1001 to 1500
     SIM_CLIENTS=16 SIM_SECONDS=5 ...                                  # a bigger storm
+
+The Seed search workflow (`.github/workflows/seed-search.yml`) runs a
+thousand seeds every Sunday, in four pieces at once, 8 clients for 3
+simulated seconds each. Each week runs new seeds: the first comes from
+the week number. A failing seed's rerun command is in its piece's log,
+and its trace is in the piece's artifact. Run it by hand to search more
+seeds, or seeds of another size.
 
 A failed seed prints the command that reruns it (with the storm size,
 when it was set), writes every statement of the run to

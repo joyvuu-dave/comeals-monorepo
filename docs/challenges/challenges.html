@@ -651,7 +651,7 @@ UNIQUE (idempotency_key)</pre>
 </details>
 <details class="challenge" id="challenge-4" data-status="open" data-area="concurrency">
   <summary><span class="num">4</span> <span class="title">Many people changing many things at once</span> <span class="chip status-open">Not started</span> <span class="chip area-concurrency">concurrency</span><span class="badge">1 not checked</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-12 · <code>docs/challenges/0004-many-people-many-changes-at-once.md</code></div>
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-13 · <code>docs/challenges/0004-many-people-many-changes-at-once.md</code></div>
   <details class="watches"><summary>Watches 1 file</summary><ul><li><code>docs/concurrency-testing.md</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
@@ -1837,7 +1837,7 @@ UNIQUE (idempotency_key)</pre>
 </details>
 <details class="challenge" id="challenge-30" data-status="open" data-area="proof">
   <summary><span class="num">30</span> <span class="title">Tests that break the network, the database and the clock</span> <span class="chip status-open">Not started</span> <span class="chip area-proof">proof</span><span class="badge">1 not checked</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-12 · <code>docs/challenges/0030-tests-that-break-things-on-purpose.md</code></div>
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-13 · <code>docs/challenges/0030-tests-that-break-things-on-purpose.md</code></div>
   <details class="watches"><summary>Watches 1 file</summary><ul><li><code>docs/concurrency-testing.md</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
@@ -1895,7 +1895,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>The request storm also runs under a seeded scheduler: one SQL statement runs at a time, and the seed picks whose (<code>spec/support/simulation/scheduler.rb</code>). The clock, <code>sleep</code>, <code>rand</code> and <code>SecureRandom</code> come from the seed while it runs (<code>spec/support/simulation/determinism.rb</code>), and every run starts from empty tables with ids from 1 (<code>spec/support/simulation/world.rb</code>). Two runs of one seed give the same statements in the same order and the same answers (<code>spec/simulation/storm_spec.rb</code>).</p>
 </li><li>
-<p><code>bin/check</code> runs two seeds. <code>SIM_SEEDS=&lt;n&gt;</code> runs many, <code>SIM_SEED=&lt;n&gt;</code> replays one, and <code>SIM_CLIENTS</code> / <code>SIM_SECONDS</code> set the storm’s size (<code>spec/support/simulation_seeds.rb</code>). A failed seed prints the command that reruns it and writes every statement of the run to <code>tmp/simulation/</code> (<code>spec/simulation_seeds_spec.rb</code>). A seed that passes drops its trace, so a search of thousands of seeds does not keep them all in memory.</p>
+<p><code>bin/check</code> runs two seeds. <code>SIM_SEEDS=&lt;n&gt;</code> runs many, <code>SIM_SEED=&lt;n&gt;</code> replays one, and <code>SIM_CLIENTS</code> / <code>SIM_SECONDS</code> set the storm’s size (<code>spec/support/simulation_seeds.rb</code>). A failed seed prints the command that reruns it and writes every statement of the run to <code>tmp/simulation/</code> (<code>spec/simulation_seeds_spec.rb</code>). A seed that passes drops its trace, so a search of thousands of seeds does not keep them all in memory. <code>SIM_FIRST_SEED</code> moves the first seed, and the Seed search workflow (<code>.github/workflows/seed-search.yml</code>) uses it to run a thousand new seeds every Sunday.</p>
 </li><li>
 <p>A race planted on purpose in the meal cap is found by some seed and found again by the same seed every time (<code>spec/simulation/scheduler_planted_race_spec.rb</code>).</p>
 </li><li>
@@ -1923,6 +1923,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-12: David chose option 1 with a readable record: a scheduler that lets one SQL statement run at a time and uses a seed to pick whose turn it is, with a fake clock, plus a printout of the steps of a failed run. It is to drive the whole storm API (every action <code>Storm::Client</code> sends), and <code>bin/check</code> runs a few seeds; one setting runs many, another replays one. Work started on branch <code>agent/replay-any-failure</code>.</p>
 </li><li>
 <p>2026-11-12: Built and closed. David chose to close the challenge once the work merges, and to list what the seed does not control in a new issue (#270) rather than keep this challenge open for it.</p>
+</li><li>
+<p>2026-11-12: David approved a weekly workflow that runs new seeds (after an overnight search of 2700 seeds found no race).</p>
 </li></ul>
 </div>
 </details>

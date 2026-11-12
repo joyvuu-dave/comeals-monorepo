@@ -7,6 +7,8 @@ require_relative 'property_seeds'
 #
 #   SIM_SEEDS=500  runs seeds 1 to 500
 #   SIM_SEED=37    runs seed 37 alone, and replays it exactly
+#   SIM_FIRST_SEED=1001 SIM_SEEDS=500   runs seeds 1001 to 1500 (the
+#                  weekly Seed search workflow runs new seeds each week)
 #
 #   SIM_CLIENTS=16 SIM_SECONDS=5   a bigger simulated storm (4 and 1
 #                                  unless set)
@@ -20,11 +22,20 @@ require_relative 'property_seeds'
 module SimulationSeeds
   ONE = 'SIM_SEED'
   MANY = 'SIM_SEEDS'
+  FIRST = 'SIM_FIRST_SEED'
   TAG = :simulation_seed
   LAST_STEPS = 20
   extend SeedSettings
 
   SIZE = { clients: ['SIM_CLIENTS', 4], seconds: ['SIM_SECONDS', 1] }.freeze
+
+  def self.seeds(default:, env: ENV)
+    seeds = super
+    return seeds if env.key?(ONE) || !env.key?(FIRST)
+
+    first = WholeNumber.read(env, FIRST, minimum: 0, example: 1001)
+    seeds.map { |seed| seed - 1 + first }
+  end
 
   def self.storm_size(env: ENV)
     SIZE.to_h do |key, (name, default)|

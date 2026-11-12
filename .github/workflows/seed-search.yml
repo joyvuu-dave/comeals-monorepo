@@ -1,0 +1,129 @@
+name: Seed search
+
+# Runs the seeded simulation of the request storm (docs/concurrency-testing.md,
+# layer 5) on many seeds. bin/check runs two seeds; this runs a thousand,
+# split into pieces that run at the same time.
+#
+# Each week runs new seeds: the first seed comes from the week number, so
+# week W runs seeds W*1000+1 to W*1000+1000. A failing seed replays
+# exactly on a laptop, with the command printed under its failure in the
+# piece's log (the storm size and SIM_SEED). The piece's artifact holds the
+# log and tmp/simulation/, which has every statement of the failed run.
+#
+# It runs every Sunday, and by hand. The Saturday Mutant workflow uses
+# most of the 40 jobs GitHub Pro runs at once, so this runs the next day.
+# The repository is public, so GitHub's standard machines cost nothing.
+
+on:
+  # Sunday 09:00 UTC. GitHub can start a scheduled run late, or skip it
+  # when it is busy; a run a few hours late changes nothing here.
+  schedule:
+    - cron: "0 9 * * 0"
+  workflow_dispatch:
+    inputs:
+      pieces:
+        description: "How many pieces run at once"
+        type: number
+        default: 4
+      seeds:
+        description: "Seeds in each piece"
+        type: number
+        default: 250
+      first_seed:
+        description: "The first seed of piece 0 (empty = from the week number)"
+        type: string
+        default: ""
+      clients:
+        description: "Clients in each simulated storm (SIM_CLIENTS)"
+        type: number
+        default: 8
+      seconds:
+        description: "Seconds of each simulated storm (SIM_SECONDS)"
+        type: number
+        default: 3
+
+concurrency:
+  group: seed-search-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  plan:
+    # ubuntu-26.04, not ubuntu-latest: the note at the top of ci.yml's jobs.
+    runs-on: ubuntu-26.04
+    timeout-minutes: 5
+    outputs:
+      pieces: ${{ steps.plan.outputs.pieces }}
+      first: ${{ steps.plan.outputs.first }}
+    steps:
+      - id: plan
+        env:
+          PIECES: ${{ inputs.pieces || 4 }}
+          SEEDS: ${{ inputs.seeds || 250 }}
+          FIRST_SEED: ${{ inputs.first_seed }}
+        run: |
+          set -euo pipefail
+          echo "pieces=$(python3 -c 'import json, os; print(json.dumps(list(range(int(os.environ["PIECES"])))))')" >> "$GITHUB_OUTPUT"
+          if [ -z "$FIRST_SEED" ]; then
+            # Whole weeks since 1970-01-01. One week's seeds never reach
+            # the next week's while pieces x seeds is 1000 or less.
+            FIRST_SEED=$(( $(date -u +%s) / 604800 * 1000 + 1 ))
+          fi
+          echo "first=$FIRST_SEED" >> "$GITHUB_OUTPUT"
+          echo "Seeds $FIRST_SEED to $(( FIRST_SEED + PIECES * SEEDS - 1 )), in $PIECES pieces." >> "$GITHUB_STEP_SUMMARY"
+
+  piece:
+    needs: plan
+    runs-on: ubuntu-26.04
+    timeout-minutes: 180
+    strategy:
+      fail-fast: false
+      matrix:
+        piece: ${{ fromJSON(needs.plan.outputs.pieces) }}
+    services:
+      postgres:
+        image: postgres:18.6
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: comeals_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    # A scheduled run has no inputs, so each one has its default again here.
+    # The inputs reach the shell as variables, never pasted into a script.
+    env:
+      RAILS_ENV: test
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/comeals_test
+      PIECE: ${{ matrix.piece }}
+      FIRST: ${{ needs.plan.outputs.first }}
+      SIM_SEEDS: ${{ inputs.seeds || 250 }}
+      SIM_CLIENTS: ${{ inputs.clients || 8 }}
+      SIM_SECONDS: ${{ inputs.seconds || 3 }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: ruby/setup-ruby@v1
+        with:
+          bundler-cache: true
+      - run: bin/rails db:schema:load
+      - name: Run this piece's seeds
+        run: |
+          set -o pipefail
+          export SIM_FIRST_SEED=$(( FIRST + PIECE * SIM_SEEDS ))
+          echo "Piece $PIECE: seeds $SIM_FIRST_SEED to $(( SIM_FIRST_SEED + SIM_SEEDS - 1 )), $SIM_CLIENTS clients for $SIM_SECONDS s."
+          bundle exec rspec spec/simulation/storm_spec.rb 2>&1 | tee seed-search.log
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: seed-search-piece-${{ matrix.piece }}
+          path: |
+            seed-search.log
+            tmp/simulation/
+          retention-days: 30
+          if-no-files-found: ignore
