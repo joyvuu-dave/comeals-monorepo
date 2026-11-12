@@ -57,11 +57,15 @@ class BrowserCount < ApplicationRecord
   end
   def self.add_one!(date:, browser:, major:, os:, device:, result:) # rubocop:disable Metrics/ParameterLists -- one per key column
     new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
-    connection.execute(sanitize_sql_array([<<~SQL.squish, date, browser, major, os, device, result]))
+    # The time comes from Time.current, not PostgreSQL's now(), the same
+    # as every instant the app writes: travel_to and the seeded
+    # simulation's clock decide it.
+    at = Time.current
+    connection.execute(sanitize_sql_array([<<~SQL.squish, date, browser, major, os, device, result, at, at]))
       INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+      VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
       ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
-      DO UPDATE SET count = browser_counts.count + 1, updated_at = now()
+      DO UPDATE SET count = browser_counts.count + 1, updated_at = EXCLUDED.updated_at
     SQL
   end
 

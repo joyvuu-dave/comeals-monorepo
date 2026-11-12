@@ -265,8 +265,10 @@ for. It plants a real race in the meal cap (no meal lock, READ
 COMMITTED), and some seed fills a meal past its cap, the same way every
 time that seed runs; as the app is, no seed does.
 
-What the seed does not control yet: PostgreSQL's own clock (`now()`,
-`CURRENT_TIMESTAMP`), SCrypt's salt (`OpenSSL::Random`), Rails'
+The app never reads PostgreSQL's own clock (`now()`, `CURRENT_TIMESTAMP`):
+every date and time it writes comes from `Time.current`, which the seed controls
+(`spec/db/app_clock_spec.rb`). What the seed does not control yet:
+SCrypt's salt (`OpenSSL::Random`), Rails'
 connection check after 2 seconds idle (real time), a connection the pool
 closes and opens again during a run, the real Solid Queue worker, admin
 pages through a browser, other databases' SERIALIZABLE transactions on

@@ -116,6 +116,15 @@ RSpec.describe CommonHouseLogin do
     end
   end
 
+  # From Ruby's clock, not the column's CURRENT_TIMESTAMP default:
+  # travel_to and the seeded simulation's clock decide it.
+  it "starts keys_valid_since at the app's clock" do
+    at = Time.utc(2026, 10, 21, 17, 30)
+    login = travel_to(at) { described_class.create!(password: password) }
+
+    expect(login.reload.keys_valid_since).to eq(at)
+  end
+
   describe 'changing the password' do
     it 'signs out every screen signed in before the change' do
       login = described_class.create!(password: password)

@@ -41,6 +41,8 @@
 require 'rails_helper'
 
 RSpec.describe Resident do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
 
@@ -103,6 +105,15 @@ RSpec.describe Resident do
       resident.save!
 
       expect(resident.reload.keys).to be_empty
+    end
+
+    # From Ruby's clock, not the column's CURRENT_TIMESTAMP default:
+    # travel_to and the seeded simulation's clock decide it.
+    it "starts keys_valid_since at the app's clock" do
+      at = Time.utc(2026, 10, 21, 17, 30)
+      resident = travel_to(at) { create(:resident, community: community, unit: unit) }
+
+      expect(resident.reload.keys_valid_since).to eq(at)
     end
 
     it 'advances keys_valid_since past any previously-issued JWT' do

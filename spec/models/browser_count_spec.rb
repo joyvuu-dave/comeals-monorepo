@@ -25,6 +25,8 @@ require 'rails_helper'
 # whether the browser check passed. Counts only: no IP, no resident, no
 # User-Agent string.
 RSpec.describe BrowserCount do
+  include ActiveSupport::Testing::TimeHelpers
+
   let(:key) do
     { date: Date.new(2026, 10, 21), browser: 'Safari', major: 18, os: 'iOS', device: 'phone', result: 'passed' }
   end
@@ -34,6 +36,17 @@ RSpec.describe BrowserCount do
       described_class.add_one!(**key)
 
       expect(described_class.sole).to have_attributes(**key, count: 1)
+    end
+
+    # Every instant the app writes comes from Ruby's clock (Time.current),
+    # not PostgreSQL's now(): travel_to and the seeded simulation's clock
+    # decide it, and now() is the same for a whole transaction.
+    it "stamps the row with the app's clock" do
+      at = Time.utc(2026, 10, 21, 17, 30)
+      travel_to(at) { described_class.add_one!(**key) }
+      travel_to(at + 60) { described_class.add_one!(**key) }
+
+      expect(described_class.sole).to have_attributes(created_at: at, updated_at: at + 60)
     end
 
     it 'adds to the count of the same day and browser' do
