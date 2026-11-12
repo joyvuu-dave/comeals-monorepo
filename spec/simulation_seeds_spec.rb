@@ -22,8 +22,31 @@ RSpec.describe SimulationSeeds do
   end
 
   it 'names the seed and the file in the rerun command' do
-    expect(described_class.rerun_command(42, './spec/simulation/x_spec.rb'))
+    expect(described_class.rerun_command(42, './spec/simulation/x_spec.rb', env: {}))
       .to eq('SIM_SEED=42 bundle exec rspec ./spec/simulation/x_spec.rb')
+  end
+
+  # A seed replays only in a storm of the same size.
+  it 'names the storm size in the rerun command when it was set' do
+    env = { 'SIM_CLIENTS' => '8', 'SIM_SECONDS' => '3' }
+    expect(described_class.rerun_command(42, './spec/simulation/x_spec.rb', env: env))
+      .to eq('SIM_CLIENTS=8 SIM_SECONDS=3 SIM_SEED=42 bundle exec rspec ./spec/simulation/x_spec.rb')
+  end
+
+  describe '.storm_size' do
+    it 'is 4 clients for 1 second unless set' do
+      expect(described_class.storm_size(env: {})).to eq(clients: 4, seconds: 1)
+    end
+
+    it 'reads SIM_CLIENTS and SIM_SECONDS' do
+      expect(described_class.storm_size(env: { 'SIM_CLIENTS' => '16', 'SIM_SECONDS' => '05' }))
+        .to eq(clients: 16, seconds: 5)
+    end
+
+    it 'refuses a size that is not a whole number of 1 or more' do
+      expect { described_class.storm_size(env: { 'SIM_CLIENTS' => '0' }) }
+        .to raise_error(ArgumentError, 'SIM_CLIENTS must be a whole number of 1 or more, like 4; got "0"')
+    end
   end
 
   describe 'a failing example tagged with its seed' do

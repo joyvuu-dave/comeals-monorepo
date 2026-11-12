@@ -9,10 +9,12 @@ require 'rails_helper'
 # (challenge 31).
 RSpec.describe Simulation::Storm, prosopite: false, server_notices: [ServerNotices::REFUSED_COMMIT] do
   include_context 'with no test transaction'
-  include_context 'with a pool for a simulation', 16
+  # One connection per actor (each client, the settler, the jobs, the
+  # admin) and the scheduler's own, with room to spare.
+  include_context 'with a pool for a simulation', SimulationSeeds.storm_size[:clients] + 8
 
   def storm(seed)
-    described_class.call(seed: seed, clients: 4, seconds: 1)
+    described_class.call(seed: seed, **SimulationSeeds.storm_size)
   end
 
   it 'replays a storm exactly: the same statements in the same order, and the same answers' do
