@@ -5,14 +5,15 @@
     Any whole count above 0 passes them (`greater_than: 0`), and the
     INSERT writes the count 1 itself, not the count of the record.
   diff: |
-    @@ -1,7 +1,7 @@
+    @@ -1,8 +1,8 @@
      def self.add_one!(date:, browser:, major:, os:, device:, result:)
     -  new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
     +  new(date:, browser:, major:, os:, device:, result:, count: 2).validate!
+       at = Time.current
        connection.execute(sanitize_sql_array(["INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
      ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
-     DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n".squish, date, browser, major, os, device, result]))
+     DO UPDATE SET count = browser_counts.count + 1, updated_at = EXCLUDED.updated_at\n".squish, date, browser, major, os, device, result, at, at]))
      end
 
 - subject: BrowserCount.add_one!
@@ -22,14 +23,15 @@
     statement with the line breaks in it, and no placeholder or value is
     inside a line break.
   diff: |
-    @@ -1,7 +1,7 @@
+    @@ -1,8 +1,8 @@
      def self.add_one!(date:, browser:, major:, os:, device:, result:)
        new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
+       at = Time.current
        connection.execute(sanitize_sql_array(["INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
      ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
-    -DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n".squish, date, browser, major, os, device, result]))
-    +DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n", date, browser, major, os, device, result]))
+    -DO UPDATE SET count = browser_counts.count + 1, updated_at = EXCLUDED.updated_at\n".squish, date, browser, major, os, device, result, at, at]))
+    +DO UPDATE SET count = browser_counts.count + 1, updated_at = EXCLUDED.updated_at\n", date, browser, major, os, device, result, at, at]))
      end
 
 - subject: BrowserCount.add_one!
@@ -39,14 +41,15 @@
     Any whole count above 0 passes them (`greater_than: 0`), and the
     INSERT writes the count 1 itself, not the count of the record.
   diff: |
-    @@ -1,7 +1,7 @@
+    @@ -1,8 +1,8 @@
      def self.add_one!(date:, browser:, major:, os:, device:, result:)
     -  new(date:, browser:, major:, os:, device:, result:, count: 1).validate!
     +  new(date:, browser:, major:, os:, device:, result:, count: 167).validate!
+       at = Time.current
        connection.execute(sanitize_sql_array(["INSERT INTO browser_counts (date, browser, major, os, device, result, count, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, 1, now(), now())
+     VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?)
      ON CONFLICT (date, browser, (COALESCE(major, 0)), os, device, result)
-     DO UPDATE SET count = browser_counts.count + 1, updated_at = now()\n".squish, date, browser, major, os, device, result]))
+     DO UPDATE SET count = browser_counts.count + 1, updated_at = EXCLUDED.updated_at\n".squish, date, browser, major, os, device, result, at, at]))
      end
 
 - subject: BrowserCount.by_month
