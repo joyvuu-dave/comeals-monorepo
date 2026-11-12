@@ -93,7 +93,11 @@ module Storm
       new(**).call
     end
 
-    def initialize(plan:, transport:, clients:, seconds:, seed:, queue_jobs: false) # rubocop:disable Metrics/ParameterLists -- all keywords, each one a storm setting
+    # rubocop:disable-next Metrics/ParameterLists -- all keywords, each one a storm setting
+    def initialize(plan:, transport:, clients:, seconds:, seed:, queue_jobs: false, clock: Storm::MONOTONIC,
+                   starts_at: nil)
+      @clock = clock
+      @starts_at = starts_at
       @plan = plan
       @queue_jobs = queue_jobs
       @transport = transport
@@ -105,15 +109,32 @@ module Storm
     end
 
     def call
-      @deadline = Process.clock_gettime(Process::CLOCK_MONOTONIC) + @seconds
-      clients = Array.new(@clients) do |index|
-        Client.new(index: index, plan: @plan, transport: @transport, rng: Random.new(@seed + index),
-                   deadline: @deadline)
-      end
-      threads = clients.map { |client| Thread.new { client.run } } + background_threads
+      threads = actors.map { |_, work| Thread.new(&work) }
       join(threads)
-      Result.new(requests: clients.flat_map(&:log), background: Array.new(@log.size) { @log.pop },
-                 problems: @problems, meal_sockets: clients.map(&:meal_sockets).reduce(Set.new, :|),
+      result
+    end
+
+    # starts_at is when the storm starts on the clock, if not now: a
+    # simulation builds the actors before its clock starts.
+    #
+    # Everything that runs at once, by name: one entry per client, then
+    # the settler, the jobs and the admin. Run#call gives each a thread; a
+    # simulation (spec/support/simulation/storm.rb) gives each to its
+    # scheduler instead.
+    def actors
+      @deadline = (@starts_at || @clock.call) + @seconds
+      @client_list = Array.new(@clients) do |index|
+        Client.new(index: index, plan: @plan, transport: @transport, rng: Random.new(@seed + index),
+                   deadline: @deadline, clock: @clock)
+      end
+      @client_list.map.with_index { |client, index| [:"client#{index}", -> { client.run }] } +
+        [[:settler, -> { settle_loop }], [:jobs, -> { job_loop }], [:admin, -> { admin_loop }]]
+    end
+
+    # What the actors did, once they have all ended.
+    def result
+      Result.new(requests: @client_list.flat_map(&:log), background: Array.new(@log.size) { @log.pop },
+                 problems: @problems, meal_sockets: @client_list.map(&:meal_sockets).reduce(Set.new, :|),
                  seconds: @seconds)
     end
 
@@ -127,12 +148,8 @@ module Storm
       end
     end
 
-    def background_threads
-      [Thread.new { settle_loop }, Thread.new { job_loop }, Thread.new { admin_loop }]
-    end
-
     def running?
-      Process.clock_gettime(Process::CLOCK_MONOTONIC) < @deadline
+      @clock.call < @deadline
     end
 
     # The settler waits a moment first, so the first settlement has writes

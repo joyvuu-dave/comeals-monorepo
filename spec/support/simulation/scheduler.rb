@@ -10,9 +10,9 @@ module Simulation
   # Runs actors so that the seed decides everything that real threads
   # would leave to chance (challenge 31).
   #
-  # Each actor runs on its own thread with its own database connection,
-  # because a transaction needs a session of its own. But only one actor
-  # runs at a time. An actor runs Ruby until it is about to send an SQL
+  # Each actor runs on its own thread with a database connection of its
+  # own, because a transaction needs a session of its own. But only one
+  # actor runs at a time. An actor runs Ruby until it is about to send an SQL
   # statement, and stops there. The scheduler then uses the seed to pick
   # which stopped actor sends its statement next. So with the same seed,
   # the same statements go to PostgreSQL in the same order, and get the
@@ -38,8 +38,16 @@ module Simulation
     Result = Data.define(:steps, :values)
 
     # A statement is run through the scheduler unless Rails runs it to
-    # read the schema, which it does whenever its cache is cold.
+    # read the schema, which it does whenever its cache is cold, or it is
+    # a BEGIN. Rails sends BEGIN just before the first statement of a
+    # transaction, from inside whichever statement comes first, and a
+    # schema read counts. So whether BEGIN came on its own or with the
+    # next statement depended on what an earlier run left in the cache.
+    # PostgreSQL takes a transaction's snapshot at its first statement,
+    # not at BEGIN, so a BEGIN changes nothing another session can see,
+    # and it is left out of the trace.
     UNGATED = %w[SCHEMA].freeze
+    BEGIN_STATEMENT = /\ABEGIN\b/
 
     # Session settings for the actors' connections. The app's own
     # timeouts are on the real clock; here an actor may wait a long real
@@ -75,10 +83,11 @@ module Simulation
       check_the_pool
       @steps = []
       @sent = 0
+      prepare_the_connections
       Determinism.with(seed: @seed, start: @start) do |determinism|
         @clock = determinism.clock
         determinism.sleeper = ->(seconds) { @by_thread[Thread.current].sleep_until(@clock.at + seconds.to_r) }
-        ActiveSupport::Notifications.subscribed(Gate.new(@by_thread), 'sql.active_record') do
+        ActiveSupport::Notifications.subscribed(Gate.new(self), 'sql.active_record') do
           @actor_threads = determinism.actor_threads
           start_actors
           loop_until_done
@@ -87,7 +96,14 @@ module Simulation
       Result.new(steps: @steps, values: @actors.to_h { |a| [a.name, a.value] })
     ensure
       @actors.each(&:stop)
+      put_the_connections_back
     end
+
+    # The actor on this thread, if it is one.
+    def actor_on(thread) = @by_thread[thread]
+
+    # The PostgreSQL process behind a connection of the pool.
+    def pid_of(connection) = @pids[connection]
 
     # Called on the actor's own thread once its setup is done. From here
     # on, the thread reads the simulation's clock and generator. Not
@@ -98,14 +114,67 @@ module Simulation
       @actor_threads << thread
     end
 
-    # Called on the actor's own thread, before its first statement.
-    def session_settings(raw)
-      before = SESSION.keys.index_with { |name| raw.exec("SHOW #{name}").getvalue(0, 0) }
-      SESSION.each { |name, value| raw.exec("SET #{name} = '#{value}'") }
-      before
+    private
+
+    # An actor does not keep one connection: Rails' executor gives the
+    # thread's connection back to the pool at the end of each request
+    # (ActiveRecord::ConnectionAdapters::ConnectionPool::ExecutorHooks),
+    # and the next request takes whichever one is free. So every
+    # connection in the pool except the scheduler's own is opened and set
+    # up here, before the run:
+    #   - opening one during the run would draw random bytes on an actor's
+    #     thread, and whether it happens depends on what earlier runs
+    #     left in the pool;
+    #   - each gets the session settings above, and a notice processor
+    #     that hands "still waiting" to the actor whose thread runs the
+    #     statement (libpq calls it on that thread);
+    #   - the scheduler learns each one's PostgreSQL process, so it looks
+    #     in pg_locks for the process of the connection the actor is using
+    #     now.
+    def prepare_the_connections
+      observer
+      # Every table's columns, so no run reads the schema mid-way and the
+      # next one does not.
+      ActiveRecord::Base.connection_pool.schema_reflection.load!(ActiveRecord::Base.connection_pool)
+      pool = ActiveRecord::Base.connection_pool
+      connections = Array.new(pool.size - 1) { pool.checkout }
+      @pids = {}.compare_by_identity
+      @prepared = connections.map do |connection|
+        raw = connection.raw_connection
+        @pids[connection] = raw.backend_pid
+        before = SESSION.keys.index_with { |name| raw.exec("SHOW #{name}").getvalue(0, 0) }
+        SESSION.each { |name, value| raw.exec("SET #{name} = '#{value}'") }
+        others = raw.set_notice_processor { |message| notice(message, others) }
+        # raw_connection turns lazy transactions off for good on that
+        # connection; production has them on. Left off, some connections
+        # would send BEGIN as a statement of its own and others inside the
+        # next one, and which kind an actor gets depends on the pool's order.
+        connection.enable_lazy_transactions!
+        [raw, before, others]
+      end
+    ensure
+      connections&.each { |connection| pool.checkin(connection) }
     end
 
-    private
+    def put_the_connections_back
+      @prepared&.each do |raw, before, others|
+        before.each { |name, value| raw.exec("SET #{name} = '#{value}'") }
+        raw.set_notice_processor(&others)
+      end
+      @prepared = nil
+    end
+
+    # PostgreSQL's LOG lines come only because of client_min_messages
+    # above. "still waiting" tells the actor's scheduler a deadlock check
+    # ran; the rest are dropped. Every other notice goes where it went
+    # before.
+    def notice(message, others)
+      if message.match?(STILL_WAITING)
+        @by_thread[Thread.current]&.checks&.push(:checked)
+      elsif !message.start_with?('LOG:')
+        others&.call(message)
+      end
+    end
 
     # An actor that cannot get a connection waits 5 s for one and then
     # fails, which looks like a bug in the code under test.
@@ -150,7 +219,10 @@ module Simulation
         arrival = actor.arrivals.pop(timeout: POLL)
         return arrived(actor, arrival) if arrival
         return blocked(actor) if actor.pid && waiting_for_a_lock?(actor.pid)
-        raise "simulation seed #{@seed}: #{actor.name} did not stop within #{TURN_TIMEOUT}s" if monotonic > deadline
+        next unless monotonic > deadline
+
+        raise "simulation seed #{@seed}: #{actor.name} did not stop within #{TURN_TIMEOUT}s, at:\n  " +
+              Array(actor.backtrace).first(25).join("\n  ")
       end
     end
 
@@ -222,20 +294,25 @@ module Simulation
     # Stops an actor's thread before each statement it sends. It is the
     # subscriber's start, which ActiveSupport calls before the statement
     # runs; finish records what the statement ended in.
+    #
+    # A statement that runs inside another one's event runs in the same
+    # turn, and the step's text lists it first: "inner; outer".
     class Gate
-      def initialize(by_thread)
-        @by_thread = by_thread
+      def initialize(scheduler)
+        @scheduler = scheduler
       end
 
       def start(_name, _id, payload)
-        actor = @by_thread[Thread.current]
+        actor = @scheduler.actor_on(Thread.current)
         return unless actor && gated?(payload)
+        return actor.nested_start(payload[:sql]) if actor.inside_a_statement?
 
+        actor.pid = @scheduler.pid_of(payload[:connection])
         actor.stop_before(payload[:sql], binds(payload))
       end
 
       def finish(_name, _id, payload)
-        actor = @by_thread[Thread.current]
+        actor = @scheduler.actor_on(Thread.current)
         return unless actor && gated?(payload)
 
         actor.statement_ended(payload[:exception]&.first || payload[:row_count] || :ok)
@@ -243,7 +320,9 @@ module Simulation
 
       private
 
-      def gated?(payload) = UNGATED.exclude?(payload[:name]) && !payload[:cached]
+      def gated?(payload)
+        UNGATED.exclude?(payload[:name]) && !payload[:cached] && !payload[:sql].match?(BEGIN_STATEMENT)
+      end
 
       def binds(payload)
         binds = payload[:type_casted_binds]
@@ -259,7 +338,9 @@ module Simulation
     #   blocked  its statement waits for a lock in PostgreSQL
     #   done     its work returned or raised
     class Actor
-      attr_reader :name, :arrivals, :checks, :pid, :value, :wake_at
+      attr_reader :name, :arrivals, :checks, :value, :wake_at
+      # The PostgreSQL process of the connection the actor uses now.
+      attr_accessor :pid
 
       def initialize(name, work)
         @name = name
@@ -270,6 +351,8 @@ module Simulation
         @state = :running
         @in_flight = nil
         @waited = false
+        @depth = 0
+        @nested = []
       end
 
       def ready? = @state == :ready
@@ -287,6 +370,8 @@ module Simulation
           run(scheduler)
         end
       end
+
+      def backtrace = @thread&.backtrace
 
       def stop
         @thread&.join(5)
@@ -332,6 +417,7 @@ module Simulation
         return nil unless @in_flight && @outcome_set
 
         sql, binds, = @in_flight
+        sql = [*@nested_done, sql].join('; ')
         step = Step.new(sent: @sent, actor: @name, sql: sql, binds: binds, outcome: @outcome, waited: @waited)
         @in_flight = nil
         @outcome_set = false
@@ -344,6 +430,14 @@ module Simulation
       def stop_before(sql, binds)
         @arrivals << [:statement, sql, binds]
         wait_for_turn
+        @depth = 1
+      end
+
+      def inside_a_statement? = @depth.positive?
+
+      def nested_start(sql)
+        @depth += 1
+        @nested << sql
       end
 
       def sleep_until(wake_at)
@@ -351,41 +445,29 @@ module Simulation
         wait_for_turn
       end
 
+      # A nested statement's end only closes it; the outer one's outcome
+      # is the step's.
       def statement_ended(outcome)
+        @depth -= 1
+        return if @depth.positive?
+
         @outcome = outcome
+        @nested_done = @nested
+        @nested = []
         @outcome_set = true
       end
 
       private
-
-      # PostgreSQL's LOG lines come only because of client_min_messages
-      # above. "still waiting" tells the scheduler a deadlock check ran;
-      # the rest are dropped. Every other notice goes where it went before.
-      def notice(message, others)
-        return @checks << :checked if message.match?(STILL_WAITING)
-        return if message.start_with?('LOG:')
-
-        others&.call(message)
-      end
 
       def wait_for_turn
         raise 'the scheduler never gave this actor its turn' unless @turn.pop(timeout: TURN_TIMEOUT)
       end
 
       def run(scheduler)
-        ActiveRecord::Base.connection_pool.with_connection do |connection|
-          raw = connection.raw_connection
-          @pid = raw.backend_pid
-          before = scheduler.session_settings(raw)
-          others = raw.set_notice_processor { |message| notice(message, others) }
+        ActiveRecord::Base.connection_pool.with_connection do
           ActiveSupport::Notifications.instrumenter
           scheduler.enter(Thread.current)
-          begin
-            @value = @work.call
-          ensure
-            before.each { |setting, value| raw.exec("SET #{setting} = '#{value}'") }
-            raw.set_notice_processor(&others)
-          end
+          @value = @work.call
         end
         @arrivals << [:done, @value]
       rescue StandardError => e

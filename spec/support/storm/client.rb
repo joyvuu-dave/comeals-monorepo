@@ -87,14 +87,14 @@ module Storm
 
     attr_reader :log, :meal_sockets
 
-    def initialize(index:, plan:, transport:, rng:, deadline:)
+    def initialize(index:, plan:, transport:, rng:, deadline:, clock: Storm::MONOTONIC) # rubocop:disable Metrics/ParameterLists -- all keywords
       @index = index
+      @clock = clock
       @plan = plan
       @transport = transport
       @rng = rng
       @deadline = deadline
       @resident = plan.residents.fetch(index)
-      @token = plan.tokens.fetch(@resident.id)
       @home = plan.meals.fetch(index % plan.meals.size)
       @ip = "10.9.#{index / 250}.#{(index % 250) + 1}"
       @n = 0
@@ -114,7 +114,7 @@ module Storm
     end
 
     def run
-      step while Process.clock_gettime(Process::CLOCK_MONOTONIC) < @deadline
+      step while @clock.call < @deadline
       self
     end
 
@@ -125,9 +125,9 @@ module Storm
       method, path, body, check, done = send(:"request_#{action}", meal)
       # A delete with nothing to delete creates instead; judge what was sent.
       action = done if done
-      started = Process.clock_gettime(Process::CLOCK_MONOTONIC)
+      started = @clock.call
       status, response = call(method, path, body, action)
-      ms = ((Process.clock_gettime(Process::CLOCK_MONOTONIC) - started) * 1000).round(1)
+      ms = ((@clock.call - started) * 1000).round(1)
       problem = judge(action, status, response, check)
       @log << Entry.new(client: @index, n: @n, action: action, meal_id: meal.id, status: status, problem: problem,
                         ms: ms)
@@ -159,7 +159,7 @@ module Storm
     # page sends one (decision 6 of #135, S2): this client and request
     # number, which no other request has.
     def call(method, path, body, action)
-      headers = { 'Authorization' => "Bearer #{@token}" }
+      headers = { 'Authorization' => "Bearer #{@plan.tokens.fetch(@resident.id)}" }
       headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if KEYED.include?(action)
       login = action == :login
       note_sent(login)
