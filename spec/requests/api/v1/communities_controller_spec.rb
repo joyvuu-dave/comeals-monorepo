@@ -33,6 +33,12 @@ RSpec.describe 'Communities API' do
   end
 
   describe 'GET /api/v1/communities/:id/birthdays' do
+    # A title is the shortest name no other resident shares
+    # (ResidentNameShortener), so every resident here gets a fixed name.
+    # The factory picks a random first name, and once in CI it picked
+    # "Mae", which made the title "Mae M's B-day!".
+    let(:resident) { create(:resident, community: community, unit: unit, name: 'Ann Lee') }
+
     def birthdays(params = {})
       get "/api/v1/communities/#{community.id}/birthdays", params: { token: token }.merge(params)
       response.parsed_body
@@ -43,7 +49,7 @@ RSpec.describe 'Communities API' do
     it 'returns residents with birthdays in the month two weeks after start' do
       march_bday = create(:resident, community: community, unit: unit, name: 'Mae March',
                                      birthday: Date.new(1990, 3, 15))
-      create(:resident, community: community, unit: unit, birthday: Date.new(1985, 2, 20))
+      create(:resident, community: community, unit: unit, name: 'Feb Born', birthday: Date.new(1985, 2, 20))
 
       body = birthdays(start: '2026-02-20')
 
