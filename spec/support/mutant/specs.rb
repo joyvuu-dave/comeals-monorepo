@@ -168,7 +168,7 @@ MUTANT_SPEC_ROWS = {
   # Also fails when LiveUpdate pushes before the commit.
   'spec/requests/api/v1/meal_write_retry_spec.rb' => %w[RetryOnConflict Api::V1::MealsController LiveUpdate],
   'spec/requests/api/v1/calendar_writes_retry_spec.rb' =>
-    %w[RetryOnConflict ApiController Api::V1::EventsController Api::V1::GuestRoomReservationsController
+    %w[RetryOnConflict ApiController KeyedWrites Api::V1::EventsController Api::V1::GuestRoomReservationsController
        Api::V1::CommonHouseReservationsController],
   'spec/requests/api/v1/calendar_read_conflict_spec.rb' =>
     %w[RetryOnConflict ApiController Api::V1::CommunitiesController],

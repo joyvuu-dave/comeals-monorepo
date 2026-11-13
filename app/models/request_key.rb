@@ -50,7 +50,7 @@ class RequestKey < ApplicationRecord
   # "Resident:12" or "CommonHouseLogin:1".
   sig { params(login: JwtAuth::Login).returns(String) }
   def self.sender_of(login)
-    "#{login.class.name}:#{login.id}"
+    "#{login.class}:#{login.id}"
   end
 
   # The hash of what the request asks for: its method, its path, and its
@@ -85,7 +85,9 @@ class RequestKey < ApplicationRecord
   sig { params(value: T.untyped).returns(T.untyped) }
   def self.sorted(value)
     case value
-    when Hash then value.sort_by { |name, _| name.to_s }.to_h { |name, inner| [name.to_s, sorted(inner)] }
+    # Every name is already a String: JSON and a query string have no
+    # other kind.
+    when Hash then value.sort_by(&:first).to_h { |name, inner| [name, sorted(inner)] }
     when Array then value.map { |inner| sorted(inner) }
     else value
     end

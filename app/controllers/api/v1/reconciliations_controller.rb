@@ -74,13 +74,12 @@ module Api
       private
 
       # The 201 for a saved settlement, built from what it read inside its
-      # own transaction. Both dates are NOT NULL on a saved row, which
-      # this is.
+      # own transaction. A Date is written in JSON as YYYY-MM-DD.
       sig { params(settlement: Settlement).returns(T::Hash[Symbol, T.untyped]) }
       def created(settlement)
         reconciliation = settlement.reconciliation
-        { json: { id: reconciliation.id, date: T.must(reconciliation.date).iso8601,
-                  cutoff_date: T.must(reconciliation.end_date).iso8601, meal_count: settlement.meal_count },
+        { json: { id: reconciliation.id, date: reconciliation.date, cutoff_date: reconciliation.end_date,
+                  meal_count: settlement.meal_count },
           status: :created }
       end
 

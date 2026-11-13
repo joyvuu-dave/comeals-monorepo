@@ -38,6 +38,16 @@ RSpec.describe DatabaseUnreachable do
     end
   end
 
+  it 'reports the error as handled, as a warning, with the path' do
+    allow(Rails.error).to receive(:report)
+    error = ActiveRecord::ConnectionFailed.new('server closed the connection unexpectedly')
+
+    call('/api/v1/meals/1/residents/2', error)
+
+    expect(Rails.error).to have_received(:report)
+      .with(error, handled: true, severity: :warning, context: { path: '/api/v1/meals/1/residents/2' })
+  end
+
   it 'lets the error through on a path that is not the API, for the error page' do
     expect { call('/admin/meals', ActiveRecord::ConnectionFailed.new('gone')) }
       .to raise_error(ActiveRecord::ConnectionFailed)

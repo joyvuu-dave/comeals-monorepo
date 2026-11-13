@@ -10,7 +10,7 @@ class ApiController < ActionController::API
   #
   # Every write path retries a refusal and answers 409 itself
   # (Api::V1::MealsController#with_meal_lock,
-  # #render_retrying_on_conflict). But at SERIALIZABLE any statement can
+  # KeyedWrites#render_retrying_on_conflict). But at SERIALIZABLE any statement can
   # be refused, including ones outside those blocks: a before_action's
   # lookup, a read action, a serializer's query during render. In a
   # before_action or a read nothing was saved — a refused transaction
@@ -305,28 +305,6 @@ class ApiController < ActionController::API
     render json: { message: 'Someone else was changing this at the same time. ' \
                             'Nothing was saved. Try again.' },
            status: :conflict
-  end
-
-  # A calendar write (an event, a reservation), tried again when PostgreSQL
-  # refuses it for a conflict with another transaction, and answered 409
-  # when the conflict does not go away (ADR 0005). The block does the write
-  # and returns the render arguments; nothing renders inside it, because a
-  # retry runs it again. A reservation checks that its period is free and
-  # then inserts — a read before a write, which is exactly what SERIALIZABLE
-  # refuses when two of them race — and before this the refusal was a 500
-  # (spec/requests/api/v1/calendar_writes_retry_spec.rb).
-  def render_retrying_on_conflict(&)
-    render(**RetryOnConflict.call { keyed(&) })
-  rescue ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
-    render json: { message: 'Someone else was changing the calendar at the same time. ' \
-                            'Nothing was saved. Try again.' },
-           status: :conflict
-  end
-
-  # A write with no Idempotency-Key. KeyedWrites replaces this in the
-  # controllers that read the key, to save the key with the write.
-  def keyed
-    yield
   end
 
   # Resolve both @current_resident_api and @current_api_key in one pass,

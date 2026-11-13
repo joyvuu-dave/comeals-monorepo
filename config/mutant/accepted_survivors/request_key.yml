@@ -1,0 +1,39 @@
+---
+- subject: RequestKey.request_sha256
+  kind: same-answer
+  why: >-
+    T.unsafe returns its argument. It is there only so Sorbet accepts a splat of an array whose size it does not
+    know.
+  diff: |
+    @@ -1,5 +1,5 @@
+     def self.request_sha256(request)
+       sent = sent_body(request).merge(Rack::Utils.parse_nested_query(request.query_string))
+    -  change = sorted(T.unsafe(sent).except(*NOT_THE_CHANGE))
+    +  change = sorted(sent.except(*NOT_THE_CHANGE))
+       Digest::SHA256.hexdigest("#{request.request_method} #{request.path}\n#{JSON.generate(change)}")
+     end
+- subject: RequestKey.sent_body
+  kind: same-answer
+  why: >-
+    The body comes from JSON.parse or Rack::Utils.parse_nested_query, and at the top level both give a plain Hash, not
+    a subclass of Hash, so instance_of? and is_a? agree. (A nested form field is a Rack::QueryParser::Params, a
+    subclass, but this check never sees one.)
+  diff: |
+    @@ -1,16 +1,16 @@
+     def self.sent_body(request)
+       raw = request.raw_post.to_s
+       if raw.empty?
+         return {}
+       end
+       body = if request.media_type == "application/json"
+         JSON.parse(raw)
+       else
+         Rack::Utils.parse_nested_query(raw)
+       end
+    -  if body.is_a?(Hash)
+    +  if body.instance_of?(Hash)
+         body
+       else
+         { "_json" => body }
+       end
+     end

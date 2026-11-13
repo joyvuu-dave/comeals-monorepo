@@ -238,6 +238,36 @@ RSpec.describe 'POST /api/v1/reconciliations' do
       expect(body[:message]).to eq(RequestKey::OTHER_REQUEST)
     end
 
+    # Two sends with one key at the same moment: both pass the lookup in
+    # the before_action, the first commits, and the second fails. The
+    # second is then answered with what the first saved, not with an
+    # error for a settle that worked.
+    describe 'when the first send saves while the second is running' do
+      def lose_the_race_to_the_first_send(error)
+        settleable_meal
+        first = settle_with_key(latest, '"settle-1"')
+        saved = RequestKey.sole.attributes.except('id')
+        RequestKey.delete_all
+        allow(SettleAndNotify).to receive(:call) do
+          RequestKey.create!(saved)
+          raise error
+        end
+        [first, settle_with_key(latest, '"settle-1"')]
+      end
+
+      it 'answers a settlement that lost to it with its answer, marked as replayed' do
+        first, second = lose_the_race_to_the_first_send(Settlement::Contested.new('settled first'))
+
+        expect(second).to eq([201, first[1], 'true'])
+      end
+
+      it 'answers a settle refused for having nothing left with its answer, marked as replayed' do
+        first, second = lose_the_race_to_the_first_send(ActiveRecord::RecordInvalid.new(Reconciliation.new))
+
+        expect(second).to eq([201, first[1], 'true'])
+      end
+    end
+
     it 'keeps no key for a settle that was refused' do
       settle_with_key(latest, '"settle-1"')
 

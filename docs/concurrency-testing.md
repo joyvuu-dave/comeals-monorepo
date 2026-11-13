@@ -300,7 +300,7 @@ The first three, each fixed the same day with a deterministic spec.
 - The calendar writes (events, guest room and common house reservations)
   had no retry and no rescue for a serialization failure, so a reservation
   racing another answered 500. Now they retry and answer 409
-  (`ApiController#render_retrying_on_conflict`,
+  (`KeyedWrites#render_retrying_on_conflict`,
   `spec/requests/api/v1/calendar_writes_retry_spec.rb`).
 - A nightly job refused for a conflict failed outright, with a failed run
   record and a fail ping. `EnsureRotationsJob` conflicted in seven of eight

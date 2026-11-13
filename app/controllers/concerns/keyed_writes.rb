@@ -37,6 +37,23 @@ module KeyedWrites
 
   private
 
+  # A calendar write (an event, a reservation), tried again when PostgreSQL
+  # refuses it for a conflict with another transaction, and answered 409
+  # when the conflict does not go away (ADR 0005), with its
+  # Idempotency-Key when it has one (keyed). The block does the write
+  # and returns the render arguments; nothing renders inside it, because a
+  # retry runs it again. A reservation checks that its period is free and
+  # then inserts — a read before a write, which is exactly what SERIALIZABLE
+  # refuses when two of them race — and before this the refusal was a 500
+  # (spec/requests/api/v1/calendar_writes_retry_spec.rb).
+  def render_retrying_on_conflict(&)
+    render(**RetryOnConflict.call { keyed(&) })
+  rescue ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
+    render json: { message: 'Someone else was changing the calendar at the same time. ' \
+                            'Nothing was saved. Try again.' },
+           status: :conflict
+  end
+
   def answer_if_request_key_seen
     value = request.headers['Idempotency-Key']
     return if value.nil?

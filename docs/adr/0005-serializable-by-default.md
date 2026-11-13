@@ -517,7 +517,7 @@ steps that open a savepoint), and `spec/services/settle_and_notify_spec.rb`
   `with_lock` refuses a dirty record), the calendar writes (no retry at
   all, a 500), and the recurring jobs (a failed run and a fail ping). All
   three now retry; the calendar writes answer 409 when the conflict does
-  not go away, through `ApiController#render_retrying_on_conflict`.
+  not go away, through `KeyedWrites#render_retrying_on_conflict`.
 - **2026-09-11** — the last path with no answer for a refusal: reads. The
   calendar month is rebuilt on a conflict, and `ApiController` rescues
   anything that still escapes — a refusal during a render, in a

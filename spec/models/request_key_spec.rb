@@ -68,6 +68,23 @@ RSpec.describe RequestKey do
         .to eq(Digest::SHA256.hexdigest(%(POST /api/v1/events\n{"_json":[1,2]})))
     end
 
+    it 'is the hash of no parameters for an empty JSON body, which JSON.parse would refuse' do
+      env = Rack::MockRequest.env_for('/api/v1/events/4/delete', method: 'DELETE')
+      env['CONTENT_TYPE'] = 'application/json'
+
+      expect(described_class.request_sha256(ActionDispatch::Request.new(env)))
+        .to eq(Digest::SHA256.hexdigest(%(DELETE /api/v1/events/4/delete\n{})))
+    end
+
+    # Rack 3 lets a server leave rack.input out, and then raw_post is nil.
+    it 'is the hash of no parameters for a request with no body stream at all' do
+      env = Rack::MockRequest.env_for('/api/v1/events/4/delete', method: 'DELETE')
+      env.delete('rack.input')
+
+      expect(described_class.request_sha256(ActionDispatch::Request.new(env)))
+        .to eq(Digest::SHA256.hexdigest(%(DELETE /api/v1/events/4/delete\n{})))
+    end
+
     it 'is the hash of no parameters when nothing was sent' do
       expect(hash_of('/api/v1/events/4/delete', method: 'DELETE'))
         .to eq(Digest::SHA256.hexdigest(%(DELETE /api/v1/events/4/delete\n{})))
