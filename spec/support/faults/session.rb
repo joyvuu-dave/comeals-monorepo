@@ -53,11 +53,13 @@ module Faults
     # connections take the app's own settings (the variables: block, so
     # SERIALIZABLE, and the query cache off) with the proxy's address on
     # top. A bare url: has neither, so a settlement here ran at READ
-    # COMMITTED and settled a dinner from an old read of its costs.
+    # COMMITTED and settled a dinner from an old read of its costs. The
+    # test database's login is left out: this server was made by initdb
+    # with the user running it (Server#initdb), and in CI the test
+    # database's user is postgres, a role this server does not have.
     def connect
-      ActiveRecord::Base.establish_connection(
-        ActiveRecord::Base.connection_db_config.configuration_hash.merge(url: database_url, pool: 12)
-      )
+      settings = ActiveRecord::Base.connection_db_config.configuration_hash.except(:username, :password)
+      ActiveRecord::Base.establish_connection(settings.merge(url: database_url, pool: 12))
       TransactionIsolationCheck.verify!(ActiveRecord::Base.connection)
       Rails.cache = SolidCache::Store.new(namespace: Rails.env, expiry_method: :job)
       Pusher.define_singleton_method(:trigger) { |*_args| true }

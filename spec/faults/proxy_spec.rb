@@ -5,12 +5,17 @@ require 'rails_helper'
 # The fault suite (challenge 30) puts this proxy between the server and
 # PostgreSQL, so it can cut every connection in the middle of a write.
 RSpec.describe Faults::Proxy do
-  let(:database) { ActiveRecord::Base.connection_db_config.database }
-  let(:proxy) { described_class.new(upstream_port: 5432) }
+  let(:config) { ActiveRecord::Base.connection_db_config.configuration_hash }
+  let(:proxy) { described_class.new(upstream_port: config.fetch(:port, 5432)) }
 
   after { proxy.stop }
 
-  def connect = PG.connect(host: '127.0.0.1', port: proxy.port, dbname: database, connect_timeout: 5)
+  # The test database's own login: in CI it is postgres with a password
+  # (DATABASE_URL); on the laptop it is the user running the specs.
+  def connect
+    PG.connect(host: '127.0.0.1', port: proxy.port, dbname: config[:database], user: config[:username],
+               password: config[:password], connect_timeout: 5)
+  end
 
   it 'passes a connection through to PostgreSQL' do
     connection = connect
