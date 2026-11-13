@@ -132,7 +132,13 @@ MUTANT_SPEC_ROWS = {
     %w[Settlement Reconciliation MealLedger ReconciliationWarnings Api::V1::ReconciliationsController],
   'spec/requests/api/v1/reconciliations_create_spec.rb' =>
     %w[Settlement Reconciliation MealLedger SettleAndNotify NotifyCooksJob RetryOnConflict
-       Api::V1::ReconciliationsController],
+       Api::V1::ReconciliationsController RequestKey KeyedWrites],
+  # A write sent again with an Idempotency-Key (ADR 0015).
+  'spec/requests/api/v1/request_keys_spec.rb' =>
+    %w[RequestKey KeyedWrites Api::V1::EventsController Api::V1::GuestRoomReservationsController
+       Api::V1::CommonHouseReservationsController Api::V1::MealsController],
+  'spec/requests/api/v1/request_key_race_spec.rb' => %w[RequestKey KeyedWrites Api::V1::EventsController],
+  'spec/requests/api/v1/database_unreachable_spec.rb' => %w[DatabaseUnreachable],
   'spec/requests/api/v1/reconciliations_authorization_spec.rb' => %w[Api::V1::ReconciliationsController],
   'spec/requests/api/v1/residents_ical_spec.rb' => %w[MealIcalFeed Api::V1::ResidentsController],
   'spec/requests/api/v1/communities_controller_spec.rb' =>
