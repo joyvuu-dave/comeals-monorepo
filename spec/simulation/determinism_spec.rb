@@ -60,14 +60,16 @@ RSpec.describe Simulation::Determinism do
     expect(Process.clock_gettime(Process::CLOCK_MONOTONIC) - started).to be >= 0.05
   end
 
-  # Each method, the class or module it is on, and whether this app's
-  # code defines it. Ruby's own are on the class or module Ruby puts them
-  # on, and are written in C or in Ruby's own files.
+  # Each method, the class or module it is on, and whether the hooks'
+  # file defines it. Not any file under Rails.root: CI installs gems in
+  # vendor/bundle, so the securerandom gem's own gen_random is there too.
+  def hooks_file = Rails.root.join('spec/support/simulation/determinism.rb').to_s
+
   def ruby_owned
     [Object.instance_method(:sleep), Object.instance_method(:rand), Kernel.method(:rand),
      Random.method(:rand), SecureRandom.method(:random_bytes), SecureRandom.method(:random_number),
      SecureRandom.method(:gen_random), Time.method(:now)]
-      .map { [it.name, it.owner, it.source_location&.first.to_s.start_with?(Rails.root.to_s)] }
+      .map { [it.name, it.owner, it.source_location&.first == hooks_file] }
   end
 
   # A hook that stayed in place for the whole test run could break a
