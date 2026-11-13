@@ -1906,6 +1906,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-12: Done. <code>bin/faults</code> found 500s on a lost database connection (fixed: <code>DatabaseUnreachable</code>, 503) and writes that were not safe to send again (fixed: ADR 0015).</p>
 </li><li>
 <p>2026-11-13: <code>bin/faults</code> found a close sent again after a settlement answered 400 for a close that was saved (#280). David chose option 1: on a settled meal, a write that sends the value the meal already has is answered as saved. It also found that its own settler ran at READ COMMITTED; fixed in the suite.</p>
+</li><li>
+<p>2026-11-13: David decided the Idempotency-Key stays optional for now. A page loaded before keys were added sends none, so requiring one would refuse those pages’ writes. To look at again once every phone has loaded a newer page.</p>
 </li></ul>
 </div>
 </details>

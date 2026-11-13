@@ -89,8 +89,12 @@ cleanup() {
     done
   fi
   echo "Resetting test database..."
-  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, job_runs, solid_queue_jobs, \
-solid_queue_processes, solid_queue_semaphores, solid_queue_recurring_tasks CASCADE" 2>/dev/null || true
+  # CASCADE empties what has a foreign key to a named table. The rest is
+  # named: audits, browser_counts, request_keys, keys and
+  # common_house_logins have none (spec/bin/storm_cleanup_spec.rb).
+  psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, job_runs, audits, browser_counts, \
+request_keys, keys, common_house_logins, solid_queue_jobs, solid_queue_processes, solid_queue_semaphores, \
+solid_queue_recurring_tasks CASCADE" 2>/dev/null || true
 }
 trap cleanup EXIT
 

@@ -52,7 +52,9 @@ namespace :test do
     Pusher.define_singleton_method(:trigger) { |*_args| true }
 
     queue = ENV['STORM_SOLID_QUEUE'].present?
-    tables = %w[communities ledger_check_runs job_runs]
+    # CASCADE empties what has a foreign key to these; the tables with none
+    # are named (spec/bin/storm_cleanup_spec.rb).
+    tables = %w[communities ledger_check_runs job_runs audits browser_counts request_keys keys common_house_logins]
     tables += %w[solid_queue_jobs solid_queue_processes solid_queue_semaphores solid_queue_recurring_tasks] if queue
     ActiveRecord::Base.connection.execute("TRUNCATE #{tables.join(', ')} CASCADE")
     Current.reset

@@ -45,3 +45,4 @@ Both options, faults first (David, 2026-11-12). The fault suite is `bin/faults`,
 - 2026-11-12: David chose both options, faults first, with a PostgreSQL of the suite's own and a proxy in Ruby.
 - 2026-11-12: Done. `bin/faults` found 500s on a lost database connection (fixed: `DatabaseUnreachable`, 503) and writes that were not safe to send again (fixed: ADR 0015).
 - 2026-11-13: `bin/faults` found a close sent again after a settlement answered 400 for a close that was saved (#280). David chose option 1: on a settled meal, a write that sends the value the meal already has is answered as saved. It also found that its own settler ran at READ COMMITTED; fixed in the suite.
+- 2026-11-13: David decided the Idempotency-Key stays optional for now. A page loaded before keys were added sends none, so requiring one would refuse those pages' writes. To look at again once every phone has loaded a newer page.
