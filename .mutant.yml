@@ -180,6 +180,7 @@ matcher:
     - AdminUsers::PasswordsController*
     - MealStatusActions*
     - AttendanceVersionCheck*
+    - SettledSameValue*
     - RefusedDestroyMessage*
     - SuperuserAdapter*
     - Api::V1::CommonHouseReservationsController*

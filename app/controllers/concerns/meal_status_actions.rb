@@ -6,10 +6,15 @@
 # set one true-or-false value under the meal lock. Included in
 # Api::V1::MealsController, whose before_actions find the meal and
 # refuse a settled one; what it provides (meal, render_refused,
-# render_write_under_lock) is declared in sorbet/rbi/shims/concerns.rbi.
+# render_write_under_lock) is declared in
+# sorbet/rbi/shims/concerns.rbi.
 module MealStatusActions
   extend ActiveSupport::Concern
   extend T::Sig
+  # On a settled meal, a close or a cancel that sends the value the meal
+  # already has is answered as saved (#280). Included here, so the
+  # controller gets it with this concern; its own checks use it too.
+  include SettledSameValue
 
   # A filter of its own name, not reject_if_reconciled: Rails replaces a
   # before_action given the same method again, so naming that one here
@@ -29,9 +34,8 @@ module MealStatusActions
     flags = TrueOrFalse.from_params(params, %i[closed], required: true)
     return render_refused(flags) if flags.is_a?(String)
 
-    render_write_under_lock do
+    render_same_value_write({ json: { message: 'Meal closed value updated.' } }) do
       meal.update!(closed: flags.fetch(:closed))
-      { json: { message: 'Meal closed value updated.' } }
     end
   end
 
@@ -40,16 +44,16 @@ module MealStatusActions
   # can sign people up can do it, like closing a meal. A dinner a cook
   # spent money on is refused with a sentence (Meal#cancel!). Sending
   # the state it is in already changes nothing, so a second tap or a
-  # retry after a lost answer is not an error.
+  # retry after a lost answer is not an error, on a settled dinner too
+  # (same_value_answer, #280).
   sig { void }
   def update_cancelled
     flags = TrueOrFalse.from_params(params, %i[cancelled], required: true)
     return render_refused(flags) if flags.is_a?(String)
 
     cancel = flags.fetch(:cancelled)
-    render_write_under_lock do
+    render_same_value_write({ json: { message: cancel ? 'Dinner cancelled.' : 'Dinner restored.' } }) do
       cancel ? meal.cancel! : meal.restore!
-      { json: { message: cancel ? 'Dinner cancelled.' : 'Dinner restored.' } }
     end
   end
 

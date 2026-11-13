@@ -20,62 +20,6 @@
          { json: { message: "MealResident updated.", attendance_version: attendance_version_now } }
        }
      end
-- subject: Api::V1::MealsController#update_description
-  kind: same-answer
-  why: >-
-    params[:description] comes from the JSON parser or Rack's form parser, which give a plain String, never a subclass,
-    so instance_of? and is_a? agree.
-  diff: |
-    @@ -1,10 +1,10 @@
-     def update_description
-       description = params[:description]
-    -  unless description.is_a?(String)
-    +  unless description.instance_of?(String)
-         return render_refused("Send the description as text.")
-       end
-       render_write_under_lock {
-         meal.update!(description:)
-         { json: { message: "Description updated." } }
-       }
-     end
-- subject: Api::V1::MealsController#update_max
-  kind: same-answer
-  why: update_max returns early unless params.key?(:max), so the key is there and fetch never raises.
-  diff: |
-    @@ -1,13 +1,13 @@
-     def update_max
-       unless params.key?(:max)
-         return render_refused("Send max: a number, or null to remove the cap.")
-       end
-       render_write_under_lock {
-         if !meal.closed? && params[:max].present?
-           { json: { message: "Meal is open. A cap can only be set on a closed meal." }, status: :bad_request }
-         else
-    -      meal.update!(max: params[:max])
-    +      meal.update!(max: params.fetch(:max))
-           { json: { message: "Meal max value updated." } }
-         end
-       }
-     end
-- subject: Api::V1::MealsController#update_max
-  kind: same-answer
-  why: update_max returns early unless params.key?(:max), so the key is there and fetch never raises.
-  diff: |
-    @@ -1,13 +1,13 @@
-     def update_max
-       unless params.key?(:max)
-         return render_refused("Send max: a number, or null to remove the cap.")
-       end
-       render_write_under_lock {
-    -    if !meal.closed? && params[:max].present?
-    +    if !meal.closed? && params.fetch(:max).present?
-           { json: { message: "Meal is open. A cap can only be set on a closed meal." }, status: :bad_request }
-         else
-           meal.update!(max: params[:max])
-           { json: { message: "Meal max value updated." } }
-         end
-       }
-     end
 - subject: Api::V1::MealsController#update_bills
   kind: same-answer
   why: >-
@@ -190,5 +134,64 @@
     +    meal_resident = meal.meal_residents.find_or_initialize_by(resident_id: params.fetch(:resident_id))
          meal_resident.update!(flags)
          { json: MealResidentSerializer.new(meal_resident, params: { attendance_version: attendance_version_now }) }
+       }
+     end
+- subject: Api::V1::MealsController#update_description
+  kind: same-answer
+  why: >-
+    params[:description] comes from the JSON parser or Rack's form parser, which give a plain String, never a subclass,
+    so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,9 +1,9 @@
+     def update_description
+       description = params[:description]
+    -  unless description.is_a?(String)
+    +  unless description.instance_of?(String)
+         return render_refused("Send the description as text.")
+       end
+       render_same_value_write({ json: { message: "Description updated." } }) {
+         meal.update!(description:)
+       }
+     end
+- subject: Api::V1::MealsController#update_max
+  kind: same-answer
+  why: >-
+    update_max returns early unless params.key?(:max), so the key is there and fetch never raises.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def update_max
+       unless params.key?(:max)
+         return render_refused("Send max: a number, or null to remove the cap.")
+       end
+       answer = { json: { message: "Meal max value updated." } }
+       render_write_under_lock(before_settled_check: same_value_answer(answer)) {
+         if !meal.closed? && params[:max].present?
+           { json: { message: "Meal is open. A cap can only be set on a closed meal." }, status: :bad_request }
+         else
+    -      meal.update!(max: params[:max])
+    +      meal.update!(max: params.fetch(:max))
+           answer
+         end
+       }
+     end
+- subject: Api::V1::MealsController#update_max
+  kind: same-answer
+  why: >-
+    update_max returns early unless params.key?(:max), so the key is there and fetch never raises.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def update_max
+       unless params.key?(:max)
+         return render_refused("Send max: a number, or null to remove the cap.")
+       end
+       answer = { json: { message: "Meal max value updated." } }
+       render_write_under_lock(before_settled_check: same_value_answer(answer)) {
+    -    if !meal.closed? && params[:max].present?
+    +    if !meal.closed? && params.fetch(:max).present?
+           { json: { message: "Meal is open. A cap can only be set on a closed meal." }, status: :bad_request }
+         else
+           meal.update!(max: params[:max])
+           answer
+         end
        }
      end

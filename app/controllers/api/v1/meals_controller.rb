@@ -213,9 +213,8 @@ module Api
         description = params[:description]
         return render_refused('Send the description as text.') unless description.is_a?(String)
 
-        render_write_under_lock do
+        render_same_value_write({ json: { message: 'Description updated.' } }) do
           meal.update!(description: description)
-          { json: { message: 'Description updated.' } }
         end
       end
 
@@ -234,13 +233,14 @@ module Api
         # remove a cap.
         return render_refused('Send max: a number, or null to remove the cap.') unless params.key?(:max)
 
-        render_write_under_lock do
+        answer = { json: { message: 'Meal max value updated.' } }
+        render_write_under_lock(before_settled_check: same_value_answer(answer)) do
           if !meal.closed? && params[:max].present?
             { json: { message: 'Meal is open. A cap can only be set on a closed meal.' },
               status: :bad_request }
           else
             meal.update!(max: params[:max])
-            { json: { message: 'Meal max value updated.' } }
+            answer
           end
         end
       end
@@ -307,8 +307,9 @@ module Api
       # through here, so a new one cannot skip the lock (AGENTS.md, money
       # rule 9) or answer a refusal with a 500.
       #
-      # before_settled_check is with_meal_lock's: only a guest add passes
-      # one.
+      # before_settled_check is with_meal_lock's: a guest add passes one,
+      # and so do the close, the cancel, the description and the cap
+      # (same_value_answer).
       #
       # The write runs in `keyed` (KeyedWrites): for a guest remove sent
       # with an Idempotency-Key, the key's row is written in the same
@@ -470,7 +471,8 @@ module Api
 
       sig { void }
       def reject_if_reconciled
-        return unless meal.reconciled?
+        # A settled meal sent the value it already has goes on (SettledSameValue).
+        return if !meal.reconciled? || sends_what_the_meal_has?
 
         render(**reconciled_rejection)
       end
@@ -518,10 +520,13 @@ module Api
       #
       # before_settled_check runs under the lock, before reconciled?, in
       # each try. When it returns an answer, that is the answer, and the
-      # block does not run. It is nil for every write but a bills save and
-      # a guest add: a save or an add whose first try was written is
-      # answered as already made, even when the meal was settled after
-      # that try (seen_bills_key_answer, seen_guest_key_answer).
+      # block does not run. A bills save and a guest add pass one: a save
+      # or an add whose first try was written is answered as already made,
+      # even when the meal was settled after that try
+      # (seen_bills_key_answer, seen_guest_key_answer). The close, the
+      # cancel, the description and the cap pass one too: on a settled
+      # meal, the value it already has is answered as saved
+      # (same_value_answer). Every other write passes nil.
       #
       # At SERIALIZABLE, PostgreSQL can refuse this transaction even though
       # the lock was granted: the lock orders two writers on the same meal,

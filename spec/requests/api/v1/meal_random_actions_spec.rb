@@ -13,7 +13,8 @@ require Rails.root.join('spec/support/oracle/plain_ledger')
 #      changed exactly what it said;
 #   3. the ledger: the meal's lines sum to zero and agree with the plain
 #      ledger, and once settled the stored charges agree too and every
-#      later write is refused.
+#      later change is refused (a close, a reopen or a cap that sends what
+#      the meal has is answered as saved, #280).
 #
 # The rules the model encodes are the ones in the concerns:
 # ClosedMealAttendanceFreeze (no new attendance on a closed meal unless a
@@ -220,7 +221,10 @@ RSpec.describe 'random action sequences against one meal, through the API' do
   def close(model, _rng)
     status, = request(:patch, "/api/v1/meals/#{meal.id}/closed", residents.first, closed: true)
     if model[:settled]
-      expect(status).to eq(400), "#{where}: closing after settlement answered #{status}"
+      # A settled meal refuses a change, and answers a close of a closed
+      # meal as saved: it changes nothing (#280).
+      expected = model[:closed] ? 200 : 400
+      expect(status).to eq(expected), "#{where}: closing after settlement answered #{status}"
     else
       expect(status).to eq(200), "#{where}: closing answered #{status}"
       unless model[:closed]
@@ -233,7 +237,8 @@ RSpec.describe 'random action sequences against one meal, through the API' do
   def reopen(model, _rng)
     status, = request(:patch, "/api/v1/meals/#{meal.id}/closed", residents.first, closed: false)
     if model[:settled]
-      expect(status).to eq(400), "#{where}: reopening after settlement answered #{status}"
+      expected = model[:closed] ? 400 : 200
+      expect(status).to eq(expected), "#{where}: reopening after settlement answered #{status}"
     else
       expect(status).to eq(200), "#{where}: reopening answered #{status}"
       model[:closed] = false
@@ -245,7 +250,8 @@ RSpec.describe 'random action sequences against one meal, through the API' do
     max = rng.rand(0..8)
     status, = request(:patch, "/api/v1/meals/#{meal.id}/max", residents.first, max: max)
     if model[:settled]
-      expect(status).to eq(400), "#{where}: max after settlement answered #{status}"
+      expected = max == model[:max] ? 200 : 400
+      expect(status).to eq(expected), "#{where}: max #{max} after settlement answered #{status}"
     elsif !model[:closed] || max < attendees_count(model)
       expect(status).to eq(400), "#{where}: max #{max} on an open or fuller meal answered #{status}"
     else

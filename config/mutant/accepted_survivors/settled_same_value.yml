@@ -1,0 +1,113 @@
+---
+- subject: SettledSameValue#sends_what_the_meal_has?
+  kind: same-answer
+  why: >-
+    Without the else the case answers nil, and nil does what false does in both callers: reject_if_reconciled and
+    same_value_answer only test the answer with || or if.
+  diff: |
+    @@ -1,14 +1,12 @@
+     def sends_what_the_meal_has?
+       case action_name
+       when "update_closed"
+         sent_flag(:closed) == meal.closed
+       when "update_cancelled"
+         sent_flag(:cancelled) == meal.cancelled?
+       when "update_description"
+         params[:description] == meal.description
+       when "update_max"
+         params.key?(:max) && sent_max == meal.max
+    -  else
+    -    false
+       end
+     end
+- subject: SettledSameValue#sent_flag
+  kind: same-answer
+  why: >-
+    The if/else and the unless give the same answers: nil for a String, flags[name] for a Hash.
+  diff: |
+    @@ -1,8 +1,6 @@
+     def sent_flag(name)
+       flags = TrueOrFalse.from_params(params, [name], required: true)
+    -  if flags.is_a?(String)
+    -    nil
+    -  else
+    +  unless flags.is_a?(String)
+         flags[name]
+       end
+     end
+- subject: SettledSameValue#sent_flag
+  kind: same-answer
+  why: >-
+    With required: true, TrueOrFalse answers a String unless the key is there, so a Hash always has the key and fetch
+    never raises.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def sent_flag(name)
+       flags = TrueOrFalse.from_params(params, [name], required: true)
+       if flags.is_a?(String)
+         nil
+       else
+    -    flags[name]
+    +    flags.fetch(name)
+       end
+     end
+- subject: SettledSameValue#sent_flag
+  kind: same-answer
+  why: >-
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass of
+    String, so instance_of? and is_a? agree.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def sent_flag(name)
+       flags = TrueOrFalse.from_params(params, [name], required: true)
+    -  if flags.is_a?(String)
+    +  if flags.instance_of?(String)
+         nil
+       else
+         flags[name]
+       end
+     end
+- subject: SettledSameValue#sent_flag
+  kind: same-answer
+  why: >-
+    With the key missing, required: true answers a String, so sent_flag answers nil; required: false answers a Hash
+    without the value, so flags[name] is nil too. With the key there, both answer the same Hash.
+  diff: |
+    @@ -1,8 +1,8 @@
+     def sent_flag(name)
+    -  flags = TrueOrFalse.from_params(params, [name], required: true)
+    +  flags = TrueOrFalse.from_params(params, [name], required: false)
+       if flags.is_a?(String)
+         nil
+       else
+         flags[name]
+       end
+     end
+- subject: SettledSameValue#sent_max
+  kind: same-answer
+  why: >-
+    The symbol only has to be unequal to meal.max, which is an Integer or nil. Any other symbol does the same.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def sent_max
+       sent = params[:max]
+       if sent.blank?
+         return nil
+       end
+    -  T.let(Kernel.Integer(sent.to_s, 10, exception: false), T.nilable(Integer)) || :unreadable
+    +  T.let(Kernel.Integer(sent.to_s, 10, exception: false), T.nilable(Integer)) || :unreadable__mutant__
+     end
+- subject: SettledSameValue#sent_max
+  kind: same-answer
+  why: >-
+    sends_what_the_meal_has? calls sent_max only after params.key?(:max), so the key is there and fetch never raises.
+  diff: |
+    @@ -1,7 +1,7 @@
+     def sent_max
+    -  sent = params[:max]
+    +  sent = params.fetch(:max)
+       if sent.blank?
+         return nil
+       end
+       T.let(Kernel.Integer(sent.to_s, 10, exception: false), T.nilable(Integer)) || :unreadable
+     end

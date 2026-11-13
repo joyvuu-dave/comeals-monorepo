@@ -196,6 +196,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/meals_controller_spec.rb' =>
     %w[Api::V1::MealsController MealStatusActions AuditDescription MealFormSerializer MealCostSummary Meal
        MealResident Guest TrueOrFalse GuestAdd],
+  # A settled meal sent the value it already has (#280).
+  'spec/requests/api/v1/settled_meal_same_value_spec.rb' =>
+    %w[SettledSameValue Api::V1::MealsController MealStatusActions TrueOrFalse],
   'spec/requests/api/v1/meals_refused_writes_spec.rb' =>
     %w[Api::V1::MealsController ReconciledMealImmutability ClosedMealAttendanceFreeze],
   'spec/requests/api/v1/meals_unknown_resident_spec.rb' => %w[Api::V1::MealsController],

@@ -88,6 +88,22 @@ The first runs, on 2026-11-12:
    deleted. Fixed: ADR 0015, an optional `Idempotency-Key` on the calendar
    writes, a guest remove and a settle.
 
+Later runs, on 2026-11-13:
+
+3. **A close sent again after a settlement was refused.** The first
+   close was saved and its answer lost, a settlement settled the dinner,
+   and the second close was answered 400 "already been reconciled".
+   Fixed (#280): on a settled meal, a close, a cancel, a description or
+   a cap that sends the value the meal already has is answered as saved
+   (`app/controllers/concerns/settled_same_value.rb`).
+4. **The suite's own settler ran at READ COMMITTED.** The rake process
+   connected with only a URL, which dropped `config/database.yml`'s
+   `variables:` block, so a settlement there claimed a dinner from an
+   old read of its costs and settled a blank cost. The app connects with
+   the full configuration and never settles like this. Fixed in the
+   suite: `Faults::Session` connects with the app's own settings and
+   refuses to run unless its sessions are SERIALIZABLE.
+
 The money rules held through every fault in every run.
 
 ## When it fails

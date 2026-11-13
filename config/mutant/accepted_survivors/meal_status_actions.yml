@@ -2,28 +2,27 @@
 - subject: MealStatusActions#update_closed
   kind: same-answer
   why: >-
-    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass
-    of String, so instance_of? and is_a? agree.
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass of
+    String, so instance_of? and is_a? agree.
   diff: |
-    @@ -1,10 +1,10 @@
+    @@ -1,9 +1,9 @@
      def update_closed
        flags = TrueOrFalse.from_params(params, [:closed], required: true)
     -  if flags.is_a?(String)
     +  if flags.instance_of?(String)
          return render_refused(flags)
        end
-       render_write_under_lock {
+       render_same_value_write({ json: { message: "Meal closed value updated." } }) {
          meal.update!(closed: flags.fetch(:closed))
-         { json: { message: "Meal closed value updated." } }
        }
      end
 - subject: MealStatusActions#update_cancelled
   kind: same-answer
   why: >-
-    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass
-    of String, so instance_of? and is_a? agree.
+    TrueOrFalse.from_params answers a plain Hash or a String it builds with interpolation and join. Never a subclass of
+    String, so instance_of? and is_a? agree.
   diff: |
-    @@ -1,19 +1,19 @@
+    @@ -1,18 +1,18 @@
      def update_cancelled
        flags = TrueOrFalse.from_params(params, [:cancelled], required: true)
     -  if flags.is_a?(String)
@@ -31,16 +30,15 @@
          return render_refused(flags)
        end
        cancel = flags.fetch(:cancelled)
-       render_write_under_lock {
+       render_same_value_write({ json: { message: if cancel
+         "Dinner cancelled."
+       else
+         "Dinner restored."
+       end } }) {
          if cancel
            meal.cancel!
          else
            meal.restore!
          end
-         { json: { message: if cancel
-           "Dinner cancelled."
-         else
-           "Dinner restored."
-         end } }
        }
      end

@@ -133,6 +133,25 @@ module MealStatusActions
     params(before_settled_check: T.untyped, blk: T.proc.returns(T::Hash[Symbol, T.untyped])).void
   end
   def render_write_under_lock(before_settled_check: nil, &blk); end
+
+  sig { params(answer: T::Hash[Symbol, T.untyped], write: T.proc.void).void }
+  def render_same_value_write(answer, &write); end
+end
+
+module SettledSameValue
+  sig { returns(ActionController::Parameters) }
+  def params; end
+
+  sig { returns(Meal) }
+  def meal; end
+
+  sig { returns(String) }
+  def action_name; end
+
+  sig do
+    params(before_settled_check: T.untyped, blk: T.proc.returns(T::Hash[Symbol, T.untyped])).void
+  end
+  def render_write_under_lock(before_settled_check: nil, &blk); end
 end
 
 module AttendanceVersionCheck

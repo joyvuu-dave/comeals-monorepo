@@ -96,6 +96,16 @@ is answered 409 "stale", and the page loads the meal again. The storm
 client sends no version, like a page from before ADR 0012, so the fault
 report leaves those routes out.
 
+### Why not a key on a meal's close, cancel, description and cap
+
+Each of these sets one value. A second send sets the same value again,
+which changes nothing, so it needs no key. The one case where the second
+send was answered differently is a settled meal, which refuses every
+change: a close saved, its answer lost, the dinner settled, and the close
+sent again was refused (#280). On a settled meal, a request that sends
+the value the meal already has is now answered as saved
+(`app/controllers/concerns/settled_same_value.rb`).
+
 ### Why not a table per write
 
 A bills save and a guest add each keep extra columns that their answers
