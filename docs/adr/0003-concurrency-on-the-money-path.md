@@ -302,6 +302,18 @@ was missed until 2026-10-16; see "The other order" above._)
    as a plain read leaves a live race in that direction; that is not a
    deduction, it is what happened on the first attempt.
 
+   _Amended 2026-11-13: "each alone is proven not to close the hole" was
+   true of the trigger as it was then, which only read the meal row
+   (`FOR KEY SHARE`). Since 2026-10-16 the trigger updates the meal row,
+   and at SERIALIZABLE that alone closes it:
+   `spec/db/settlement_without_its_lock_spec.rb` takes the settlement's
+   `FOR UPDATE` out and the ledger stays right, and with the old
+   read-only trigger every example fails (the TLA+ model in
+   `docs/models.md` finds the same). The settlement lock stays: it turns
+   a conflict and a retry into a short wait. The compare-and-swap stays
+   too: a settlement run at READ COMMITTED needs it so it cannot claim a
+   meal twice._
+
 2. **Do not adopt `SERIALIZABLE`.** Issue #43 calls it "the single largest
    available upgrade." It is not, because of a detail the issue misses:
    **Postgres SSI only detects conflicts among transactions that are all

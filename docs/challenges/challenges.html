@@ -1757,7 +1757,7 @@ UNIQUE (idempotency_key)</pre>
 <span id="label-The+case+that+breaks+it" class="legacy-anchor"></span>
 <h3>The case that breaks it</h3>
 
-<p>The race specs try a few orders on purpose. ADR 0003 records that the settlement lock and the trigger were each tried alone and neither one worked; it took all three pieces. A fourth piece, or a change to one, could open an order no spec tries.</p>
+<p>The race specs try a few orders on purpose. ADR 0003 records that the settlement lock and the trigger were each tried alone and neither one worked, with the trigger of that time; it took all three pieces. A fourth piece, or a change to one, could open an order no spec tries.</p>
 
 <span id="label-Where+we+stand" class="legacy-anchor"></span>
 <h3>Where we stand</h3>
@@ -1768,7 +1768,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p><code>models/MealSettlement.tla</code> is today’s protocol: one or two settlements, an API writer, an admin form and a psql writer at READ COMMITTED, with the settlement lock, the compare-and-swap and the trigger each a switch. TLC finds that a settled dinner’s rows never change and that a dinner is settled once. It finds a failing order when the trigger is taken away, when it is the <code>FOR KEY SHARE</code> trigger from before 2026-10-16, or when it looks only at <code>NEW.meal_id</code>, and when the compare-and-swap is taken away from settlements run at READ COMMITTED.</p>
 </li><li>
-<p>At SERIALIZABLE the model needs only the trigger for these two properties; the settlement lock and the compare-and-swap are not needed for them. ADR 0003 says the lock and the trigger each failed alone, but that test used the old <code>FOR KEY SHARE</code> trigger. <code>spec/db/settlement_without_its_lock_spec.rb</code> confirms this against a real PostgreSQL (2026-11-13): with the settlement’s <code>FOR UPDATE</code> taken out, a raw write before or after the claim still leaves the stored balances matching the rows, and with the <code>FOR KEY SHARE</code> trigger every example fails.</p>
+<p>At SERIALIZABLE the model needs only the trigger for these two properties; the settlement lock and the compare-and-swap are not needed for them. ADR 0003 said the lock and the trigger each failed alone, but that test used the old <code>FOR KEY SHARE</code> trigger; its amendment of 2026-11-13 says so. <code>spec/db/settlement_without_its_lock_spec.rb</code> confirms this against a real PostgreSQL (2026-11-13): with the settlement’s <code>FOR UPDATE</code> taken out, a raw write before or after the claim still leaves the stored balances matching the rows, and with the <code>FOR KEY SHARE</code> trigger every example fails.</p>
 </li><li>
 <p><code>models/SerializableOnly.tla</code> is challenge 2, option A, and <code>models/MealEventList.tla</code> is challenge 3. Each holds with the guarantees that design names, and fails without the one piece the design depends on.</p>
 </li><li>
