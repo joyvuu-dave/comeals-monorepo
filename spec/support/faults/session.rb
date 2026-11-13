@@ -27,6 +27,7 @@ module Faults
     end
 
     def call
+      print_threads_on_usr1
       @server = Faults::Server.new(directory: @root.join('server'))
       @server.start
       @server.create_database('comeals_faults', schema: Rails.root.join('db/structure.sql'))
@@ -41,6 +42,19 @@ module Faults
     end
 
     private
+
+    # kill -USR1 <pid> prints where every thread of this process is. The
+    # spec sends it to a run that went on too long, before it stops it.
+    # The printing runs in a thread of its own, because a signal handler
+    # cannot take the lock that writing to the output needs.
+    def print_threads_on_usr1
+      Signal.trap('USR1') do
+        Thread.new do
+          Thread.list.each { |thread| @out.puts("--- #{thread.inspect}", thread.backtrace&.first(30)) }
+          @out.flush
+        end
+      end
+    end
 
     # The port is read into a local: "#{@proxy" right after the host
     # looks like a user, password and host to gitleaks.

@@ -14,9 +14,13 @@ RSpec.describe 'bin/faults' do
   # it, with nothing in the log to say where.
   let(:limit) { 300 }
 
-  # Interrupt first, so the run's own ensure stops its Puma and its
-  # PostgreSQL; then kill whatever of the process group is left.
+  # First ask the run to print where each of its threads is
+  # (Session#print_threads_on_usr1). Then interrupt it, so its own ensure
+  # stops its Puma and its PostgreSQL; then kill whatever of the process
+  # group is left.
   def stop(waiter)
+    Process.kill('USR1', waiter.pid)
+    sleep 2
     Process.kill('INT', waiter.pid)
     return if waiter.join(30)
 
