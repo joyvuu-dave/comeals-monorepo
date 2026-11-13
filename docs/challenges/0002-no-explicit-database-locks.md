@@ -4,7 +4,7 @@ title: Keep every guarantee with no database locks we take ourselves
 area: concurrency
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-12
 watches:
   - app/models/concerns/locks_its_meal_first.rb
   - docs/adr/0003-concurrency-on-the-money-path.md
@@ -39,6 +39,8 @@ The app protects these rules with four pieces (`docs/adr/0003-concurrency-on-the
 4. The trigger `comeals_reject_settled_child_write` (in `db/structure.sql`) writes the meal row on every child write. So a transaction that read that row earlier, even in psql, now conflicts with the write.
 
 The whole app runs at SERIALIZABLE (`docs/adr/0005-serializable-by-default.md`). The specs that pin the races: `spec/db/settlement_race_spec.rb`, `spec/db/settlement_after_a_raw_write_race_spec.rb`, `spec/db/cancel_against_a_cost_race_spec.rb`.
+
+A TLA+ model of option A, `models/SerializableOnly.tla` (challenge 28, `docs/models.md`), finds that a settled dinner keeps its rows when every writer is SERIALIZABLE and a trigger only reads the meal row, and that a psql writer breaks it when there is no check in the database.
 
 Together they make sure:
 

@@ -19,6 +19,7 @@ bin/check                  # Full health check: tests, linters, security, freshn
 bin/mutant                 # Mutation testing: one class or one stage here; every class is the Mutant workflow (Saturdays), changed methods are CI's mutant-changed job (not in bin/check). Every survivor must be in config/mutant/accepted_survivors/ with its reason (docs/mutation-testing.md)
 bin/storm                  # Real-server concurrency storm: many Puma threads, many clients (not in bin/check; docs/concurrency-testing.md)
 bin/dafny-verify           # Check the Dafny proofs of the money rules in proofs/ (a bin/check step; docs/proofs.md)
+bin/tla-check              # Check the TLA+ models of the concurrency rules in models/ (a bin/check step; docs/models.md)
 ```
 
 ### Local URLs

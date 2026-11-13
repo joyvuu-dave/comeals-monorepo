@@ -509,6 +509,28 @@ check_dafny() {
   fi
 }
 
+# The TLA+ models in models/ (docs/models.md). bin/tla-check downloads
+# the pinned TLC on its first run, and fails when any case does not give
+# the result its first line expects, including a case that must fail.
+check_tla() {
+  step "TLA+ models"
+
+  local output exit_code=0
+  output=$(bin/tla-check 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -oE '^[0-9]+ cases gave the result they expect' | tail -n 1)
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary"
+    record "TLA+ models" "PASS" "$summary"
+  else
+    fail "Not every case gave the result it expects"
+    echo "$output" | tail -n 30
+    record "TLA+ models" "FAIL" "see bin/tla-check"
+  fi
+}
+
 check_bundle_budget() {
   step "Bundle budget"
 
@@ -997,6 +1019,7 @@ main() {
   check_sorbet
   check_rbi_fresh
   check_dafny
+  check_tla
   check_prettier
   check_todo_markers
   check_app_zone_dates

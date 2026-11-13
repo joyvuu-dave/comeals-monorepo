@@ -74,6 +74,8 @@ Settlement becomes one small step per dinner: append "settled at position 37" at
 
 **What we would lose:** today the database refuses a bad write from anyone, including a person in psql. Under this design only writes through the app follow the rules. That becomes finding the problem afterwards: each event stores a hash of the one before it in its dinner's list, and the daily ledger check verifies the hashes and recomputes everything. A portable design can only use what every database guarantees, and "refuse a bad write from any source" is not on that list.
 
+A TLA+ model of this design, `models/MealEventList.tla` (challenge 28, `docs/models.md`), assumes only that a transaction is all or nothing and that a unique index refuses a second row. With the unique index on `(meal_id, position)`, the settled event is always the last one of its dinner and is never written twice; without it, a sign-up can take the same position as the settlement.
+
 **How to show it works:** run `spec/concurrency/` and `bin/storm` on every database (PostgreSQL, MySQL with both adapters, MariaDB, a 3-node Galera cluster, SQLite). Stop a Galera node while writes run. And write a TLA+ model that assumes only the three guarantees above (challenge 28).
 
 ## Outside facts

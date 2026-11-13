@@ -76,6 +76,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
     sandbox.fake('gitleaks')
     sandbox.fake_script('bin/tapioca')
     sandbox.fake_script('bin/dafny-verify', "echo 'Dafny program verifier finished with 4 verified, 0 errors'")
+    sandbox.fake_script('bin/tla-check', "echo '14 cases gave the result they expect.'")
     sandbox.fake_script('bin/bundle-budget', "echo 'ok     first load: 180.7 KB gzipped (budget 190 KB)'")
     sandbox.fake_script('bin/npm-audit', "echo 'no vulnerabilities'")
     sandbox.fake_script('bin/visual-coverage', "echo 'Markup branches : 100%'")
@@ -130,6 +131,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
                               '    ✓  Sorbet               no type errors',
                               '    ✓  RBI files            up to date',
                               '    ✓  Dafny proofs         4 verified, 0 errors',
+                              '    ✓  TLA+ models          14 cases gave the result they expect',
                               '    ✓  Prettier             all formatted',
                               '    ✓  TODO markers         none in money-path code',
                               '    ✓  App-zone dates       none outside Community#today',
@@ -159,8 +161,8 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
         'ruby -e print RUBY_VERSION', 'curl -sf https://endoflife.date/api/ruby/4.0.json',
         'curl -sf https://endoflife.date/api/nodejs/24.json',
         'bundle exec rubycritic app lib --no-browser --format console --minimum-score 80',
-        'bin/tapioca gem --verify', 'bin/tapioca dsl --verify', 'bin/dafny-verify', 'bin/bundle-budget',
-        'gitleaks git . --no-banner --redact', 'bin/visual-coverage', 'bin/test-integration'
+        'bin/tapioca gem --verify', 'bin/tapioca dsl --verify', 'bin/dafny-verify', 'bin/tla-check',
+        'bin/bundle-budget', 'gitleaks git . --no-banner --redact', 'bin/visual-coverage', 'bin/test-integration'
       )
       debride = sandbox.calls_to('bundle').find { |call| call.args[1] == 'debride' }
       expect(debride.args[2..4]).to eq(['--rails', '--whitelist', debride.args[4]])
@@ -454,6 +456,20 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
       result = run_check
 
       expect(summary_line(result.output, 'Dafny proofs')).to eq('✗  Dafny proofs         did not run')
+    end
+
+    it 'fails when a model case does not give the result it expects, and shows what bin/tla-check said' do
+      sandbox.fake_script('bin/tla-check', <<~BASH)
+        echo 'FAIL  Settle.no-trigger (1 s): expected SettledRowsStay to fail, but: TLC exited with 1'
+        exit 1
+      BASH
+
+      result = run_check
+
+      expect(step_output(result.output, 'TLA+ models'))
+        .to eq("==> TLA+ models\n    ✗ Not every case gave the result it expects\n" \
+               "FAIL  Settle.no-trigger (1 s): expected SettledRowsStay to fail, but: TLC exited with 1\n\n")
+      expect(summary_line(result.output, 'TLA+ models')).to eq('✗  TLA+ models          see bin/tla-check')
     end
   end
 

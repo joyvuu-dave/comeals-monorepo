@@ -1,0 +1,161 @@
+#!/usr/bin/env bash
+# bin/tla-check — check the TLA+ models in models/ (docs/models.md).
+#
+#   bin/tla-check              run every case in models/cases/
+#   bin/tla-check NAME ...     run only these cases, like
+#                              MealSettlement.today
+#
+# A case is a TLC config file, models/cases/<Module>.<case>.cfg. Its
+# first line says what TLC must find:
+#
+#   \* expect: holds                     every invariant holds in every
+#                                        state TLC can reach
+#   \* expect: violates SettledRowsStay  TLC finds a state where this
+#                                        invariant is false
+#
+# A case that should fail is as much a part of the check as one that
+# should hold: it shows that the piece the case removes is needed. If one
+# starts to hold, the model no longer shows that, and the run fails.
+#
+# Runs one TLC everywhere: tla2tools.jar from the TLA+ 1.7.4 release,
+# checked by its SHA-256. The first run downloads it into ~/.cache/comeals
+# (COMEALS_CACHE moves it), and every worktree shares it. Java comes from
+# JAVA if it is set, then from java on the PATH, then from Homebrew's
+# openjdk@21 (under HOMEBREW_PREFIX, /opt/homebrew when it is not set).
+
+set -euo pipefail
+
+cd "$(dirname "$0")/.."
+
+TLA_VERSION=1.7.4
+TLC_SAYS="TLC2 Version 2.19 of 08 August 2024 (rev: 5a47802)"
+# The release publishes no digest. This is the SHA-256 of the jar
+# downloaded on 2026-11-12.
+SHA256=936a262061c914694dfd669a543be24573c45d5aa0ff20a8b96b23d01e050e88
+CACHE="${COMEALS_CACHE:-$HOME/.cache/comeals}"
+HOME_DIR="$CACHE/tla-$TLA_VERSION"
+JAR="$HOME_DIR/tla2tools.jar"
+
+# Download and check the jar. Runs under the lock below, so two worktrees
+# never write it at the same moment. It downloads to a .partial file and
+# renames it when the digest is right, so a stopped run leaves no jar
+# that looks finished.
+install() {
+  [ -f "$JAR" ] && return
+  mkdir -p "$HOME_DIR"
+  echo "Downloading tla2tools.jar $TLA_VERSION into $HOME_DIR"
+  curl -sSfL -o "$JAR.partial" "https://github.com/tlaplus/tlaplus/releases/download/v$TLA_VERSION/tla2tools.jar"
+  if ! echo "$SHA256  $JAR.partial" | shasum -a 256 -c - > /dev/null; then
+    echo "bin/tla-check: tla2tools.jar does not have the pinned SHA-256. It was not kept." >&2
+    rm -f "$JAR.partial"
+    exit 1
+  fi
+  mv "$JAR.partial" "$JAR"
+}
+
+if [ "${1:-}" = "--install-under-lock" ]; then
+  install
+  exit 0
+fi
+
+# On a Mac, /usr/bin/java is on the PATH even with no Java installed, and
+# it fails when run, so each one is run once to see that it works.
+java_ok() { command -v "$1" > /dev/null && "$1" -version > /dev/null 2>&1; }
+brew_java="${HOMEBREW_PREFIX:-/opt/homebrew}/opt/openjdk@21/bin/java"
+if [ -n "${JAVA:-}" ]; then
+  java_ok "$JAVA" || { echo "bin/tla-check: JAVA=$JAVA does not run." >&2; exit 1; }
+elif java_ok java; then
+  JAVA=java
+elif java_ok "$brew_java"; then
+  JAVA=$brew_java
+else
+  echo "bin/tla-check: no Java found. Install one (brew install openjdk@21) or set JAVA." >&2
+  exit 1
+fi
+
+mkdir -p "$CACHE"
+# A kernel lock on a file, let go when its holder dies (as in
+# bin/dafny-verify).
+python3 -c 'import fcntl, subprocess, sys
+lock = open(sys.argv[1], "a")
+fcntl.flock(lock, fcntl.LOCK_EX)
+sys.exit(subprocess.call(sys.argv[2:]))' "$CACHE/tla.lock" "$0" --install-under-lock
+
+if [ "$#" -gt 0 ]; then
+  cases=()
+  for name in "$@"; do
+    [ -f "models/cases/$name.cfg" ] || { echo "bin/tla-check: there is no models/cases/$name.cfg." >&2; exit 1; }
+    cases+=("models/cases/$name.cfg")
+  done
+else
+  cases=(models/cases/*.cfg)
+fi
+
+problems=()
+
+# Every model has a case, and every case names a model that exists, so a
+# new model is never left out and a renamed one is never skipped.
+if [ "$#" -eq 0 ]; then
+  for tla in models/*.tla; do
+    module=$(basename "$tla" .tla)
+    compgen -G "models/cases/$module.*.cfg" > /dev/null || problems+=("$tla has no case in models/cases/")
+  done
+fi
+
+scratch=$(mktemp -d)
+trap 'rm -r "$scratch"' EXIT
+
+passed=0
+for cfg in "${cases[@]}"; do
+  name=$(basename "$cfg" .cfg)
+  module=${name%%.*}
+  if [ ! -f "models/$module.tla" ]; then
+    problems+=("$name: there is no models/$module.tla")
+    continue
+  fi
+
+  expect=$(head -n 1 "$cfg" | sed -nE 's/^\\\* expect: (holds|violates [A-Za-z][A-Za-z0-9]*)$/\1/p')
+  if [ -z "$expect" ]; then
+    problems+=("$name: the first line must be '\\* expect: holds' or '\\* expect: violates <Invariant>'")
+    continue
+  fi
+
+  started=$SECONDS
+  output=$(cd models && "$JAVA" -XX:+UseParallelGC -cp "$JAR" tlc2.TLC -workers auto \
+    -metadir "$scratch/$name" -config "cases/$name.cfg" "$module.tla" 2>&1) && status=0 || status=$?
+  took=$((SECONDS - started))
+
+  why=""
+  if [ "$(echo "$output" | head -n 1)" != "$TLC_SAYS" ]; then
+    why="TLC's first line is not \"$TLC_SAYS\""
+  elif [ "$expect" = holds ]; then
+    if [ "$status" -ne 0 ] || ! echo "$output" | grep -qx 'Model checking completed. No error has been found.'; then
+      found=$(echo "$output" | grep -m 1 -E '^Error:' || echo "TLC exited with $status")
+      why="expected every invariant to hold, but: $found"
+    fi
+  else
+    invariant=${expect#violates }
+    # TLC exits with 12 when it finds a state that breaks an invariant.
+    if [ "$status" -ne 12 ] || ! echo "$output" | grep -qx "Error: Invariant $invariant is violated."; then
+      found=$(echo "$output" | grep -m 1 -E '^Error:|^Model checking completed' || echo "TLC exited with $status")
+      why="expected $invariant to fail, but: $found"
+    fi
+  fi
+
+  if [ -n "$why" ]; then
+    echo "FAIL  $name ($took s): $why"
+    problems+=("$name: $why")
+  else
+    states=$(echo "$output" | grep -oE '[0-9,]+ distinct states found' | tail -n 1 | cut -d' ' -f1 || true)
+    echo "ok    $name: $expect (${states:-?} distinct states, $took s)"
+    passed=$((passed + 1))
+  fi
+done
+
+if [ "${#problems[@]}" -gt 0 ]; then
+  echo >&2
+  echo "bin/tla-check: not every case gave the result it expects:" >&2
+  printf -- '- %s\n' "${problems[@]}" >&2
+  exit 1
+fi
+echo "$passed cases gave the result they expect."

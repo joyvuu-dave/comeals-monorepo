@@ -3,6 +3,9 @@
 - **Status:** Accepted
 - **Date:** 2026-07-27
 - **Issue:** [#43](https://github.com/joyvuu-dave/comeals-monorepo/issues/43)
+- **Model:** `models/MealSettlement.tla` checks this protocol in every
+  order TLC can reach, and shows what fails with each piece taken away
+  (`docs/models.md`).
 
 ## Context
 
