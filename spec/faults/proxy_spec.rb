@@ -51,6 +51,32 @@ RSpec.describe Faults::Proxy do
     connection&.close
   end
 
+  # PostgreSQL restarting closes its end of every connection while a
+  # client waits for an answer. The client must see its connection end,
+  # as it would without the proxy. In CI (Linux) the proxy once closed
+  # its end of the client socket from one thread while the other thread
+  # was still reading it, the close never finished, and the client waited
+  # for an answer for good.
+  it 'ends the client side when the server closes its side' do
+    server = TCPServer.new('127.0.0.1', 0)
+    serving = Thread.new do
+      upstream = server.accept
+      upstream.readpartial(5)
+      upstream.close
+    end
+    other = described_class.new(upstream_port: server.addr[1])
+    client = TCPSocket.new('127.0.0.1', other.port)
+    client.write('query')
+
+    expect(client.wait_readable(5)).to be_truthy, 'the client was still waiting after 5 seconds'
+    expect(client.read).to eq('')
+  ensure
+    serving&.join(5)
+    client&.close
+    other&.stop
+    server&.close
+  end
+
   it 'counts what it cut' do
     connection = connect
     proxy.cut

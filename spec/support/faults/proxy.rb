@@ -100,8 +100,18 @@ module Faults
       close(pair) if gone
     end
 
+    # shutdown first: it ends the connection in the kernel, so the other
+    # side sees it end and the other copy thread's read returns at once.
+    # A close alone has to wake that thread first, and on Linux a thread
+    # blocked in IO.copy_stream did not wake: the close never finished,
+    # and the client waited for an answer for good.
     def close(pair)
       pair.each do |socket|
+        begin
+          socket.shutdown(Socket::SHUT_RDWR)
+        rescue IOError, SystemCallError
+          nil # already closed, or the other side is gone
+        end
         socket.close
       rescue IOError
         nil
