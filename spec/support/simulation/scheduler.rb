@@ -157,12 +157,23 @@ module Simulation
       connections&.each { |connection| pool.checkin(connection) }
     end
 
+    # Checked out, as in prepare_the_connections, while the SQL goes to them.
+    # A connection the pool counts as idle is one its reaper thread may ping
+    # at the same moment (Rails 8.1: preconnect, keep_alive), and two
+    # threads on one connection broke the run with "stream closed in
+    # another thread" (#281).
     def put_the_connections_back
-      @prepared&.each do |raw, before, others|
+      return unless @prepared
+
+      pool = ActiveRecord::Base.connection_pool
+      connections = Array.new(pool.size - 1) { pool.checkout }
+      @prepared.each do |raw, before, others|
         before.each { |name, value| raw.exec("SET #{name} = '#{value}'") }
         raw.set_notice_processor(&others)
       end
       @prepared = nil
+    ensure
+      connections&.each { |connection| pool.checkin(connection) }
     end
 
     # PostgreSQL's LOG lines come only because of client_min_messages

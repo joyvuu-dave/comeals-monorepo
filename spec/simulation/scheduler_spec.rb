@@ -137,6 +137,30 @@ RSpec.describe Simulation::Scheduler do
     expect(refused.uniq.sort).to eq([0, 1])
   end
 
+  # The scheduler sends SQL straight to each connection of the pool to set
+  # it up before a run and back after it. The pool's reaper thread pings
+  # connections the pool counts as idle (Rails 8.1: preconnect and
+  # keep_alive), and reconnects one whose ping fails. So a connection the
+  # scheduler uses must be one the pool counts as in use. If not, the ping
+  # and the scheduler use it from two threads at once: the ping fails and
+  # the reconnect closes the socket under the scheduler ("stream closed in
+  # another thread", #281), or one thread reads the other's answer and the
+  # other waits for ever.
+  it 'uses a connection of the pool directly only while the pool counts it as in use' do
+    pool = ActiveRecord::Base.connection_pool
+    used_while_idle = []
+    # rubocop:disable-next RSpec/AnyInstance -- the scheduler's SQL goes to PG::Connection, not to the adapter
+    allow_any_instance_of(PG::Connection).to receive(:exec).and_wrap_original do |original, sql, *rest|
+      adapter = pool.connections.find { |c| c.instance_variable_get(:@raw_connection).equal?(original.receiver) }
+      used_while_idle << sql if adapter && !adapter.in_use?
+      original.call(sql, *rest)
+    end
+
+    run_plain(1)
+
+    expect(used_while_idle).to be_empty
+  end
+
   it 'refuses the actor that closes a lock cycle, and the same one on every replay' do
     runs = (1..12).map { |seed| Array.new(2) { run_deadlock(seed) } }
     expect(runs).to all(satisfy { |first, second| first == second })
