@@ -51,7 +51,15 @@ namespace :test do
       clock = Faults::Clock.new(root.join('clock_offset'))
       clock.reset
 
-      ActiveRecord::Base.establish_connection(url: database_url, pool: 12)
+      # The settler, the jobs and the admin run in this process. Its
+      # connections take the app's own settings (the variables: block, so
+      # SERIALIZABLE, and the query cache off) with the proxy's address on
+      # top. A bare url: has neither, so a settlement here ran at READ
+      # COMMITTED and settled a dinner from an old read of its costs.
+      ActiveRecord::Base.establish_connection(
+        ActiveRecord::Base.connection_db_config.configuration_hash.merge(url: database_url, pool: 12)
+      )
+      TransactionIsolationCheck.verify!(ActiveRecord::Base.connection)
       Rails.cache = SolidCache::Store.new(namespace: Rails.env, expiry_method: :job)
       Pusher.define_singleton_method(:trigger) { |*_args| true }
 
