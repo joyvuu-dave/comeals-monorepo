@@ -22,7 +22,8 @@ module Simulation
   # Outside a simulation they are Ruby's own methods (Hooks, below). Not covered:
   # Process.clock_gettime (Rails times its own instrumentation with it,
   # and nothing the app decides reads it), and PostgreSQL's own clock
-  # (now(), CURRENT_TIMESTAMP), which the seed data step handles.
+  # (now(), CURRENT_TIMESTAMP), which the app never reads: every time it
+  # writes comes from Time.current (spec/db/app_clock_spec.rb).
   module Determinism
     TICK = 0.001
 

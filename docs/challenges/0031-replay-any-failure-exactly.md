@@ -4,7 +4,7 @@ title: Replay any failure exactly
 area: proof
 status: done
 opened: 2026-11-07
-reviewed: 2026-11-12
+reviewed: 2026-11-13
 watches:
   - spec/support/simulation/scheduler.rb
   - spec/support/simulation/determinism.rb
