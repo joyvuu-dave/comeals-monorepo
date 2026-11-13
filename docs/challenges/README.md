@@ -85,7 +85,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 6   | [Dates far in the future](0006-dates-far-in-the-future.md)                                             | time        | open   | 2026-11-07 |
 | 7   | [Pricing rules that change over time](0007-rules-that-change-over-time.md)                             | money       | open   | 2026-11-11 |
 | 8   | [Birthdays on February 29](0008-february-29-birthdays.md)                                              | time        | done   | 2026-11-07 |
-| 9   | [Inflation and the limit on one bill](0009-inflation-and-the-bill-limit.md)                            | money       | open   | 2026-11-07 |
+| 9   | [Inflation and the limit on one bill](0009-inflation-and-the-bill-limit.md)                            | money       | open   | 2026-11-13 |
 | 10  | [A currency other than the US dollar](0010-a-second-currency.md)                                       | money       | open   | 2026-11-07 |
 | 11  | [The same answer after every deploy](0011-same-answer-after-every-deploy.md)                           | money       | open   | 2026-11-07 |
 | 12  | [Two residents with the same name](0012-two-residents-with-the-same-name.md)                           | people      | open   | 2026-11-07 |

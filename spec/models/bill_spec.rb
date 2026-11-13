@@ -6,6 +6,7 @@
 #
 #  id           :bigint           not null, primary key
 #  amount       :decimal(12, 8)   default(0.0), not null
+#  lock_version :integer          default(0), not null
 #  no_cost      :boolean          default(FALSE), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null
@@ -339,6 +340,33 @@ RSpec.describe Bill do
       expect(record.save).to be(false)
       expect(record.errors.full_messages).to eq(['No cost must be true or false'])
       expect(record.reload.no_cost).to eq(stored)
+    end
+  end
+
+  # Issue #274: the storm's admin read a bill, a bills save marked it No
+  # cost, and the admin's update! then wrote only the amount (dirty
+  # tracking saw no_cost unchanged). The row became No cost with an
+  # amount, and the CHECK refused it with a CheckViolation. A save from
+  # an older read is now refused by the lock_version, before any SQL
+  # reaches the CHECK, and the newer row is kept.
+  describe 'a save from an older read' do
+    let(:bill) { create(:bill, amount: 12, no_cost: false) }
+
+    it 'is refused as stale, and the newer row is kept' do
+      old_read = described_class.find(bill.id)
+      described_class.find(bill.id).update!(amount: 0, no_cost: true)
+
+      expect { old_read.update!(amount: BigDecimal('89.15'), no_cost: false) }
+        .to raise_error(ActiveRecord::StaleObjectError)
+      expect(bill.reload.slice(:amount, :no_cost)).to eq('amount' => BigDecimal('0'), 'no_cost' => true)
+    end
+
+    it 'is refused when it would delete the bill' do
+      old_read = described_class.find(bill.id)
+      described_class.find(bill.id).update!(amount: 30)
+
+      expect { old_read.destroy! }.to raise_error(ActiveRecord::StaleObjectError)
+      expect(described_class.exists?(bill.id)).to be(true)
     end
   end
 end

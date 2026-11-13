@@ -857,6 +857,7 @@ CREATE TABLE public.bills (
     no_cost boolean DEFAULT false NOT NULL,
     resident_id bigint NOT NULL,
     updated_at timestamp without time zone NOT NULL,
+    lock_version integer DEFAULT 0 NOT NULL,
     CONSTRAINT bills_amount_non_negative CHECK ((amount >= (0)::numeric)),
     CONSTRAINT bills_amount_whole_cents CHECK ((amount = round(amount, 2))),
     CONSTRAINT bills_no_cost_means_no_amount CHECK (((NOT no_cost) OR (amount = (0)::numeric)))
@@ -4542,6 +4543,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261113160000'),
 ('20261112180000'),
 ('20261111120000'),
 ('20261106120000'),

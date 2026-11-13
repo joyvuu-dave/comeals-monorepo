@@ -79,11 +79,16 @@ module Storm
     QUEUED_JOBS = (JOBS + [SendMissedSettlementMailJob]).freeze
 
     # What an unlocked admin write may end in, besides success: a rule, a
-    # unique index, a guard, the settled-meal trigger, a conflict, or a
-    # lock wait that ran out. Anything else is a problem.
+    # unique index, a guard, the settled-meal trigger, a conflict, a lock
+    # wait that ran out, or a bill that changed after it was read.
+    # Anything else is a problem.
     ADMIN_REFUSALS = [
       ActiveRecord::RecordInvalid, ActiveRecord::RecordNotUnique, ActiveRecord::RecordNotDestroyed,
-      ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout
+      ActiveRecord::TransactionRollbackError, ActiveRecord::LockWaitTimeout,
+      # The admin bill write reads the bill, then saves it in a second
+      # transaction. A client's bills save in between makes the read old,
+      # and the bill's lock_version refuses the save (#274).
+      ActiveRecord::StaleObjectError
     ].freeze
     TRIGGER_REFUSAL = /refused: meal \d+ is reconciled/
 

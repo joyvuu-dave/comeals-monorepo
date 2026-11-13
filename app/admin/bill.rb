@@ -6,7 +6,11 @@ ActiveAdmin.register Bill do
   # The cook and the meal are set on the new bill form. The edit form does
   # not send them, and a request that does is refused in words by the
   # model (Bill::COOK_AND_MEAL_FIXED), so they stay permitted here.
-  permit_params :meal_id, :resident_id, :amount, :no_cost
+  #
+  # lock_version is the version of the bill the edit form was built from
+  # (issue #274). Rails compares it with the row's when it saves, so a
+  # save from a form opened before someone else's change is refused.
+  permit_params :meal_id, :resident_id, :amount, :no_cost, :lock_version
 
   # The edit form says "delete this bill and add a new one" to fix a wrong
   # cook or meal, so the edit page offers Delete too. ActiveAdmin puts it
@@ -54,6 +58,15 @@ ActiveAdmin.register Bill do
     # docs/adr/0003-concurrency-on-the-money-path.md before touching this.
     before_action :block_if_reconciled, only: %i[edit update destroy]
 
+    # Issue #274. A cook can save this bill from the meal page while the
+    # edit form is open. The form sends the lock_version it was built
+    # from, so the save is refused (ActiveRecord::StaleObjectError, in the
+    # save's own transaction, which rolls back) instead of writing the
+    # form's values over the cook's. The edit page shows the bill as it is
+    # now. If the bill was deleted in the same moment, that page is a 404,
+    # which is also true.
+    rescue_from ActiveRecord::StaleObjectError, with: :changed_by_someone_else
+
     def scoped_collection
       # eager_load (not includes) guarantees LEFT OUTER JOINs, which is required
       # because index columns sort on associated tables: meals.date, residents.name,
@@ -65,6 +78,12 @@ ActiveAdmin.register Bill do
       end_of_association_chain
         .eager_load(:meal, :resident, resident: :unit)
         .preload(meal: %i[meal_residents guests])
+    end
+
+    def changed_by_someone_else
+      redirect_to edit_admin_bill_path(params[:id]),
+                  alert: 'Someone else changed this bill after you opened it. Nothing was saved. ' \
+                         'This form now shows the bill as it is. Make your change again.'
     end
 
     def block_if_reconciled
@@ -90,6 +109,14 @@ ActiveAdmin.register Bill do
     column :unit, sortable: 'units.name'
 
     actions
+  end
+
+  # SHOW
+  # ActiveAdmin's own show page, without lock_version (#274). That number
+  # is only for refusing a save from an old form, and means nothing to a
+  # person. The CSV and JSON downloads keep it: they are the row's data.
+  show do
+    attributes_table(*(active_admin_config.resource_columns - [:lock_version]))
   end
 
   # FORM
@@ -121,6 +148,7 @@ ActiveAdmin.register Bill do
           span "#{cook.name} - #{cook.unit.name}"
           para 'To change the cook or the meal, delete this bill and add a new one.', class: 'inline-hints'
         end
+        f.input :lock_version, as: :hidden
       end
       # The column is DECIMAL(12,8), so the raw value renders as "16.0" —
       # render it as money instead (MoneyFieldHelper). A new bill's amount

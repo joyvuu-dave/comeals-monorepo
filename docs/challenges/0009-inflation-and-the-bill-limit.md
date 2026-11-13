@@ -4,7 +4,7 @@ title: Inflation and the limit on one bill
 area: money
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-07
+reviewed: 2026-11-13
 watches:
   - app/models/bill.rb
 ---

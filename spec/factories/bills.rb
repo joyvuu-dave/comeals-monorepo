@@ -6,6 +6,7 @@
 #
 #  id           :bigint           not null, primary key
 #  amount       :decimal(12, 8)   default(0.0), not null
+#  lock_version :integer          default(0), not null
 #  no_cost      :boolean          default(FALSE), not null
 #  created_at   :datetime         not null
 #  updated_at   :datetime         not null

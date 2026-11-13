@@ -833,6 +833,51 @@ class Bill
     def id_will_change!; end
 
     sig { returns(T.nilable(::Integer)) }
+    def lock_version; end
+
+    sig { params(value: T.nilable(::Integer)).returns(T.nilable(::Integer)) }
+    def lock_version=(value); end
+
+    sig { returns(T::Boolean) }
+    def lock_version?; end
+
+    sig { returns(T.nilable(::Integer)) }
+    def lock_version_before_last_save; end
+
+    sig { returns(T.untyped) }
+    def lock_version_before_type_cast; end
+
+    sig { returns(T::Boolean) }
+    def lock_version_came_from_user?; end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def lock_version_change; end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def lock_version_change_to_be_saved; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def lock_version_changed?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(::Integer)) }
+    def lock_version_in_database; end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def lock_version_previous_change; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def lock_version_previously_changed?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable(::Integer)) }
+    def lock_version_previously_was; end
+
+    sig { returns(T.nilable(::Integer)) }
+    def lock_version_was; end
+
+    sig { void }
+    def lock_version_will_change!; end
+
+    sig { returns(T.nilable(::Integer)) }
     def meal_id; end
 
     sig { params(value: T.nilable(::Integer)).returns(T.nilable(::Integer)) }
@@ -983,6 +1028,9 @@ class Bill
     def restore_id_value!; end
 
     sig { void }
+    def restore_lock_version!; end
+
+    sig { void }
     def restore_meal_id!; end
 
     sig { void }
@@ -1023,6 +1071,12 @@ class Bill
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def saved_change_to_id_value?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
+    def saved_change_to_lock_version; end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def saved_change_to_lock_version?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
     sig { returns(T.nilable([T.nilable(::Integer), T.nilable(::Integer)])) }
     def saved_change_to_meal_id; end
@@ -1107,6 +1161,9 @@ class Bill
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def will_save_change_to_id_value?(from: T.unsafe(nil), to: T.unsafe(nil)); end
+
+    sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
+    def will_save_change_to_lock_version?(from: T.unsafe(nil), to: T.unsafe(nil)); end
 
     sig { params(from: T.untyped, to: T.untyped).returns(T::Boolean) }
     def will_save_change_to_meal_id?(from: T.unsafe(nil), to: T.unsafe(nil)); end

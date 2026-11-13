@@ -49,6 +49,7 @@ require_reconciler
 render_conflict
 render_overloaded
 redirect_after_conflict
+changed_by_someone_else
 refused_destroy_path
 # Named in an `if:` option, which debride does not read
 # (GuestRoomReservation's uniqueness rule):
