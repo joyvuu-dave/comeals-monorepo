@@ -88,10 +88,12 @@ it is not what keeps the two properties true.
 ADR 0003 says the settlement lock and the trigger "were each tested
 alone and neither works". That test was made with the `FOR KEY SHARE`
 trigger, which `trigger-key-share` shows fails. With today's trigger,
-the model says the trigger alone is enough at SERIALIZABLE. The model is
-not the database, so a spec that runs a settlement without its lock
-against a real PostgreSQL should confirm this before any document says
-it.
+the model says the trigger alone is enough at SERIALIZABLE.
+`spec/db/settlement_without_its_lock_spec.rb` checks this against a real
+PostgreSQL: it runs a settlement with its `FOR UPDATE` taken out against
+a raw READ COMMITTED write, before and after the claim, and the stored
+balances match the rows each time. With the trigger changed back to a
+`FOR KEY SHARE` read, every example fails.
 
 ### SerializableOnly: challenge 2, option A
 

@@ -42,6 +42,8 @@ The whole app runs at SERIALIZABLE (`docs/adr/0005-serializable-by-default.md`).
 
 A TLA+ model of option A, `models/SerializableOnly.tla` (challenge 28, `docs/models.md`), finds that a settled dinner keeps its rows when every writer is SERIALIZABLE and a trigger only reads the meal row, and that a psql writer breaks it when there is no check in the database.
 
+`spec/db/settlement_without_its_lock_spec.rb` runs a real settlement with piece 3's `FOR UPDATE` taken out, against a psql-like writer at READ COMMITTED. The ledger stays right: a write that commits between the settlement's snapshot and its claim makes the claim fail as a conflict, and the retry counts the write; a write that starts after the claim waits and is refused. With the trigger changed back to a read (as before 2026-10-16), all six examples fail. So at SERIALIZABLE, piece 4 alone keeps a settlement and an unlocked write from disagreeing; piece 3's lock turns the conflict into a wait.
+
 Together they make sure:
 
 - A settlement counts exactly the rows that exist.
@@ -66,3 +68,4 @@ My recommendation, if this is ever done: A first, and keep `with_meal_lock` anyw
 ## History
 
 - 2026-11-07: Opened, from a talk with the owner about what would make the locks unnecessary.
+- 2026-11-13: The owner asked for a spec that runs a settlement without its `FOR UPDATE` against real PostgreSQL, to check what the TLA+ model found. Added `spec/db/settlement_without_its_lock_spec.rb`. It agrees with the model: the trigger alone keeps the ledger right against a raw READ COMMITTED writer.
