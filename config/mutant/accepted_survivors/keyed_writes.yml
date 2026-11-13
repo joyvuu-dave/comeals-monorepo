@@ -1,0 +1,415 @@
+---
+- subject: KeyedWrites#answer_if_request_key_seen
+  kind: same-answer
+  why: >-
+    Without the return, the method goes on with @request_key = header.key, which is nil for a header that is not a key,
+    and seen_request_key answers nil for it. So nothing more is rendered or saved.
+  diff: |
+    @@ -1,15 +1,15 @@
+     def answer_if_request_key_seen
+       value = request.headers["Idempotency-Key"]
+       if value.nil?
+         return
+       end
+       header = IdempotencyKeyHeader.new(value)
+       if header.key.nil?
+    -    return render(json: { message: header.error }, status: :bad_request)
+    +    render(json: { message: header.error }, status: :bad_request)
+       end
+       @request_key = header.key
+       seen = seen_request_key
+       if seen
+         render(**seen)
+       end
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    Both sides are Strings (a SHA-256 in hex), and for Strings != and !eql? agree.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def seen_request_key
+       if @request_key.nil?
+         return nil
+       end
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+    -  if row.request_sha256 != RequestKey.request_sha256(request)
+    +  if !row.request_sha256.eql?(RequestKey.request_sha256(request))
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    With no key, RequestKey.find_by(key: nil) finds no row, because key is NOT NULL, so the method answers nil either
+    way. The check only saves the query. Both callers that can have no key (keyed and the settle action's rescues) go on
+    as for a key not seen.
+  diff: |
+    @@ -1,14 +1,12 @@
+     def seen_request_key
+    -  if @request_key.nil?
+    -    return nil
+    -  end
+    +  nil
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+       if row.request_sha256 != RequestKey.request_sha256(request)
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    With no key, RequestKey.find_by(key: nil) finds no row, because key is NOT NULL, so the method answers nil either
+    way. The check only saves the query. Both callers that can have no key (keyed and the settle action's rescues) go on
+    as for a key not seen.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def seen_request_key
+    -  if @request_key.nil?
+    +  if nil
+         return nil
+       end
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+       if row.request_sha256 != RequestKey.request_sha256(request)
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    With no key, RequestKey.find_by(key: nil) finds no row, because key is NOT NULL, so the method answers nil either
+    way. The check only saves the query. Both callers that can have no key (keyed and the settle action's rescues) go on
+    as for a key not seen.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def seen_request_key
+    -  if @request_key.nil?
+    +  if false
+         return nil
+       end
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+       if row.request_sha256 != RequestKey.request_sha256(request)
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    With no key, RequestKey.find_by(key: nil) finds no row, because key is NOT NULL, so the method answers nil either
+    way. The check only saves the query. Both callers that can have no key (keyed and the settle action's rescues) go on
+    as for a key not seen.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def seen_request_key
+    -  if @request_key.nil?
+    +  if self.nil?
+         return nil
+       end
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+       if row.request_sha256 != RequestKey.request_sha256(request)
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    With no key, RequestKey.find_by(key: nil) finds no row, because key is NOT NULL, so the method answers nil either
+    way. The check only saves the query. Both callers that can have no key (keyed and the settle action's rescues) go on
+    as for a key not seen.
+  diff: |
+    @@ -1,14 +1,14 @@
+     def seen_request_key
+       if @request_key.nil?
+    -    return nil
+    +    nil
+       end
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+       if row.request_sha256 != RequestKey.request_sha256(request)
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#seen_request_key
+  kind: same-answer
+  why: >-
+    With no key, RequestKey.find_by(key: nil) finds no row, because key is NOT NULL, so the method answers nil either
+    way. The check only saves the query. Both callers that can have no key (keyed and the settle action's rescues) go on
+    as for a key not seen.
+  diff: |
+    @@ -1,14 +1,11 @@
+     def seen_request_key
+    -  if @request_key.nil?
+    -    return nil
+    -  end
+       row = RequestKey.find_by(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key)
+       if row.nil?
+         return nil
+       end
+       if row.request_sha256 != RequestKey.request_sha256(request)
+         return { json: { message: RequestKey::OTHER_REQUEST }, status: :unprocessable_content }
+       end
+       response.set_header(REPLAYED, "true")
+       { json: row.body, status: row.status }
+     end
+- subject: KeyedWrites#keyed
+  kind: same-answer
+  why: >-
+    With no key, the keyed path answers the same: seen_request_key finds no row and keep_request_key returns before it
+    writes one, so the write runs and its answer is returned. The check only skips that transaction and the lookup.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keyed
+    -  if @request_key.nil?
+    +  if self.nil?
+         return yield
+       end
+       ActiveRecord::Base.transaction {
+         seen_request_key || yield.tap { |rendering|
+           keep_request_key(rendering)
+         }
+       }
+     end
+- subject: KeyedWrites#keyed
+  kind: same-answer
+  why: >-
+    With no key, the keyed path answers the same: seen_request_key finds no row and keep_request_key returns before it
+    writes one, so the write runs and its answer is returned. The check only skips that transaction and the lookup.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keyed
+       if @request_key.nil?
+    -    return yield
+    +    nil
+       end
+       ActiveRecord::Base.transaction {
+         seen_request_key || yield.tap { |rendering|
+           keep_request_key(rendering)
+         }
+       }
+     end
+- subject: KeyedWrites#keyed
+  kind: same-answer
+  why: >-
+    With no key, the keyed path answers the same: seen_request_key finds no row and keep_request_key returns before it
+    writes one, so the write runs and its answer is returned. The check only skips that transaction and the lookup.
+  diff: |
+    @@ -1,10 +1,7 @@
+     def keyed
+    -  if @request_key.nil?
+    -    return yield
+    -  end
+       ActiveRecord::Base.transaction {
+         seen_request_key || yield.tap { |rendering|
+           keep_request_key(rendering)
+         }
+       }
+     end
+- subject: KeyedWrites#keyed
+  kind: same-answer
+  why: >-
+    With no key, the keyed path answers the same: seen_request_key finds no row and keep_request_key returns before it
+    writes one, so the write runs and its answer is returned. The check only skips that transaction and the lookup.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keyed
+    -  if @request_key.nil?
+    +  if nil
+         return yield
+       end
+       ActiveRecord::Base.transaction {
+         seen_request_key || yield.tap { |rendering|
+           keep_request_key(rendering)
+         }
+       }
+     end
+- subject: KeyedWrites#keyed
+  kind: same-answer
+  why: >-
+    With no key, the keyed path answers the same: seen_request_key finds no row and keep_request_key returns before it
+    writes one, so the write runs and its answer is returned. The check only skips that transaction and the lookup.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keyed
+    -  if @request_key.nil?
+    +  if false
+         return yield
+       end
+       ActiveRecord::Base.transaction {
+         seen_request_key || yield.tap { |rendering|
+           keep_request_key(rendering)
+         }
+       }
+     end
+- subject: KeyedWrites#keyed
+  kind: same-answer
+  why: >-
+    With no key, the keyed path answers the same: seen_request_key finds no row and keep_request_key returns before it
+    writes one, so the write runs and its answer is returned. The check only skips that transaction and the lookup.
+  diff: |
+    @@ -1,10 +1,8 @@
+     def keyed
+    -  if @request_key.nil?
+    -    return yield
+    -  end
+    +  nil
+       ActiveRecord::Base.transaction {
+         seen_request_key || yield.tap { |rendering|
+           keep_request_key(rendering)
+         }
+       }
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (200..300).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (200..298).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (nil..299).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (0..299).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (1..299).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (199..299).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end
+- subject: KeyedWrites#keep_request_key
+  kind: same-answer
+  why: >-
+    The writes that use keyed answer 200, 201, a 4xx or a 5xx. None answers a 1xx, 299 or 300, the only statuses where
+    these ranges differ.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def keep_request_key(rendering)
+       if @request_key.nil?
+         return
+       end
+       status = Rack::Utils.status_code(rendering.fetch(:status, :ok))
+    -  unless (200..299).cover?(status)
+    +  unless (200...299).cover?(status)
+         return
+       end
+       RequestKey.create!(sender: RequestKey.sender_of(T.must(current_login)), key: @request_key, request_sha256: RequestKey.request_sha256(request), status:, body: JSON.parse(rendering.fetch(:json).to_json))
+     end

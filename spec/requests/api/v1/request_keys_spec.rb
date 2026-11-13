@@ -65,6 +65,23 @@ RSpec.describe 'Idempotency-Key on calendar writes' do
       expect(Event.count).to eq(2)
     end
 
+    it 'looks up the key, not only the sender: a new key from the same sender saves a new event' do
+      post '/api/v1/events', params: event_params.merge(token: token), headers: { 'Idempotency-Key' => '"first"' }
+      post '/api/v1/events', params: event_params.merge(token: token), headers: { 'Idempotency-Key' => '"second"' }
+
+      expect(response).to have_http_status(:ok)
+      expect(response.headers['Idempotent-Replayed']).to be_nil
+      expect(Event.count).to eq(2)
+    end
+
+    # The row holds the answer as JSON, as the server sent it, not a
+    # string with JSON in it.
+    it 'keeps the answer as JSON' do
+      post '/api/v1/events', params: event_params.merge(token: token), headers: { 'Idempotency-Key' => '"k"' }
+
+      expect(RequestKey.sole.body).to eq('message' => 'Event has been created')
+    end
+
     it 'keeps a key per sender: another resident with the same key saves their own event' do
       other = create(:resident, community: community, unit: unit)
       post '/api/v1/events', params: event_params.merge(token: token), headers: { 'Idempotency-Key' => '"k"' }
