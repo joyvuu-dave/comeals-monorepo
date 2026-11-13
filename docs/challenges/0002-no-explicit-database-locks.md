@@ -4,7 +4,7 @@ title: Keep every guarantee with no database locks we take ourselves
 area: concurrency
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-12
+reviewed: 2026-11-13
 watches:
   - app/models/concerns/locks_its_meal_first.rb
   - docs/adr/0003-concurrency-on-the-money-path.md

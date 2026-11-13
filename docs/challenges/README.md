@@ -78,7 +78,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | #   | Challenge                                                                                              | Area        | Status | Reviewed   |
 | --- | ------------------------------------------------------------------------------------------------------ | ----------- | ------ | ---------- |
 | 1   | [An email change can take over an account](0001-email-change-account-takeover.md)                      | security    | open   | 2026-11-07 |
-| 2   | [Keep every guarantee with no database locks we take ourselves](0002-no-explicit-database-locks.md)    | concurrency | open   | 2026-11-12 |
+| 2   | [Keep every guarantee with no database locks we take ourselves](0002-no-explicit-database-locks.md)    | concurrency | open   | 2026-11-13 |
 | 3   | [The same guarantees on every database Rails supports](0003-any-database-rails-supports.md)            | portability | open   | 2026-11-11 |
 | 4   | [Many people changing many things at once](0004-many-people-many-changes-at-once.md)                   | concurrency | open   | 2026-11-13 |
 | 5   | [Time zone rules change](0005-time-zone-rules-change.md)                                               | time        | open   | 2026-11-07 |
