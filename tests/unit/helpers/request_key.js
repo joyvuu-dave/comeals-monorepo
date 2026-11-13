@@ -1,7 +1,7 @@
 import { expect } from "vitest";
 
 // The request config a calendar form's save sends with its body: an
-// Idempotency-Key holding a UUID (use_request_key.js, ADR 0015).
+// Idempotency-Key holding a UUID (use_request_key.ts, ADR 0015).
 export const KEYED = {
   headers: {
     "Idempotency-Key": expect.stringMatching(

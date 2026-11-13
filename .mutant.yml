@@ -119,6 +119,7 @@ matcher:
     - SecretFileProbe*
     - UnknownRouteLog*
     - DatabasePoolCheck*
+    - DatabaseUnreachable*
     - SolidQueueCheck*
     - SquashedMigrationsCheck*
     - SchemaBootCheck*
@@ -140,6 +141,7 @@ matcher:
     - Holidays*
     - JobRun*
     - Key*
+    - KeyedWrites*
     - LedgerCheckRun*
     - BrowserCount*
     - MailDelivery*
@@ -151,6 +153,7 @@ matcher:
     - MealSchedule*
     - Multiplier*
     - ReconciliationBalance*
+    - RequestKey*
     - Resident*
     - ResidentBalance*
     - Rotation*

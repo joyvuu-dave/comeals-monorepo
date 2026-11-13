@@ -1,6 +1,8 @@
 import { useRef } from "react";
 import { newId } from "./new_id";
 
+export type RequestKeyHeaders = { "Idempotency-Key": string };
+
 // The Idempotency-Key of a calendar form's save (ADR 0015). A phone that
 // sends a save and gets no answer cannot tell whether it was saved, and
 // the person presses the button again. The server keeps the key of every
@@ -18,8 +20,10 @@ import { newId } from "./new_id";
 // keyed(body) returns the two arguments after the URL: the body, and the
 // request config with the header.
 export default function useRequestKey() {
-  const last = useRef(null);
-  return function keyed(body) {
+  const last = useRef<{ text: string; key: string } | null>(null);
+  return function keyed<Body>(
+    body: Body,
+  ): [Body, { headers: RequestKeyHeaders }] {
     const text = JSON.stringify(body);
     if (last.current === null || last.current.text !== text) {
       last.current = { text: text, key: newId() };
@@ -31,6 +35,6 @@ export default function useRequestKey() {
 // The header for a key, as a Structured Field string (RFC 9651): the key
 // between double quotes. Every key this app makes is a UUID or letters,
 // digits and hyphens, so nothing in it needs a backslash.
-export function requestKeyHeaders(key) {
+export function requestKeyHeaders(key: string): RequestKeyHeaders {
   return { "Idempotency-Key": `"${key}"` };
 }

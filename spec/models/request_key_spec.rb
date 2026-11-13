@@ -11,6 +11,23 @@ require 'rails_helper'
 # so mutant runs them for sent_body and sorted too, which only
 # request_sha256 calls (docs/mutation-testing.md, "Which examples run for
 # a subject").
+# == Schema Information
+#
+# Table name: request_keys
+#
+#  id             :bigint           not null, primary key
+#  body           :jsonb            not null
+#  key            :text             not null
+#  request_sha256 :text             not null
+#  sender         :text             not null
+#  status         :integer          not null
+#  created_at     :datetime         not null
+#
+# Indexes
+#
+#  index_request_keys_on_created_at      (created_at)
+#  index_request_keys_on_sender_and_key  (sender,key) UNIQUE
+#
 RSpec.describe RequestKey do
   def request(path, method: 'POST', body: nil, type: 'application/json')
     env = Rack::MockRequest.env_for(path, method: method, input: body.to_s)
