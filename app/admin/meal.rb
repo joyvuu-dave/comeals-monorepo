@@ -123,14 +123,57 @@ ActiveAdmin.register Meal do
     # (see semantic_errors below). A remove is a before_destroy abort, which
     # Rails raises as RecordNotDestroyed out of the nested save. Catch it
     # and show the same sentence, instead of a 500 page.
+    #
+    # The form is built from one read of the meal and saved in a later
+    # request (#287). A cook can close the meal or change its max on the
+    # meal page in between, and the form would write its own closed and
+    # max over that. So the form sends the date, closed and max it showed
+    # (shown[...]), and the save is refused when any of them has changed.
+    # A request with no shown values (a tab opened before this check) is
+    # saved as before. The check and the save run in one transaction
+    # under the meal's row lock, so the meal page cannot change the meal
+    # between them: its write waits for the save to finish, or the save
+    # waits for its write and then sees it. Meal first, then its guests, the
+    # same order as every other write to a meal's rows (LocksItsMealFirst).
+    #
+    # Meals have no lock_version on purpose. Bills, sign-ups and guests
+    # touch their meal, and touch adds one to lock_version and checks the
+    # version in memory, so every sign-up would refuse an open form, and
+    # a sign-up holding an older meal would raise StaleObjectError.
+    #
+    # A guest removed on the meal page while the form was open makes the
+    # nested guest row name a guest that is gone. Rails raises
+    # RecordNotFound while it assigns the form's values, before any write.
     def update
-      update!
+      resource.with_lock do
+        next form_out_of_date('Someone else changed this meal') if form_built_from_an_older_meal?
+
+        update!
+      end
     rescue ActiveRecord::RecordNotDestroyed => e
       resource.errors.add(:guests, e.record.errors.full_messages.to_sentence)
       render :edit
+    rescue ActiveRecord::RecordNotFound => e
+      raise unless e.model == 'Guest'
+
+      form_out_of_date('A guest on this form was removed')
     end
 
     private
+
+    def form_built_from_an_older_meal?
+      shown = params[:shown]
+      return false unless shown
+
+      meal = resource
+      shown[:date] != meal.date.iso8601 || shown[:closed] != meal.closed.to_s || shown[:max] != meal.max.to_s
+    end
+
+    def form_out_of_date(what_happened)
+      redirect_to edit_admin_meal_path(params[:id]),
+                  alert: "#{what_happened} after you opened it. Nothing was saved. " \
+                         'This form now shows the meal as it is. Make your change again.'
+    end
 
     # Under the meal's row lock, like every write to a meal's rows
     # (LocksItsMealFirst): a cost saved at the same moment either commits
@@ -343,6 +386,16 @@ ActiveAdmin.register Meal do
       end
       f.input :closed
       f.input :max if f.object.closed
+      # What this form shows, as the meal was when the form was drawn
+      # (#287). The save is refused when the meal has changed since: see
+      # MealsController#form_built_from_an_older_meal?. The values in the
+      # database, not the form's: a form drawn again after a refused save
+      # holds the admin's values, and those are not what the meal was.
+      unless f.object.new_record?
+        text_node hidden_field_tag('shown[date]', f.object.date_in_database.iso8601, id: nil)
+        text_node hidden_field_tag('shown[closed]', f.object.closed_in_database.to_s, id: nil)
+        text_node hidden_field_tag('shown[max]', f.object.max_in_database.to_s, id: nil)
+      end
     end
     f.inputs do
       f.has_many :guests, allow_destroy: true, heading: 'Guests', new_record: true do |g|
