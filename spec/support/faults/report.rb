@@ -7,7 +7,10 @@ module Faults
   #     worked (2xx) and the second was answered with an error: the
   #     phone shows an error for a write that was saved;
   #   - a write sent again that was saved twice: two events or two common
-  #     house bookings with the title one request gave them.
+  #     house bookings with the title one request gave them;
+  #   - a settle that worked, sent again, and answered with anything but
+  #     the first answer: the same key must give the same settlement
+  #     (ADR 0015), not a second one and not "nothing to settle".
   #
   # And, as counts only, what the faults were and what they did.
   module Report
@@ -38,6 +41,25 @@ module Faults
       twice.call(Event.where('title LIKE ?', 'storm-event-%')).map { |title, n| "event #{title} saved #{n} times" } +
         twice.call(CommonHouseReservation.where('title LIKE ?', 'storm-chr-%'))
              .map { |title, n| "common house booking #{title} saved #{n} times" }
+    end
+
+    SETTLE = 'POST /api/v1/reconciliations'
+
+    def self.settle_answered_differently(resends)
+      resends.select { route(it.verb, it.path) == SETTLE && ok?(it.first_status) && !unreachable?(it) }
+             .reject { it.second_status == it.first_status && same_json?(it.first_body, it.second_body) }
+             .map do |r|
+        "settle sent again: #{r.first_status} #{r.first_body[0, 120]}, then #{r.second_status} #{r.second_body[0, 120]}"
+      end
+    end
+
+    # The answer to a send again is the stored answer (request_keys), which
+    # PostgreSQL keeps as jsonb, and jsonb puts the keys in its own order.
+    # A phone reads the keys, not their order.
+    def self.same_json?(first, second)
+      JSON.parse(first) == JSON.parse(second)
+    rescue JSON::ParserError
+      first == second
     end
 
     def self.resend_tally(resends)

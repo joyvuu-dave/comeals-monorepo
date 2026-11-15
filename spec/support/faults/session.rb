@@ -11,6 +11,14 @@ module Faults
   class Session
     THREADS = 8
 
+    # The settle phone (settle_phone): a reconciler who presses Settle
+    # again and again, one cutoff after another, over a connection that
+    # loses every answer once, so every settle is sent twice. The storm's
+    # own settles are too few in a short run for a lost one to be likely,
+    # and at a chance of one half a short run had one settle sent again
+    # out of three.
+    SETTLE_LOSE = 1.0
+
     # Lines of a background write that the faults stopped on purpose.
     LOST_CONNECTION = /ConnectionFailed|ConnectionNotEstablished|ConnectionBad|DatabaseConnectionError|
                        server\ closed\ the\ connection|terminating\ connection|connection\ to\ server/x
@@ -23,6 +31,7 @@ module Faults
       @seed = Integer(env.fetch('FAULTS_SEED', 1))
       @lose = Float(env.fetch('FAULTS_LOSE', 0.05))
       @every = Float(env.fetch('FAULTS_EVERY', 2))
+      @settlements = Integer(env.fetch('FAULTS_SETTLEMENTS', 16))
       @root = Rails.root.join('tmp/faults')
     end
 
@@ -101,7 +110,7 @@ module Faults
     def storm
       ActiveRecord::Base.connection.execute('TRUNCATE communities, ledger_check_runs, job_runs CASCADE')
       Current.reset
-      @plan = Storm::Seed.plant(clients: @clients)
+      @plan = Storm::Seed.plant(clients: @clients, settleable: @settlements)
       @plain = plain_transport
       @transport = Faults::LossyTransport.new(@plain, chance: @lose, seed: @seed)
       @out.puts "==> #{@clients} clients for #{@seconds}s, a fault every #{@every}s, #{(@lose * 100).round}% of " \
@@ -109,9 +118,41 @@ module Faults
       @driver = Faults::Driver.new(proxy: @proxy, server: @server, clock: @clock, seed: @seed, every: @every)
       deadline = Storm::MONOTONIC.call + @seconds
       faults = Thread.new { @driver.run(deadline) }
+      settles = Thread.new { settle_phone(deadline) }
       result = Storm::Run.call(plan: @plan, transport: @transport, clients: @clients, seconds: @seconds, seed: @seed)
       faults.join
+      settles.join
       result
+    end
+
+    # Challenge 30: a settle whose answer is lost and sent again. Each
+    # press asks for the plan's next cutoff (Seed::Plan#phone_cutoff), so
+    # the presses are spread over the run and most of them settle a
+    # dinner, while the storm writes to it, the settler races it, and the
+    # driver breaks things. Its answers are counted in @settle_answers and
+    # its lost answers in @settle_transport.resends.
+    def settle_phone(deadline)
+      @settle_answers = Hash.new(0)
+      @settle_transport = Faults::LossyTransport.new(@plain, chance: SETTLE_LOSE, seed: @seed + 1)
+      token = @plan.tokens.fetch(@plan.reconcilers.first.id)
+      pause = @seconds / (@settlements * 1.5)
+      press = 0
+      while Storm::MONOTONIC.call + pause < deadline
+        sleep(pause)
+        press += 1
+        settle_once(token, press)
+      end
+    rescue StandardError => e
+      @settle_answers["#{e.class}: #{e.message}"] += 1
+    end
+
+    def settle_once(token, press)
+      cutoff = @plan.phone_cutoff
+      headers = { 'Authorization' => "Bearer #{token}", 'Idempotency-Key' => %("settle-phone-#{press}") }
+      status, = @settle_transport.call(:post, '/api/v1/reconciliations', headers,
+                                       JSON.generate(cutoff: cutoff.iso8601), '10.9.99.1')
+      @settle_answers[status] += 1
+      @plan.phone_settled unless [409, 503].include?(status)
     end
 
     # One keep-alive connection to the Puma for each thread.
@@ -140,11 +181,28 @@ module Faults
       problems += kinds(wrong)
       # The checks read through the server too, with no answer lost.
       problems += Storm::Checks.call(plan: @plan, transport: @plain)
-      problems += Faults::Report.error_for_a_saved_write(@transport.resends)
+      problems += Faults::Report.error_for_a_saved_write(@transport.resends + @settle_transport.resends)
+      problems += Faults::Report.settle_answered_differently(@settle_transport.resends)
+      problems += settle_phone_problems
       problems += Faults::Report.saved_twice
       @connections.each_value(&:finish)
       print_counts(result, expected, unreachable)
       print_problems(problems)
+    end
+
+    # The settle phone must have settled at least once, and had at least
+    # one of those answers lost and sent again, or the run did not test
+    # what it is for. Anything but a settlement (201), nothing left to
+    # settle (400), a conflict (409) or the database out of reach (503)
+    # is wrong.
+    def settle_phone_problems
+      wrong = @settle_answers.except(201, 400, 409, 503)
+      problems = wrong.map { |status, n| "settle phone: #{status} (#{n}x)" }
+      problems << 'settle phone: no settle request succeeded' unless @settle_answers[201].positive?
+      unless @settle_transport.resends.any? { it.first_status == 201 }
+        problems << 'settle phone: no settle that succeeded was sent again'
+      end
+      problems
     end
 
     def print_counts(result, expected, unreachable)
@@ -153,8 +211,10 @@ module Faults
       @out.puts "requests answered 503, the database could not be reached: #{unreachable.size}"
       @out.puts "requests: #{result.requests.size}, ok writes: #{result.ok_writes}, settlements: #{result.settlements}"
       result.tally.sort.each { |action, statuses| @out.puts "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
-      @out.puts "answers lost and sent again: #{@transport.resends.size}"
-      Faults::Report.resend_tally(@transport.resends).sort.each { |route, tally| @out.puts "  #{route}: #{tally}" }
+      @out.puts "settle phone: #{@settle_answers.sort_by { |s, _| s.to_s }.to_h}"
+      resends = @transport.resends + @settle_transport.resends
+      @out.puts "answers lost and sent again: #{resends.size}"
+      Faults::Report.resend_tally(resends).sort.each { |route, tally| @out.puts "  #{route}: #{tally}" }
     end
 
     # One line for each kind of wrong answer: the action, the status and

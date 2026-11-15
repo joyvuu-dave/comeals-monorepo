@@ -169,7 +169,7 @@ module Storm
 
     def settle_once
       Rails.application.executor.wrap do
-        settlement = SettleAndNotify.call(cutoff: @plan.latest_cutoff)
+        settlement = SettleAndNotify.call(cutoff: @plan.settle_cutoff)
         [:settled, settlement.reconciliation.id]
       end
     rescue ActiveRecord::RecordInvalid
@@ -265,9 +265,9 @@ module Storm
     # or remove on a closed meal, which is the usual real case: a meal is
     # corrected after dinner, while a settlement may be claiming it.
     # May be $0, a blank cost, like an admin who clears one; never on the
-    # meal planted so a settlement has something to claim (Seed::Plan).
+    # meals planted so a settlement has something to claim (Seed::Plan).
     def admin_amount(meal, rng)
-      cents = meal.id == @plan.settleable_meal.id ? rng.rand(1..9999) : rng.rand(0..9999)
+      cents = @plan.settleable?(meal) ? rng.rand(1..9999) : rng.rand(0..9999)
       BigDecimal(cents) / 100
     end
 

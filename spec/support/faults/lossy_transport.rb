@@ -10,7 +10,7 @@ module Faults
   # Every lost answer is recorded with the answer the phone never saw and
   # the answer to the second send. Faults::Report reads them.
   class LossyTransport
-    Resend = Data.define(:verb, :path, :first_status, :second_status, :second_body)
+    Resend = Data.define(:verb, :path, :first_status, :second_status, :first_body, :second_body)
 
     WRITES = %i[post patch put delete].freeze
 
@@ -29,7 +29,8 @@ module Faults
       return [status, response] unless WRITES.include?(method) && lose?
 
       second_status, second_body = @transport.call(method, path, headers, body, ip)
-      @lock.synchronize { @resends << Resend.new(method, path, status, second_status, second_body.to_s[0, 300]) }
+      resend = Resend.new(method, path, status, second_status, response.to_s[0, 300], second_body.to_s[0, 300])
+      @lock.synchronize { @resends << resend }
       [second_status, second_body]
     end
 

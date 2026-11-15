@@ -257,11 +257,11 @@ module Storm
     # No cost, a blank cost, or a cost with money on it. A blank cost makes
     # a meal with someone to charge wait (ADR 0011 rule 3), so the
     # settlement races it, and Checks finds a settled meal with one. Never
-    # on the meal planted so a settlement has something to claim.
+    # on a meal planted so a settlement has something to claim.
     def cost_for(meal)
       roll = @rng.rand
       return { amount: BigDecimal('0'), no_cost: true } if roll < 0.15
-      return { amount: BigDecimal('0'), no_cost: false } if roll < 0.25 && meal.id != @plan.settleable_meal.id
+      return { amount: BigDecimal('0'), no_cost: false } if roll < 0.25 && !@plan.settleable?(meal)
 
       { amount: BigDecimal(@rng.rand(1..999_999)) / 100, no_cost: false }
     end
@@ -417,7 +417,7 @@ module Storm
     end
 
     def request_settle(_meal)
-      [:post, '/api/v1/reconciliations', { cutoff: @plan.latest_cutoff.iso8601 }, nil]
+      [:post, '/api/v1/reconciliations', { cutoff: @plan.settle_cutoff.iso8601 }, nil]
     end
   end
 

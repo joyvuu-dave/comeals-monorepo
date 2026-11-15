@@ -11,6 +11,7 @@ FAULTS_SECONDS=120 FAULTS_CLIENTS=32 bin/faults
 FAULTS_SEED=7 bin/faults                         # other requests, faults in another order
 FAULTS_LOSE=0.2 bin/faults                       # lose a fifth of the answers to writes
 FAULTS_EVERY=0.5 bin/faults                      # a fault every half second
+FAULTS_SETTLEMENTS=24 bin/faults                 # 24 dinners for the settle phone (default 16)
 ```
 
 `spec/bin/faults_spec.rb` runs it for 12 seconds with 6 clients, a fault
@@ -54,6 +55,29 @@ The phone then sends the same request again, with the same headers (the
 same `Idempotency-Key`), and sees only the second answer. This is the
 case a timeout or a dropped connection makes.
 
+## The settle phone
+
+Settling is the biggest money write, so the suite settles all through a
+run, not once. The seed plants `FAULTS_SETTLEMENTS` past dinners, one a
+day, each with a cook who spent $40 and a guest
+(`Storm::Seed.plant(settleable:)`). A settle phone (`Faults::Session#settle_phone`),
+signed in as a resident who may settle, presses Settle every few seconds
+with the next of those dates as the cutoff, so each press settles about
+one dinner. Every one of its answers is lost once, so every press is
+sent twice with the same `Idempotency-Key`.
+
+The storm's own settler and settle requests take turns with it
+(`Seed::Plan#settle_cutoff`). On every second date they ask for the
+phone's date too, and race the phone and each other for that dinner. On
+the other dates they ask for the date before, so the phone settles that
+dinner alone. Without the turns the settler, which tries every 0.3
+seconds, took every dinner first, and the phone never settled.
+
+Before this, the storm had one settleable dinner, and the settler
+settled it a few seconds into the run. After that, every settle request
+was answered "nothing to settle", so no run had a settle that worked and
+was sent again.
+
 ## What it checks
 
 - The storm's own checks: every meal's ledger lines sum to zero,
@@ -65,7 +89,14 @@ case a timeout or a dropped connection makes.
 - `Faults::Report`:
   - a write whose first send worked (2xx) and whose second send got an
     error;
-  - an event or a common house booking saved twice.
+  - an event or a common house booking saved twice;
+  - a settle that worked, sent again, and answered with anything but the
+    first answer (the same settlement; the keys of the stored answer may
+    come back in another order, because PostgreSQL keeps it as `jsonb`).
+- The settle phone: it settled at least once, at least one press that
+  settled was sent again, and every answer was a settlement (`201`),
+  nothing to settle (`400`), a conflict (`409`) or the database out of
+  reach (`503`).
 
 Sign-ups, take-offs and Late or Veg changes are left out of the first
 report: the page sends them with an attendance version, and a send built

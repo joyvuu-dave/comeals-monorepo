@@ -18,6 +18,7 @@ set -euo pipefail
 #   FAULTS_SEED=7 bin/faults                         # other requests, faults in another order
 #   FAULTS_LOSE=0.2 bin/faults                       # lose a fifth of the answers to writes
 #   FAULTS_EVERY=0.5 bin/faults                      # a fault every half second
+#   FAULTS_SETTLEMENTS=24 bin/faults                 # dinners for the settle phone (default 16)
 #
 # The server's log: tmp/faults/server_app.log. PostgreSQL's:
 # tmp/faults/server/server.log.

@@ -7,7 +7,9 @@ require 'open3'
 # Puma, and the proxy, with every kind of fault at least once and a third
 # of the answers to writes lost and sent again. The books must be right
 # after, no write saved twice, no write answered with an error after it
-# was saved, and no 500 while the database is gone.
+# was saved, and no 500 while the database is gone. The settle phone must
+# have settled, and a settle that worked, sent again, must get the same
+# settlement back.
 RSpec.describe 'bin/faults' do
   # A run takes about a minute. One that goes on longer is stuck, and
   # without a limit it held a CI shard until the job's own limit stopped

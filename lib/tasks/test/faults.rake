@@ -11,7 +11,9 @@
 #   - the driver restarts that PostgreSQL, and moves the server's clock
 #     (Faults::Clock) forward and back;
 #   - some answers to writes are lost, and the phone sends the same
-#     request again (Faults::LossyTransport).
+#     request again (Faults::LossyTransport);
+#   - a settle phone presses Settle all through the run, one dinner at a
+#     time, and every one of its answers is lost once (Faults::Session).
 #
 # Afterwards: the storm's checks (every meal's ledger, settled meals
 # untouched, caps, ledger:verify, the calendar cache), and Faults::Report:
@@ -23,6 +25,7 @@
 #   FAULTS_SEED     the seed for the requests and the faults (default 1)
 #   FAULTS_LOSE     the chance an answer to a write is lost (default 0.05)
 #   FAULTS_EVERY    seconds between faults (default 2)
+#   FAULTS_SETTLEMENTS  past dinners the settle phone settles one by one (default 16)
 namespace :test do
   desc 'Run the storm while connections drop, PostgreSQL restarts and the clock moves; check the books after'
   task faults: :environment do

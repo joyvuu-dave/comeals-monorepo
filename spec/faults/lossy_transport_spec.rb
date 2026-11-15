@@ -18,7 +18,8 @@ RSpec.describe Faults::LossyTransport do
 
     expect(sent).to eq([[:post, '/api/v1/events', { 'Idempotency-Key' => '"k"' }, '{}']] * 2)
     expect(answer).to eq([400, 'answer 2'])
-    expect(transport.resends).to eq([described_class::Resend.new(:post, '/api/v1/events', 200, 400, 'answer 2')])
+    expect(transport.resends)
+      .to eq([described_class::Resend.new(:post, '/api/v1/events', 200, 400, 'answer 1', 'answer 2')])
   end
 
   it 'never loses the answer to a read' do
