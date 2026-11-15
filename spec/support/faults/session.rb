@@ -149,10 +149,23 @@ module Faults
     def settle_once(token, press)
       cutoff = @plan.phone_cutoff
       headers = { 'Authorization' => "Bearer #{token}", 'Idempotency-Key' => %("settle-phone-#{press}") }
-      status, = @settle_transport.call(:post, '/api/v1/reconciliations', headers,
-                                       JSON.generate(cutoff: cutoff.iso8601), '10.9.99.1')
+      request = [:post, '/api/v1/reconciliations', headers, JSON.generate(cutoff: cutoff.iso8601), '10.9.99.1']
+      status, body = @settle_transport.call(*request)
       @settle_answers[status] += 1
       @plan.phone_settled unless [409, 503].include?(status)
+      send_a_settle_again(request, [status, body])
+    end
+
+    # The answer that is lost is the first one. When the first send got a
+    # conflict (409) or no database (503), nothing was saved, and the send
+    # again is the one that settled. Then that settle is sent once more, so
+    # every settle that worked is sent again with the same key. Before
+    # 2026-11-15 a 12-second run in CI had every first send refused, and
+    # no settle that worked was sent again.
+    def send_a_settle_again(request, answer)
+      return unless answer[0] == 201 && @settle_transport.resends.last&.first_status != 201
+
+      @settle_transport.send_again(request, answer)
     end
 
     # One keep-alive connection to the Puma for each thread.

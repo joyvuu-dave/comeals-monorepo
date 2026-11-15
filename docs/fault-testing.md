@@ -64,7 +64,9 @@ day, each with a cook who spent $40 and a guest
 signed in as a resident who may settle, presses Settle every few seconds
 with the next of those dates as the cutoff, so each press settles about
 one dinner. Every one of its answers is lost once, so every press is
-sent twice with the same `Idempotency-Key`.
+sent twice with the same `Idempotency-Key`. When the first send was
+refused (a conflict, or no database) and the second one settled, the
+phone sends it a third time, so every settle that worked is sent again.
 
 The storm's own settler and settle requests take turns with it
 (`Seed::Plan#settle_cutoff`). On every second date they ask for the

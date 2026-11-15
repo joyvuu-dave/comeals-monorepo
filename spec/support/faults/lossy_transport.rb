@@ -34,6 +34,18 @@ module Faults
       [second_status, second_body]
     end
 
+    # Sends a write once more, with the same headers and body, and records
+    # it with the answer the phone already had. For a write whose answer
+    # was not lost, or whose answer that worked came on the send again.
+    # request is [method, path, headers, body, ip], as #call takes them;
+    # first is the [status, body] the phone already had.
+    def send_again(request, first)
+      status, response = @transport.call(*request)
+      resend = Resend.new(request[0], request[1], first[0], status, first[1].to_s[0, 300], response.to_s[0, 300])
+      @lock.synchronize { @resends << resend }
+      [status, response]
+    end
+
     private
 
     def lose? = @lock.synchronize { @rng.rand < @chance }

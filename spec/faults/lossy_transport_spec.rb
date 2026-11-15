@@ -36,4 +36,14 @@ RSpec.describe Faults::LossyTransport do
 
     expect(sent.size).to eq(1)
   end
+
+  it 'sends a write once more and records it with the answer the phone already had' do
+    transport = described_class.new(inner, chance: 0.0, seed: 1)
+    answer = transport.send_again([:post, '/api/v1/reconciliations', {}, '{}', '10.0.0.1'], [201, 'the settlement'])
+
+    expect(sent).to eq([[:post, '/api/v1/reconciliations', {}, '{}']])
+    expect(answer).to eq([200, 'answer 1'])
+    expect(transport.resends)
+      .to eq([described_class::Resend.new(:post, '/api/v1/reconciliations', 201, 200, 'the settlement', 'answer 1')])
+  end
 end
