@@ -7,8 +7,8 @@ require 'rails_helper'
 #
 # This is the request-level counterpart of spec/db/meal_write_storm_spec.rb.
 # That one drives the models the way the controller does; this one sends
-# real requests through the whole Rack stack — Rack::Attack counting in a
-# real solid_cache, the executor resetting Current, the controllers,
+# real requests through the whole Rack stack — Rack::Attack counting in
+# throttle_counts, the executor resetting Current, the controllers,
 # RetryOnConflict, LiveUpdate's pushes — from many threads at once, the
 # way a multi-threaded Puma would (production runs one thread; this runs
 # many on purpose, to find what one thread hides).
@@ -22,8 +22,12 @@ require 'rails_helper'
 #   - every request got a status the API promises for it, never a 500 or
 #     an unrescued exception;
 #   - every answer belongs to its request (/residents/id, the login);
-#   - every 429 had grounds: the client's own count in that window was
-#     over the limit, so the counter never held someone else's requests;
+#   - every 429 had grounds: the count of its address in that window,
+#     across the clients that share it, was over the limit, so the counter
+#     never held another address's requests (Storm::Addresses);
+#   - the server counted every request: each address's throttle_counts
+#     add up to what its clients sent (four clients share one address,
+#     STORM_SHARED_ADDRESS, the way the Common House iPad does);
 #   - every meal push carries a socket id that was sent with a write to
 #     that meal, so Current.socket_id never leaked between requests;
 #   - every error the app reported and swallowed is a conflict, the one
@@ -73,16 +77,17 @@ RSpec.describe 'a request storm against the whole API, with the nightly jobs and
     # rubocop:enable RSpec/InstanceVariable
   end
 
-  # The test environment caches to :null_store. Production counts throttle
-  # hits and caches the calendar in solid_cache, in the same database as
-  # the money rows, at SERIALIZABLE — so that is what the storm gets.
+  # The test environment caches to :null_store. Production caches the
+  # calendar in solid_cache and counts throttle hits in throttle_counts
+  # (ThrottleStore), in the same database as the money rows, so that is
+  # what the storm gets.
   around do |example|
     store = build_solid_cache_store(namespace: "storm-#{SecureRandom.hex(4)}")
     original_cache = Rails.cache
     original_attack_store = Rack::Attack.cache.store
     original_level = Rails.logger.level
     Rails.cache = store
-    Rack::Attack.cache.store = store
+    Rack::Attack.cache.store = ThrottleStore.new
     # Thousands of requests: the log lines would be most of the work.
     Rails.logger.level = Logger::WARN
     example.run

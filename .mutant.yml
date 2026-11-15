@@ -121,6 +121,7 @@ matcher:
     - DatabasePoolCheck*
     - DatabaseUnreachable*
     - DatabaseFull*
+    - ThrottleStore*
     - SolidQueueCheck*
     - SquashedMigrationsCheck*
     - SchemaBootCheck*
@@ -164,6 +165,7 @@ matcher:
     - SettlementLineMark*
     - StorableTime*
     - StorableTimeValidator*
+    - ThrottleCount*
     - Unit*
     - AppendOnly*
     - BelongsToTheCommunity*

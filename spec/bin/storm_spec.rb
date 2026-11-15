@@ -16,8 +16,8 @@ RSpec.describe 'bin/storm', bash_coverage: BashCoverage.new('spec/bin/storm_spec
   let(:answer_once_started) { "until [ -f #{started} ]; do #{sandbox.real('sleep')} 0.01; done" }
   # What the script empties after every run.
   let(:truncate) do
-    'TRUNCATE communities, ledger_check_runs, job_runs, audits, browser_counts, request_keys, keys, ' \
-      'common_house_logins, solid_queue_jobs, solid_queue_processes, solid_queue_semaphores, ' \
+    'TRUNCATE communities, ledger_check_runs, job_runs, audits, browser_counts, request_keys, throttle_counts, ' \
+      'keys, common_house_logins, solid_queue_jobs, solid_queue_processes, solid_queue_semaphores, ' \
       'solid_queue_recurring_tasks CASCADE'
   end
 

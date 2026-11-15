@@ -174,6 +174,11 @@ that has nothing to do with money. With it the answer is a cache miss, which
 is always correct — nothing was written, and reading through to the source
 works.
 
+Later (2026-11-15, #292): a cache miss was not correct for a rate-limit
+counter. Rack::Attack took the miss as "no count yet" and wrote 1 over the
+count, so requests from one address at the same moment got past the limit.
+The counters moved out of solid_cache (ADR 0005 decision 11).
+
 Two things it depends on, both checked against solid_cache 1.0.10 and both
 pinned by `spec/lib/solid_cache/store_spec.rb`: the constant is a plain array
 and is not frozen, and the failsafe splats it at rescue time rather than

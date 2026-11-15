@@ -38,7 +38,7 @@ set -euo pipefail
 # in the jobs log, the jobs process still alive. More knobs:
 #
 #   STORM_SOLID_QUEUE=1 STORM_SQ_HEARTBEAT=1 bin/storm   # beat every second (production: 60)
-#   STORM_SQ_EVERY=8       every recurring task every 8 s (the least)
+#   STORM_SQ_EVERY=9       every recurring task every 9 s (the least)
 #   STORM_JOBS_PROCESSES=2 two bin/jobs, as during a deploy's overlap
 #   STORM_SQ_POLL=0.1      the dispatcher's and the worker's poll (production: 5)
 #
@@ -90,10 +90,10 @@ cleanup() {
   fi
   echo "Resetting test database..."
   # CASCADE empties what has a foreign key to a named table. The rest is
-  # named: audits, browser_counts, request_keys, keys and
+  # named: audits, browser_counts, request_keys, throttle_counts, keys and
   # common_house_logins have none (spec/bin/storm_cleanup_spec.rb).
   psql -q -d "$TEST_DB" -c "TRUNCATE communities, ledger_check_runs, job_runs, audits, browser_counts, \
-request_keys, keys, common_house_logins, solid_queue_jobs, solid_queue_processes, solid_queue_semaphores, \
+request_keys, throttle_counts, keys, common_house_logins, solid_queue_jobs, solid_queue_processes, solid_queue_semaphores, \
 solid_queue_recurring_tasks CASCADE" 2>/dev/null || true
 }
 trap cleanup EXIT

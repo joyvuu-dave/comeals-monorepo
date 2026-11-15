@@ -95,6 +95,19 @@ RSpec.describe 'config/recurring.yml' do # -- a config file
     expect(RequestKey.pluck(:key)).to eq(['new'])
   end
 
+  # Rack::Attack's counts (ThrottleCount, #292): a row whose window ended
+  # counts for nothing, and is deleted every hour.
+  it 'deletes the throttle counts whose window ended every hour' do
+    task = tasks.fetch(:delete_expired_throttle_counts)
+    ThrottleCount.set('ended', 3, expires_at: 1.minute.ago)
+    ThrottleCount.set('open', 3, expires_at: 1.minute.from_now)
+
+    SolidQueue::RecurringJob.perform_now(task[:command])
+
+    expect(Fugit.parse(task[:schedule]).to_cron_s).to eq('47 * * * * UTC')
+    expect(ThrottleCount.pluck(:key)).to eq(['open'])
+  end
+
   # Outside CI the test environment loads a class only when something uses
   # it, and descendants lists only loaded classes. So without eager loading
   # this example, run alone, checked an empty list, and it never saw a job

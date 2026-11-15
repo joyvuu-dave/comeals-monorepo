@@ -56,6 +56,7 @@ module NonTransactionalCleanup
     bills_save_keys
     guest_add_keys
     request_keys
+    throttle_counts
     meal_residents
     guests
     meal_charges

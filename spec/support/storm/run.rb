@@ -22,7 +22,8 @@ module Storm
   # that raised something no path expects). The spec and the rake task
   # decide what to do with them.
   class Run
-    Result = Struct.new(:requests, :background, :problems, :meal_sockets, :seconds, keyword_init: true) do
+    Result = Struct.new(:requests, :background, :problems, :meal_sockets, :seconds, :throttle_counts,
+                        keyword_init: true) do
       def tally
         requests.group_by(&:action).transform_values { |list| list.map(&:status).tally }
       end
@@ -111,7 +112,11 @@ module Storm
       @seed = seed
       @log = Queue.new
       @problems = []
+      # How many clients send from the one shared address (Storm::Addresses).
+      @addresses = Addresses.new(shared: Storm.knob(:shared_address, 4))
     end
+
+    attr_reader :addresses
 
     def call
       threads = actors.map { |_, work| Thread.new(&work) }
@@ -130,17 +135,21 @@ module Storm
       @deadline = (@starts_at || @clock.call) + @seconds
       @client_list = Array.new(@clients) do |index|
         Client.new(index: index, plan: @plan, transport: @transport, rng: Random.new(@seed + index),
-                   deadline: @deadline, clock: @clock)
+                   deadline: @deadline, clock: @clock, addresses: @addresses)
       end
       @client_list.map.with_index { |client, index| [:"client#{index}", -> { client.run }] } +
         [[:settler, -> { settle_loop }], [:jobs, -> { job_loop }], [:admin, -> { admin_loop }]]
     end
 
     # What the actors did, once they have all ended.
+    # The throttle counts are checked here, once every request has its
+    # answer, so a storm of any kind (bin/storm, the RSpec storm, the
+    # simulation) checks them.
     def result
       Result.new(requests: @client_list.flat_map(&:log), background: Array.new(@log.size) { @log.pop },
-                 problems: @problems, meal_sockets: @client_list.map(&:meal_sockets).reduce(Set.new, :|),
-                 seconds: @seconds)
+                 problems: @problems + @addresses.count_problems(clients: @clients, rows_may_be_deleted: @queue_jobs),
+                 throttle_counts: @addresses.summary(clients: @clients),
+                 meal_sockets: @client_list.map(&:meal_sockets).reduce(Set.new, :|), seconds: @seconds)
     end
 
     private

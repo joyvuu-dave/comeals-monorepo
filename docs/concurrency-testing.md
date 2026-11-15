@@ -59,9 +59,15 @@ a settler, the nightly jobs, and an admin writing through the models
 the way ActiveAdmin does run beside them. The admin takes no
 `with_meal_lock`, but the models take the meal's `FOR KEY SHARE` lock
 first (`LocksItsMealFirst`), and attendance is marked as an admin
-correction, as the admin form marks it. `Rails.cache` and the Rack::Attack
-counters are a real solid_cache in the test database, at SERIALIZABLE,
-like production. One difference: the test environment leaves DEFERRABLE
+correction, as the admin form marks it. `Rails.cache` is a real
+solid_cache in the test database, at SERIALIZABLE, and the Rack::Attack
+counts are rows in `throttle_counts` (`ThrottleStore`), like production.
+Four clients share one address, the way everyone at the Common House
+iPad does (`STORM_SHARED_ADDRESS`, `spec/support/storm/addresses.rb`), and
+after the run each address's count on the server must match what its
+clients sent. Until 2026-11-15 every client had its own address, so no
+storm saw that a count could go back to 1 when two requests from one
+address came at once (#292). One difference: the test environment leaves DEFERRABLE
 out of `SnapshotRead` (`config/environments/test.rb`), so the balance
 refresh and the ledger check can fail with a serialization error there
 and be retried. Production's cannot. What must hold:
@@ -183,7 +189,7 @@ with one thread, the scheduler). The intervals are made short so their
 bookkeeping meets the app's writes as often as possible:
 `spec/support/storm/queue.yml` polls every 0.1 s and runs concurrency
 maintenance every second, and `spec/support/storm/recurring.yml.erb` runs
-every recurring task every 7 s, each at its own second, so the pool of
+every recurring task every 9 s, each at its own second, so the pool of
 12 still holds. The storm task's job loop still runs the nightly jobs
 in its own process and now also queues them: a run here takes no
 semaphore, so it overlaps the worker's run of the same job, while the

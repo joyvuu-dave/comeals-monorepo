@@ -36,7 +36,7 @@ RSpec.describe 'the storm cleanups' do
 
   it 'rake test:storm empties every table the specs empty before a run, with the queue or without it' do
     source = Rails.root.join('lib/tasks/test/storm.rake').read
-    always = source[/tables = %w\[(.*?)\]/, 1].split
+    always = source[/tables = %w\[(.*?)\]/m, 1].split
     queue = source[/tables \+= %w\[(.*?)\]/, 1].split
 
     expect(NonTransactionalCleanup::TABLES - reached_from(always + queue).to_a - queue).to eq([])

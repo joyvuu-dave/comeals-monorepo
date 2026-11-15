@@ -44,7 +44,7 @@ module Simulation
       original_attack_store = Rack::Attack.cache.store
       original_level = Rails.logger.level
       Rails.cache = store
-      Rack::Attack.cache.store = store
+      Rack::Attack.cache.store = ThrottleStore.new
       # Thousands of requests: the log lines would be most of the work.
       Rails.logger.level = Logger::WARN
       yield

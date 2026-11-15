@@ -54,7 +54,8 @@ namespace :test do
     queue = ENV['STORM_SOLID_QUEUE'].present?
     # CASCADE empties what has a foreign key to these; the tables with none
     # are named (spec/bin/storm_cleanup_spec.rb).
-    tables = %w[communities ledger_check_runs job_runs audits browser_counts request_keys keys common_house_logins]
+    tables = %w[communities ledger_check_runs job_runs audits browser_counts request_keys throttle_counts keys
+                common_house_logins]
     tables += %w[solid_queue_jobs solid_queue_processes solid_queue_semaphores solid_queue_recurring_tasks] if queue
     ActiveRecord::Base.connection.execute("TRUNCATE #{tables.join(', ')} CASCADE")
     Current.reset
@@ -120,6 +121,7 @@ namespace :test do
          "(#{result.ok_row_writes} rows), settlements: #{result.settlements}"
     result.tally.sort.each { |action, statuses| puts "  #{action}: #{statuses.sort_by { |s, _| s.to_s }.to_h}" }
     puts "background: #{result.background_tally}"
+    puts result.throttle_counts
     puts "queue: #{queue_summary}" if queue_summary
 
     latency = result.latency

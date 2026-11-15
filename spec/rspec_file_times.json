@@ -264,7 +264,7 @@
   "spec/requests/no_query_after_commit_spec.rb": 18.08,
   "spec/requests/rack_attack_counts_between_specs_spec.rb": 0.02,
   "spec/requests/rack_attack_path_spellings_spec.rb": 0.11,
-  "spec/requests/rack_attack_solid_cache_spec.rb": 0.43,
+  "spec/requests/rack_attack_throttle_store_spec.rb": 0.43,
   "spec/requests/rack_attack_spec.rb": 0.11,
   "spec/requests/routing_spec.rb": 0.06,
   "spec/serializers/api_contract_spec.rb": 1.4,

@@ -2418,6 +2418,19 @@ ALTER SEQUENCE public.solid_queue_semaphores_id_seq OWNED BY public.solid_queue_
 
 
 --
+-- Name: throttle_counts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.throttle_counts (
+    key text NOT NULL,
+    count integer NOT NULL,
+    expires_at timestamp(6) without time zone NOT NULL,
+    CONSTRAINT throttle_counts_count_positive CHECK ((count >= 1)),
+    CONSTRAINT throttle_counts_key_length CHECK (((char_length(key) >= 1) AND (char_length(key) <= 1024)))
+);
+
+
+--
 -- Name: units; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -3171,6 +3184,14 @@ ALTER TABLE ONLY public.solid_queue_semaphores
 
 
 --
+-- Name: throttle_counts throttle_counts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.throttle_counts
+    ADD CONSTRAINT throttle_counts_pkey PRIMARY KEY (key);
+
+
+--
 -- Name: units units_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -3879,6 +3900,13 @@ CREATE INDEX index_solid_queue_semaphores_on_key_and_value ON public.solid_queue
 
 
 --
+-- Name: index_throttle_counts_on_expires_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX index_throttle_counts_on_expires_at ON public.throttle_counts USING btree (expires_at);
+
+
+--
 -- Name: index_units_on_name; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4543,6 +4571,7 @@ ALTER TABLE ONLY public.settlement_correction_charges
 SET search_path TO "$user", public;
 
 INSERT INTO "schema_migrations" (version) VALUES
+('20261115120000'),
 ('20261113160000'),
 ('20261112180000'),
 ('20261111120000'),

@@ -2,20 +2,23 @@
 
 require 'rails_helper'
 
-# Production counts throttle hits in solid_cache. Every other rack_attack spec
-# runs against a MemoryStore, which proves the throttle config but says nothing
-# about the store that actually holds the counters in production.
+# Production counts throttle hits in the throttle_counts table, through
+# ThrottleStore (#292). Every other rack_attack spec runs against a
+# MemoryStore, which proves the throttle config but says nothing about the
+# store that holds the counts in production.
 #
 # Counting is the one thing that differs from plain read/write. Rack::Attack
-# calls store.increment on a key that may not exist yet, and stores disagree
-# about that case — memcached returns nil, and Rack::Attack falls back to
-# writing 1. This spec pins the behaviour end to end: real HTTP requests, real
-# SolidCache::Store, real Postgres rows.
+# calls store.increment on a key that may not exist yet, and takes a nil
+# answer to mean "no count yet", writing 1 over whatever is there. This spec
+# pins the behaviour end to end: real requests, a real ThrottleStore, real
+# Postgres rows. Two requests at the same moment are in
+# spec/concurrency/shared_address_spec.rb.
 #
-# The test environment caches to :null_store, so pointing Rack::Attack at a
-# real store here is not optional — against null_store every count would read
-# back as nothing and the throttle would never trip, passing vacuously.
-RSpec.describe 'Rack::Attack throttles backed by SolidCache' do
+# The test environment counts nothing (spec/support/rack_attack.rb), so
+# pointing Rack::Attack at the real store here is not optional: against the
+# null store every count would read back as nothing and the throttle would
+# never trip, passing vacuously.
+RSpec.describe 'Rack::Attack throttles backed by ThrottleStore' do
   include ActiveSupport::Testing::TimeHelpers
 
   # Rack::Attack keys each counter by the clock's period (5 minutes for
@@ -25,24 +28,24 @@ RSpec.describe 'Rack::Attack throttles backed by SolidCache' do
   # is the start of a period for every throttle here.
   before { travel_to(Time.utc(2026, 4, 1, 12, 0, 1)) }
 
-  # A fresh namespace per example is how these specs isolate from each other.
-  # The obvious alternative, Rack::Attack.reset!, does not work here — see the
-  # delete_matched example at the bottom of this file.
-  let(:solid_cache) { build_solid_cache_store(namespace: "rack-attack-spec-#{SecureRandom.hex(4)}") }
-
+  # The rows are in the example's transaction, so each example starts with
+  # an empty table.
   around do |example|
     original = Rack::Attack.cache.store
-    Rack::Attack.cache.store = solid_cache
+    Rack::Attack.cache.store = ThrottleStore.new
     example.run
     Rack::Attack.cache.store = original
   end
 
-  it 'stores its counters in solid_cache, not somewhere else' do
-    post '/api/v1/residents/token',
-         params: { email: 'nobody@example.com', password: 'wrong' },
-         env: { 'REMOTE_ADDR' => '10.1.0.1' }
+  it 'stores its counters in throttle_counts, not in the cache' do
+    expect do
+      post '/api/v1/residents/token',
+           params: { email: 'nobody@example.com', password: 'wrong' },
+           env: { 'REMOTE_ADDR' => '10.1.0.1' }
+    end.not_to change(SolidCache::Entry, :count)
 
-    expect(SolidCache::Entry.count).to be_positive
+    expect(ThrottleCount.pluck(:key, :count))
+      .to contain_exactly(['rack::attack:5916816:login/ip:10.1.0.1', 1], ['rack::attack:29584080:api/ip:10.1.0.1', 1])
   end
 
   it 'counts up across requests instead of resetting each time' do
@@ -123,18 +126,13 @@ RSpec.describe 'Rack::Attack throttles backed by SolidCache' do
   end
 
   describe 'Rack::Attack.reset!' do
-    # A real difference from memcached, pinned here so it is not a surprise
-    # later. Rack::Attack.reset! clears every counter by calling
-    # store.delete_matched, and solid_cache does not implement that — matching
-    # keys by pattern is not something the entries table supports.
-    #
-    # This costs production nothing: reset! is a test and console helper.
-    # Nothing on the request path calls it, and nothing in app/, config/, or
-    # lib/ calls delete_matched at all. To clear throttle counters by hand in
-    # production, use Rails.cache.clear (what bin/deploy already runs) or
-    # delete the specific key.
-    it 'is not available when counters live in solid_cache' do
-      expect { Rack::Attack.reset! }.to raise_error(NotImplementedError, /delete_matched/)
+    # Rack::Attack.reset! clears every counter by calling
+    # store.delete_matched with a Ruby pattern, and ThrottleStore has no
+    # such call. reset! is a test and console helper; nothing on the request
+    # path calls it. To clear the counts by hand, empty the table:
+    # ThrottleCount.delete_all.
+    it 'is not available when counters live in throttle_counts' do
+      expect { Rack::Attack.reset! }.to raise_error(Rack::Attack::IncompatibleStoreError, /delete_matched/)
     end
   end
 end

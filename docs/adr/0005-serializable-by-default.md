@@ -303,6 +303,12 @@ not the store wrapper this decision originally called for. "The volume is too
 low for the counters to contend" is probably true and is not a reason to leave
 it; a broken cache breaking a request is a stupid way to find out.
 
+Correction, 2026-11-15: the one-line change was right for cached pages and
+wrong for the Rack::Attack counts. A count refused for a conflict became
+"no count", and Rack::Attack then wrote 1 over it, so requests from one
+address at the same moment were let through past the limit. The counts
+left solid_cache; see decision 11.
+
 ### 8. Write the retry tests before the retry
 
 At 1 thread and 0 workers, with `FOR UPDATE` held on every ledger write path,
@@ -337,8 +343,9 @@ Added 2026-10-20. Solid Queue keeps its records in the solid_queue\_\*
 tables of this database: which processes are alive, which jobs are
 ready, which a worker has claimed, which wait for a later time or for a
 `limits_concurrency` slot. The transactions it opens on its own threads
-to keep those records run at READ COMMITTED. Nothing else does: no app
-table is ever written at READ COMMITTED, every job's `perform` runs at
+to keep those records run at READ COMMITTED. Nothing else does, except
+Rack::Attack's counts (decision 11): no table that holds money,
+attendance or a reservation is ever written at READ COMMITTED, every job's `perform` runs at
 SERIALIZABLE, and every job the app queues is written in the app's own
 SERIALIZABLE transaction. So the settlement's two mail jobs still commit
 or roll back with the settlement.
@@ -432,6 +439,48 @@ recurring run is rolled back),
 `spec/config/initializers/solid_queue_isolation_savepoint_spec.rb` (the
 steps that open a savepoint), and `spec/services/settle_and_notify_spec.rb`
 (both mail jobs roll back with a refused settlement).
+
+### 11. A second exception: Rack::Attack's counts run at READ COMMITTED
+
+Added 2026-11-15 (#292, challenge 4). Rack::Attack counts every API
+request in one row per address, rule and time window. Until this date
+the rows were solid_cache entries, and decision 7 made a conflict on one
+a cache miss instead of a 500. For a cached page a miss is right. For a
+count it is not: Rack::Attack takes "no value" from `increment` to mean
+"no count yet" and writes 1 over the count. solid_cache adds to a count
+with `SELECT ... FOR UPDATE` and then a write, so at SERIALIZABLE two
+requests from one address at the same moment conflict, and the count
+went back to 1. In `spec/concurrency/shared_address_spec.rb`, 40 login
+tries from one address at once were all let through (the limit is 20),
+and 200 requests counted as 2 to 4. Production runs one Puma thread, so
+two requests never overlapped there. More threads would have made them
+overlap.
+
+The counts are now rows in `throttle_counts` (`ThrottleCount`), and
+Rack::Attack reaches them through `ThrottleStore`
+(`lib/throttle_store.rb`). Each count is an UPDATE that adds to the row,
+or an INSERT when there is no row, in a transaction of its own at READ
+COMMITTED. At READ COMMITTED a request that finds the row locked waits
+for the other request to commit and then adds to the count it wrote, so
+no count is lost and none is refused. That is safe here because each
+statement reads and writes only the one row it names, and no
+SERIALIZABLE transaction reads the table.
+
+Why an UPDATE first and not one `INSERT ... ON CONFLICT DO UPDATE`: the
+waiters for a row inserted by another request are all woken at once,
+and which goes first then depends on timing, so the seeded simulation
+could not replay a storm step for step. Waiters on an UPDATE take the
+row in the order they asked, as for `SELECT ... FOR UPDATE`. The comment
+on `ThrottleCount.add` has the details.
+
+Like decision 10, this is an exception for bookkeeping, not for app
+data: nothing that holds money, attendance or a reservation is ever
+written at READ COMMITTED. The specs: `spec/models/throttle_count_spec.rb`
+(the counts, and the isolation level),
+`spec/requests/rack_attack_throttle_store_spec.rb` (the throttles end to
+end), `spec/concurrency/shared_address_spec.rb` (one address at once),
+and the storms, where four clients share one address and the server's
+count must match what they sent (`spec/support/storm/addresses.rb`).
 
 ## Consequences
 

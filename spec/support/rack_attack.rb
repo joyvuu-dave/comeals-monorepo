@@ -16,7 +16,9 @@
 # again, and the memory store Rack::Attack holds is no longer in it.
 #
 # So the store is picked here, before any spec runs, and the order of the
-# specs no longer decides it.
+# specs no longer decides it. Since #292 config/initializers/rack_attack.rb
+# also picks it at boot (ThrottleStore.for), which in the test environment
+# is the same null store; this stays so the rule holds even if that changes.
 RSpec.configure do |config|
   config.before(:suite) { Rack::Attack.cache.store = Rails.cache }
 end

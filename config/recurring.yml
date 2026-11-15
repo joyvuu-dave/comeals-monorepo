@@ -47,6 +47,9 @@ shared: &shared
   delete_expired_request_keys:
     command: "RequestKey.delete_expired"
     schedule: 45 * * * * UTC
+  delete_expired_throttle_counts:
+    command: "ThrottleCount.delete_expired"
+    schedule: 47 * * * * UTC
 
 development:
   <<: *shared

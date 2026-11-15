@@ -24,19 +24,14 @@ module Storm
   #     is what a 500 would be);
   #   - an answer that belongs to someone else: /residents/id must answer
   #     this client's id, and a login must answer this client's resident;
-  #   - a 429 the throttle had no grounds for. The client counts its own
-  #     requests per throttle window (every client has its own IP), so a
-  #     429 under the limit means the counter held someone else's requests.
+  #   - a 429 the throttle had no grounds for. Every request is counted
+  #     per address and throttle window, across the clients that share
+  #     the address (Storm::Addresses), so a 429 under the limit means the
+  #     counter held another address's requests.
   class Client
     # ms is the round trip as the client saw it, from sending the request
     # to reading the whole answer, in milliseconds.
     Entry = Struct.new(:client, :n, :action, :meal_id, :status, :problem, :ms, keyword_init: true)
-
-    # config/initializers/rack_attack.rb
-    API_LIMIT = 600
-    API_PERIOD = 60
-    LOGIN_LIMIT = 20
-    LOGIN_PERIOD = 300
 
     # How often each action is picked. Writes to meals dominate, the way
     # they do at dinner time.
@@ -85,7 +80,10 @@ module Storm
 
     attr_reader :log, :meal_sockets
 
-    def initialize(index:, plan:, transport:, rng:, deadline:, clock: Storm::MONOTONIC) # rubocop:disable Metrics/ParameterLists -- all keywords
+    # rubocop:disable Metrics/ParameterLists -- all keywords
+    def initialize(index:, plan:, transport:, rng:, deadline:, clock: Storm::MONOTONIC,
+                   addresses: Addresses.new(shared: 1))
+      # rubocop:enable Metrics/ParameterLists
       @index = index
       @clock = clock
       @plan = plan
@@ -94,7 +92,8 @@ module Storm
       @deadline = deadline
       @resident = plan.residents.fetch(index)
       @home = plan.meals.fetch(index % plan.meals.size)
-      @ip = "10.9.#{index / 250}.#{(index % 250) + 1}"
+      @addresses = addresses
+      @ip = addresses.address_for(index)
       @n = 0
       @log = []
       # Every (meal id, socket id) pair this client sent with a meal write.
@@ -107,7 +106,6 @@ module Storm
       @events = []
       @guest_rooms = []
       @common_houses = []
-      @sent = Hash.new(0)
       @weights = WEIGHTS.reject { |action, _| RECONCILER_ONLY.include?(action) && !@resident.can_reconcile? }
     end
 
@@ -160,7 +158,7 @@ module Storm
       headers = { 'Authorization' => "Bearer #{@plan.tokens.fetch(@resident.id)}" }
       headers['Idempotency-Key'] = %("storm-#{@index}-#{@n}") if KEYED_ACTIONS.include?(action)
       login = action == :login
-      note_sent(login)
+      @addresses.note_sent(@ip, login)
       status, response = @transport.call(method, path, headers, body && JSON.generate(body), @ip)
       [status, response]
     end
@@ -170,30 +168,11 @@ module Storm
     def judge(action, status, response, check)
       return nil if status == CONFLICT
       return nil if EXPECTED.fetch(action).include?(status) && (check.nil? || check.call(response))
-      return nil if status == 429 && throttled_with_reason?(action == :login)
-      return "false 429: #{@sent.inspect}" if status == 429
+      return nil if status == 429 && @addresses.throttled_with_reason?(@ip, action == :login)
+      return "false 429 to #{@ip}: #{@addresses.sent_from(@ip).inspect}" if status == 429
       return "answered someone else: #{response[0, 200]}" if EXPECTED.fetch(action).include?(status)
 
       "unexpected #{status}: #{response.to_s[0, 400]}"
-    end
-
-    def note_sent(login)
-      now = Time.now.to_i
-      @sent[[API_PERIOD, now / API_PERIOD]] += 1
-      @sent[[LOGIN_PERIOD, now / LOGIN_PERIOD]] += 1 if login
-    end
-
-    # Rack::Attack counts in fixed windows aligned to the epoch. A request
-    # sent at the edge of a window may be counted by the server in the
-    # next one, so the window before counts too.
-    def throttled_with_reason?(login)
-      now = Time.now.to_i
-      over?(API_PERIOD, API_LIMIT, now) || (login && over?(LOGIN_PERIOD, LOGIN_LIMIT, now))
-    end
-
-    def over?(period, limit, now)
-      window = now / period
-      @sent[[period, window]] > limit || @sent[[period, window - 1]] > limit
     end
 
     # --- the requests -------------------------------------------------------

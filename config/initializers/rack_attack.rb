@@ -6,9 +6,18 @@
 # legitimate resident fumbling their password will never trip them. Anything
 # that does trip them is almost certainly a bot.
 #
-# Counters live in Rails.cache (solid_cache, i.e. Postgres, in production).
+# Counters live in the throttle_counts table (ThrottleStore), wherever the
+# app keeps a real cache: production, development with caching on, and the
+# storm and fault servers. Where Rails.cache is a null store (RSpec, the
+# browser suites' servers, development with caching off) nothing is
+# counted, so nothing is throttled, as before. The counts left solid_cache
+# because a count there could go back to 1 when two requests from one
+# address came at the same moment (#292, ADR 0005 decision 11).
 
 require Rails.root.join('lib/secret_file_probe')
+require Rails.root.join('lib/throttle_store')
+
+Rack::Attack.cache.store = ThrottleStore.for(Rails.cache)
 
 module Rack
   class Attack
