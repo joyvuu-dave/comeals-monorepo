@@ -175,6 +175,22 @@ RequestKey:
     NullConstraintChecker:
       enabled: false
 
+# Rack::Attack's counts (#292). A row is written only by ThrottleCount's
+# SQL (add, set), never through the model, so no validation would run.
+# The NOT NULL and CHECK constraints are the rules. The primary key is
+# Rack::Attack's text key, not an id; the checker reads any key that is
+# not bigint or uuid as int.
+ThrottleCount:
+  key:
+    PrimaryKeyTypeChecker:
+      enabled: false
+  count:
+    NullConstraintChecker:
+      enabled: false
+  expires_at:
+    NullConstraintChecker:
+      enabled: false
+
 # Only the trigger comeals_count_attendance_version writes a row; the
 # model is read-only (AttendanceVersion#readonly?). The NOT NULL and
 # CHECK constraints and the unique index are the rules, and no

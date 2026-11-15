@@ -120,3 +120,6 @@ public_schema_config
 # ActiveRecord's database tasks call this one for every structure dump;
 # lib/structure_dump_cleanup.rb prepends it:
 structure_dump
+# Rack::Attack::Cache#do_count calls it on the store ThrottleStore.for
+# picked (lib/throttle_store.rb, #292):
+increment

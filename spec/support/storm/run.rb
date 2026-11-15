@@ -100,8 +100,12 @@ module Storm
     end
 
     # rubocop:disable-next Metrics/ParameterLists -- all keywords, each one a storm setting
+    #
+    # shared_address is how many clients send from the one shared address
+    # (Storm::Addresses). check_counts is false where the server's
+    # throttle counts cannot match what the clients sent (bin/faults).
     def initialize(plan:, transport:, clients:, seconds:, seed:, queue_jobs: false, clock: Storm::MONOTONIC,
-                   starts_at: nil)
+                   starts_at: nil, shared_address: Storm.knob(:shared_address, 4), check_counts: true)
       @clock = clock
       @starts_at = starts_at
       @plan = plan
@@ -112,8 +116,8 @@ module Storm
       @seed = seed
       @log = Queue.new
       @problems = []
-      # How many clients send from the one shared address (Storm::Addresses).
-      @addresses = Addresses.new(shared: Storm.knob(:shared_address, 4))
+      @addresses = Addresses.new(shared: shared_address)
+      @check_counts = check_counts
     end
 
     attr_reader :addresses
@@ -147,12 +151,18 @@ module Storm
     # simulation) checks them.
     def result
       Result.new(requests: @client_list.flat_map(&:log), background: Array.new(@log.size) { @log.pop },
-                 problems: @problems + @addresses.count_problems(clients: @clients, rows_may_be_deleted: @queue_jobs),
+                 problems: @problems + count_problems,
                  throttle_counts: @addresses.summary(clients: @clients),
                  meal_sockets: @client_list.map(&:meal_sockets).reduce(Set.new, :|), seconds: @seconds)
     end
 
     private
+
+    def count_problems
+      return [] unless @check_counts
+
+      @addresses.count_problems(clients: @clients, rows_may_be_deleted: @queue_jobs)
+    end
 
     def join(threads)
       threads.each_with_index do |thread, i|

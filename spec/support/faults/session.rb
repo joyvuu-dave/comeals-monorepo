@@ -19,6 +19,20 @@ module Faults
     # out of three.
     SETTLE_LOSE = 1.0
 
+    # Every client sends from an address of its own, and the server's
+    # throttle counts are not compared with what the clients sent.
+    #
+    # Shared: a client here never pauses, so four on one address pass
+    # Rack::Attack's 600 a minute within seconds. Most of their requests
+    # were then 429s, and the run tested the faults on far fewer writes.
+    # bin/storm and the RSpec storm test the shared address.
+    #
+    # Counts: a lost answer is sent again, so the server counts two
+    # requests where the client sent one. A request that met a lost
+    # database connection may or may not have been counted before it
+    # failed, and the client cannot tell which.
+    THROTTLE = { shared_address: 1, check_counts: false }.freeze
+
     # Lines of a background write that the faults stopped on purpose.
     LOST_CONNECTION = /ConnectionFailed|ConnectionNotEstablished|ConnectionBad|DatabaseConnectionError|
                        server\ closed\ the\ connection|terminating\ connection|connection\ to\ server/x
@@ -119,7 +133,8 @@ module Faults
       deadline = Storm::MONOTONIC.call + @seconds
       faults = Thread.new { @driver.run(deadline) }
       settles = Thread.new { settle_phone(deadline) }
-      result = Storm::Run.call(plan: @plan, transport: @transport, clients: @clients, seconds: @seconds, seed: @seed)
+      result = Storm::Run.call(plan: @plan, transport: @transport, clients: @clients, seconds: @seconds, seed: @seed,
+                               **THROTTLE)
       faults.join
       settles.join
       result
