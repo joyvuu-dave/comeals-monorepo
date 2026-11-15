@@ -107,7 +107,7 @@ RSpec.describe RecurringCatchUp do
       expect { returned = described_class.call(now: now) }.not_to raise_error
       expect(returned).to contain_exactly(RefreshBalancesJob, EnsureRotationsJob, SendMissedSettlementMailJob)
       expect(Rails.error).to have_received(:report)
-        .with(error, handled: true, severity: :error, context: { job: 'VerifyLedgerJob' })
+        .with(error, handled: true, severity: :error, context: { queueing: 'VerifyLedgerJob' })
     end
 
     # Active Job answers false, with no error, when the adapter refuses a
@@ -119,7 +119,7 @@ RSpec.describe RecurringCatchUp do
         .to contain_exactly(RefreshBalancesJob, EnsureRotationsJob, SendMissedSettlementMailJob)
       expect(Rails.error).to have_received(:report)
         .with(an_instance_of(RuntimeError).and(having_attributes(message: 'VerifyLedgerJob was not queued')),
-              handled: true, severity: :error, context: { job: 'VerifyLedgerJob' })
+              handled: true, severity: :error, context: { queueing: 'VerifyLedgerJob' })
     end
 
     # Found by bin/storm with STORM_SOLID_QUEUE=1 STORM_JOBS_PROCESSES=2,
@@ -160,7 +160,7 @@ RSpec.describe RecurringCatchUp do
       expect { returned = described_class.call(now: now) }.not_to raise_error
       expect(returned).to eq([])
       expect(Rails.error).to have_received(:report)
-        .with(error, handled: true, severity: :error, context: { job: 'all' })
+        .with(error, handled: true, severity: :error, context: { queueing: 'all' })
     end
   end
 end

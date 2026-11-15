@@ -62,7 +62,10 @@ module Storm
     #   - a conflict reported and swallowed anywhere else, the way the
     #     in-process storm allows it (a balance refresh after a settlement
     #     that kept conflicting, a refused cache write), except a job that
-    #     could not be queued: a lost push or a lost mail is a problem;
+    #     could not be queued: a lost push or a lost mail is a problem.
+    #     The report of a lost push carries `channel`, and the boot
+    #     catch-up's carries `queueing`. Not `job`: Rails adds that to
+    #     every report made while a job runs, a refused cache write too;
     #   - an error that was raised in the server, because the client
     #     judges the answer it got, or in the storm task, because the
     #     thread that raised it judges it (Storm::Run).
@@ -74,7 +77,7 @@ module Storm
       return "#{entry['process']} raised: #{text}" if !entry['handled'] && entry['process'] == 'jobs'
       return if !entry['handled'] || retried_conflict?(entry)
       return "#{entry['process']} reported and swallowed: #{text}" unless entry['conflict']
-      return unless entry['context'].keys.intersect?(%w[channel job])
+      return unless entry['context'].keys.intersect?(%w[channel queueing])
 
       context = entry['context'].map { |key, value| "#{key}: #{value}" }.join(', ')
       "#{entry['process']} reported and swallowed: #{text} (#{context}): an enqueue that failed after its retries"

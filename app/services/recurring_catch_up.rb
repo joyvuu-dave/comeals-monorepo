@@ -72,8 +72,12 @@ class RecurringCatchUp
     false
   end
 
+  # The key is `queueing`, not `job`: Rails puts `job` in the context of
+  # every report made while a job runs, and bin/storm tells a job that
+  # could not be queued from other reports by this key
+  # (spec/support/storm/error_log.rb).
   def report(error, job)
-    Rails.error.report(error, handled: true, severity: :error, context: { job: job })
+    Rails.error.report(error, handled: true, severity: :error, context: { queueing: job })
   end
 
   def tasks

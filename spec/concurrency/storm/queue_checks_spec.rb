@@ -98,6 +98,26 @@ RSpec.describe Storm::QueueChecks do
                             'could not serialize access (channel: meal-7): an enqueue that failed after its retries'])
   end
 
+  it 'names a nightly job the catch-up could not queue' do
+    report(process: 'jobs', error: conflict, handled: true, context: { queueing: 'VerifyLedgerJob' })
+
+    expect(problems).to eq(['jobs reported and swallowed: ActiveRecord::SerializationFailure: ' \
+                            'could not serialize access (queueing: VerifyLedgerJob): ' \
+                            'an enqueue that failed after its retries'])
+  end
+
+  # Rails adds the running job to the context of every report made while
+  # a job runs. A cache write that solid_cache refused for a conflict
+  # inside a job is reported with only that, and the storm allows a
+  # refused cache write. A 160-client run of bin/storm named one as a
+  # failed enqueue.
+  it 'lets a conflict reported inside a job pass when it carries only the job' do
+    report(process: 'driver', error: conflict, handled: true,
+           context: { job: '#<EnsureRotationsJob:0x0000000127519e38>' })
+
+    expect(problems).to eq([])
+  end
+
   it 'lets a conflict that was tried again pass, and counts it' do
     report(process: 'jobs', error: conflict, handled: true, context: { attempt: 1, max_attempts: 5 })
 
