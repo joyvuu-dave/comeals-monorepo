@@ -1,0 +1,19 @@
+---
+- subject: DatabaseFull#call
+  kind: same-answer
+  why: >-
+    The pg gem defines no subclass of PG::DiskFull, so for every error the driver can raise, instance_of? and is_a?
+    agree.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def call(env)
+       @app.call(env)
+     rescue ActiveRecord::StatementInvalid => e
+       path = env.fetch("PATH_INFO")
+    -  unless e.cause.is_a?(PG::DiskFull) && path.start_with?("/api/")
+    +  unless e.cause.instance_of?(PG::DiskFull) && path.start_with?("/api/")
+         raise
+       end
+       Rails.error.report(e, handled: true, severity: :error, context: { path: })
+       [507, { "content-type" => "application/json; charset=utf-8" }, [JSON.generate(message: MESSAGE)]]
+     end

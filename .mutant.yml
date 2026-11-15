@@ -120,6 +120,7 @@ matcher:
     - UnknownRouteLog*
     - DatabasePoolCheck*
     - DatabaseUnreachable*
+    - DatabaseFull*
     - SolidQueueCheck*
     - SquashedMigrationsCheck*
     - SchemaBootCheck*

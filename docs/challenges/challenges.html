@@ -1865,7 +1865,7 @@ UNIQUE (idempotency_key)</pre>
 <details class="challenge" id="challenge-30" data-status="done" data-area="proof">
   <summary><span class="num">30</span> <span class="title">Tests that break the network, the database and the clock</span> <span class="chip status-done">Done</span> <span class="chip area-proof">proof</span><span class="badge">1 not checked</span></summary>
   <div class="meta">Opened 2026-11-07 · reviewed 2026-11-15 · <code>docs/challenges/0030-tests-that-break-things-on-purpose.md</code></div>
-  <details class="watches"><summary>Watches 5 files</summary><ul><li><code>docs/concurrency-testing.md</code></li><li><code>docs/fault-testing.md</code></li><li><code>docs/adr/0015-idempotency-keys-on-calendar-writes.md</code></li><li><code>lib/database_unreachable.rb</code></li><li><code>app/controllers/concerns/keyed_writes.rb</code></li></ul></details>
+  <details class="watches"><summary>Watches 6 files</summary><ul><li><code>docs/concurrency-testing.md</code></li><li><code>docs/fault-testing.md</code></li><li><code>docs/adr/0015-idempotency-keys-on-calendar-writes.md</code></li><li><code>lib/database_unreachable.rb</code></li><li><code>lib/database_full.rb</code></li><li><code>app/controllers/concerns/keyed_writes.rb</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
 <h3>The challenge</h3>
@@ -1884,11 +1884,13 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>A request that loses its database connection is answered 503 with a <code>Retry-After</code>, not 500 (<code>lib/database_unreachable.rb</code>).</p>
 </li><li>
+<p>A request that PostgreSQL refuses because its disk is full is answered 507 with “nothing was saved”, not 500 (<code>lib/database_full.rb</code>, <code>spec/requests/api/v1/database_full_spec.rb</code>). The fault suite does not fill a disk; the spec makes PostgreSQL raise its real <code>disk_full</code> error.</p>
+</li><li>
 <p>Every write the browser sends again is safe to send twice. A bills save and a guest add need an <code>Idempotency-Key</code> (ADR 0009). The calendar writes, a guest remove and a settle take one (ADR 0015, <code>spec/requests/api/v1/request_keys_spec.rb</code>). Attendance writes carry a version, and a second send is answered 409 “stale” (ADR 0012). On a settled meal, a close, a cancel, a description or a cap that sends the value the meal already has is answered as saved (#280, <code>app/controllers/concerns/settled_same_value.rb</code>).</p>
 </li><li>
 <p>Settles run all through a fault run. A settle phone settles one dinner at a time, and every one of its answers is lost once, so a settle that worked is sent again on every run and must get the same settlement back (<code>docs/fault-testing.md</code>, “The settle phone”).</p>
 </li><li>
-<p>Not checked: a fault in Pusher or the mail server, a full disk, and a clock that moves on the database server itself (the app never reads it, <code>spec/db/app_clock_spec.rb</code>). Pusher and mail are kept out of the request: a push is a job that tries three times and reports (<code>LivePushJob</code>), and a reset or email change that cannot send its mail answers that it was not sent and keeps the token.</p>
+<p>Not checked: a fault in Pusher or the mail server, and a clock that moves on the database server itself (the app never reads it, <code>spec/db/app_clock_spec.rb</code>). Pusher and mail are kept out of the request: a push is a job that tries three times and reports (<code>LivePushJob</code>), and a reset or email change that cannot send its mail answers that it was not sent and keeps the token.</p>
 </li></ul>
 
 <span id="label-Options" class="legacy-anchor"></span>
@@ -1917,7 +1919,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>2026-11-13: David decided the Idempotency-Key stays optional for now. A page loaded before keys were added sends none, so requiring one would refuse those pages’ writes. To look at again once every phone has loaded a newer page.</p>
 </li><li>
-<p>2026-11-14: David chose two of the gaps. First, a settle sent again under faults: the suite now plants a row of settleable dinners and a settle phone settles them one by one, with every answer lost once. Its first run found no bug in the app. The check first compared the two answers as text, and the stored answer comes back from <code>jsonb</code> with its keys in another order, so it compares parsed JSON. Second, a full disk: a write that hits PostgreSQL’s <code>disk_full</code> error was answered 500. Pusher, mail and the database server’s clock are left as they are.</p>
+<p>2026-11-14: David chose two of the gaps. First, a settle sent again under faults: the suite now plants a row of settleable dinners and a settle phone settles them one by one, with every answer lost once. Its first run found no bug in the app. The check first compared the two answers as text, and the stored answer comes back from <code>jsonb</code> with its keys in another order, so it compares parsed JSON. Second, a full disk: a write that hits PostgreSQL’s <code>disk_full</code> error was answered 500, so the page said “The server had a problem” and treated the write as maybe saved. Nothing was saved: the error rolls the write back, and no write runs a query after its commit. David chose 507 Insufficient Storage with “nothing was saved” (2026-11-15), for API paths only; admin keeps the error page. Pusher, mail and the database server’s clock are left as they are.</p>
 </li></ul>
 </div>
 </details>

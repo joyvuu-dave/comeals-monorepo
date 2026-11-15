@@ -79,6 +79,12 @@ module Comeals
     require_relative '../lib/database_unreachable'
     config.middleware.insert_before ActionDispatch::Callbacks, DatabaseUnreachable
 
+    # An API request refused because the database's disk is full is
+    # answered 507, not 500 (see the class comment). In the same place in
+    # the stack as DatabaseUnreachable, for the same reasons.
+    require_relative '../lib/database_full'
+    config.middleware.insert_before ActionDispatch::Callbacks, DatabaseFull
+
     # Dump the schema as SQL. The database is the last line of defense
     # (AGENTS.md): reconciled-meal immutability lives in triggers, and
     # schema.rb cannot represent triggers, so a schema.rb-built database

@@ -139,6 +139,7 @@ MUTANT_SPEC_ROWS = {
        Api::V1::CommonHouseReservationsController Api::V1::MealsController],
   'spec/requests/api/v1/request_key_race_spec.rb' => %w[RequestKey KeyedWrites Api::V1::EventsController],
   'spec/requests/api/v1/database_unreachable_spec.rb' => %w[DatabaseUnreachable],
+  'spec/requests/api/v1/database_full_spec.rb' => %w[DatabaseFull],
   'spec/requests/api/v1/reconciliations_authorization_spec.rb' => %w[Api::V1::ReconciliationsController],
   'spec/requests/api/v1/residents_ical_spec.rb' => %w[MealIcalFeed Api::V1::ResidentsController],
   'spec/requests/api/v1/communities_controller_spec.rb' =>

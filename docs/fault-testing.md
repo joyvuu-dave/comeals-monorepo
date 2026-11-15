@@ -137,6 +137,18 @@ Later runs, on 2026-11-13:
 
 The money rules held through every fault in every run.
 
+## A full disk
+
+The suite does not fill a disk. A request spec does the same job: a
+trigger makes PostgreSQL raise its real `disk_full` error (SQLSTATE 53100) on a sign-up and on a guest add
+(`spec/requests/api/v1/database_full_spec.rb`). Until 2026-11-15 the
+answer was 500. Now `DatabaseFull` (`lib/database_full.rb`) answers an
+API request `507` and says nothing was saved. That is true because the
+error rolls the write back, and no write runs a query after its commit
+(`spec/requests/no_query_after_commit_spec.rb`). A disk that fills
+while PostgreSQL writes a commit stops the server, and that is the
+lost connection above: `503`, "may or may not have been saved".
+
 ## When it fails
 
 - Read the last lines: one line per kind of problem, with the action,
