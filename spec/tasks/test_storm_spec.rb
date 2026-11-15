@@ -80,12 +80,17 @@ RSpec.describe 'test:storm', prosopite: false, server_notices: [ServerNotices::R
   around do |example|
     original_env = storm_env.keys.index_with { |name| ENV.fetch(name, nil) }
     original_cache = Rails.cache
+    original_attack_store = Rack::Attack.cache.store
     original_level = Rails.logger.level
     Rails.logger.level = Logger::WARN
+    # The test environment counts nothing (ThrottleStore.for gives back the
+    # null store); the storm checks the counts, as production keeps them.
+    Rack::Attack.cache.store = ThrottleStore.new
     ENV.update(storm_env)
     example.run
   ensure
     ENV.update(original_env)
+    Rack::Attack.cache.store = original_attack_store
     Rails.cache.clear unless Rails.cache.equal?(original_cache)
     Rails.cache = original_cache
     Rails.logger.level = original_level
