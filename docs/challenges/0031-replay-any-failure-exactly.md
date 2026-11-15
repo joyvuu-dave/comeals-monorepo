@@ -4,7 +4,7 @@ title: Replay any failure exactly
 area: proof
 status: done
 opened: 2026-11-07
-reviewed: 2026-11-13
+reviewed: 2026-11-15
 watches:
   - spec/support/simulation/scheduler.rb
   - spec/support/simulation/determinism.rb
@@ -45,3 +45,4 @@ Option 1, with the readable record of option 2: the seeded scheduler and its tra
 - 2026-11-12: David chose option 1 with a readable record: a scheduler that lets one SQL statement run at a time and uses a seed to pick whose turn it is, with a fake clock, plus a printout of the steps of a failed run. It is to drive the whole storm API (every action `Storm::Client` sends), and `bin/check` runs a few seeds; one setting runs many, another replays one. Work started on branch `agent/replay-any-failure`.
 - 2026-11-12: Built and closed. David chose to close the challenge once the work merges, and to list what the seed does not control in a new issue (#270) rather than keep this challenge open for it.
 - 2026-11-12: David approved a weekly workflow that runs new seeds (after an overnight search of 2700 seeds found no race).
+- 2026-11-15: Four storm clients now share one address (#292). A count written with one `INSERT ... ON CONFLICT DO UPDATE` made two runs of one seed differ: PostgreSQL wakes all the requests that wait for another's new row at once, and which goes first depends on timing. `ThrottleCount.add` now updates first and inserts only when there is no row, so the waiters take the row in the order they asked, and a seed replays again.
