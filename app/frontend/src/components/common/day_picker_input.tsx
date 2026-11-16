@@ -4,6 +4,11 @@ import { DayPicker } from "react-day-picker";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { useStore } from "../../helpers/store_context";
+import {
+  earlier,
+  firstDay,
+  lastDay as windowLastDay,
+} from "../../helpers/calendar_window";
 
 dayjs.extend(utc);
 
@@ -38,7 +43,8 @@ interface DayPickerInputProps {
   placeholder?: string;
   // A day in the month the picker opens on when no day is chosen.
   defaultMonth?: string;
-  // The last day that can be chosen.
+  // The last day that can be chosen. The picker never offers a day
+  // outside the calendar window (helpers/calendar_window.ts) either.
   lastDay?: string;
   inputDisabled?: boolean;
   onDayChange?: (day: string) => void;
@@ -105,9 +111,18 @@ function DayPickerInputWrapper({
   // the picker opens on today's month.
   const openOn = defaultMonth ?? value ?? store.communityToday;
 
-  // Every form passes a last day by the time its picker can open; with
-  // none, every day can be chosen.
-  const tooLate = lastDay === undefined ? [] : [{ after: noonOn(lastDay) }];
+  // Every form passes a last day by the time its picker can open. Either
+  // way, no day outside the calendar window can be chosen: the server
+  // refuses those (CalendarWindow), so the picker does not offer them.
+  const today = store.communityToday;
+  const last =
+    lastDay === undefined
+      ? windowLastDay(today)
+      : earlier(lastDay, windowLastDay(today));
+  const outside = [
+    { before: noonOn(firstDay(today)) },
+    { after: noonOn(last) },
+  ];
 
   return (
     <div
@@ -139,7 +154,7 @@ function DayPickerInputWrapper({
             selected={value === null ? undefined : noonOn(value)}
             onSelect={handleDaySelect}
             defaultMonth={noonOn(openOn)}
-            disabled={tooLate}
+            disabled={outside}
           />
         </div>
       )}

@@ -248,6 +248,21 @@ describe("calendar channels through the real Pusher client", () => {
     ]);
   });
 
+  // December 9999 is the last month (helpers/calendar_window.ts). The
+  // month before it is fetched ahead; the month after it, in the year
+  // 10000, is not a date the server reads, and is never asked for.
+  it("fetches the month before December 9999 ahead, and none after it", async () => {
+    DataStore.create({ meals: [] }).switchMonths("9999-12-15");
+    await flush();
+    confirmEveryChannel();
+    await flush();
+
+    expect(fetchesOf(9999, 11)).toBe(1);
+    expect(
+      axios.get.mock.calls.filter(([url]) => url.includes("/calendar/10000")),
+    ).toEqual([]);
+  });
+
   it("moving far away closes the three old months and opens the three new ones", async () => {
     const store = await julyOnScreen();
 

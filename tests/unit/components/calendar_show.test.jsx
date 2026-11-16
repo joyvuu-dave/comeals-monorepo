@@ -229,6 +229,17 @@ describe("MainCalendar", () => {
     );
   });
 
+  // December 9999 is the last month (helpers/calendar_window.ts).
+  it("has no next month after December 9999, and still goes back", () => {
+    renderCalendar({ path: "/calendar/all/9999-12-15/" });
+    expect(
+      monthNav().getByRole("button", { name: "Goto Next Month" }),
+    ).toBeDisabled();
+    expect(
+      monthNav().getByRole("button", { name: "Goto Last Month" }),
+    ).toBeEnabled();
+  });
+
   it("prev goes back one month", () => {
     renderCalendar();
     fireEvent.click(

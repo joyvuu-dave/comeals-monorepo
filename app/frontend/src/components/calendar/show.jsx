@@ -10,6 +10,7 @@ import { observer } from "mobx-react-lite";
 import { useNavigate, useParams } from "react-router";
 import { useStore } from "../../helpers/store_context";
 import { communityNow } from "../../helpers/helpers";
+import { inLastMonthOrAfter } from "../../helpers/calendar_window";
 import { mark, reportAfterPaint, profileRender } from "../../helpers/nav_trace";
 import SideBar from "./side_bar";
 
@@ -158,10 +159,14 @@ const MonthNavHeader = memo(function MonthNavHeader({
         >
           <Icon name="chevron-left" />
         </button>{" "}
+        {/* December 9999 is the last month the app has
+            (helpers/calendar_window.ts): its next month, in the year
+            10000, is not a date the server reads. */}
         <button
           className="press"
           style={styles.chevron}
           onClick={onNext}
+          disabled={inLastMonthOrAfter(dateStr)}
           aria-label="Goto Next Month"
         >
           <Icon name="chevron-right" />

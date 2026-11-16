@@ -132,6 +132,32 @@ describe("DayPickerInput", () => {
     expect(pickerButton(/January 21st/)).toBeDisabled();
   });
 
+  // The calendar window (helpers/calendar_window.ts): no day more than
+  // 10 years before or after the community's today, whatever lastDay a
+  // form passes.
+  it("offers no day more than 10 years from today", () => {
+    renderPicker({ value: "2036-01-15", lastDay: "2036-07-15" }, "2026-01-15");
+    fireEvent.click(screen.getByDisplayValue("01/15/2036"));
+
+    expect(pickerButton(/January 15th, 2036/)).toBeEnabled();
+    expect(pickerButton(/January 16th, 2036/)).toBeDisabled();
+  });
+
+  it("offers no day more than 10 years before today", () => {
+    renderPicker({ value: "2016-01-15" }, "2026-01-15");
+    fireEvent.click(screen.getByDisplayValue("01/15/2016"));
+
+    expect(pickerButton(/January 14th, 2016/)).toBeDisabled();
+    expect(pickerButton(/January 15th, 2016/)).toBeEnabled();
+  });
+
+  it("offers no day after December 31, 9999", () => {
+    renderPicker({ value: "9999-12-30", lastDay: "10000-06-30" }, "9999-12-20");
+    fireEvent.click(screen.getByDisplayValue("12/30/9999"));
+
+    expect(pickerButton(/December 31st, 9999/)).toBeEnabled();
+  });
+
   // The device's zone cannot move a day (#129). Havana's clocks skip
   // from midnight to 01:00 on Sunday, Mar 8, 2026, so in Havana that day
   // has no midnight. Tokyo is far ahead of UTC, and Honolulu far behind.

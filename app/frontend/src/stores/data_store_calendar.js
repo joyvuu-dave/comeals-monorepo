@@ -9,6 +9,7 @@ import * as monthData from "./month_fetch";
 import { toCommunityDayjs } from "../helpers/helpers";
 import { communityId as sessionCommunityId } from "../helpers/session";
 import { mark } from "../helpers/nav_trace";
+import { inLastMonthOrAfter } from "../helpers/calendar_window";
 
 export function calendarVolatile() {
   return {
@@ -158,7 +159,10 @@ export function calendarActions(self) {
       monthData.prefetchMonth(
         current.subtract(1, "month").format("YYYY-MM-DD"),
       );
-      monthData.prefetchMonth(current.add(1, "month").format("YYYY-MM-DD"));
+      // December 9999 has no next month (helpers/calendar_window.ts).
+      if (!inLastMonthOrAfter(self.currentDate)) {
+        monthData.prefetchMonth(current.add(1, "month").format("YYYY-MM-DD"));
+      }
     },
     // Turn a month's events into the calendar's events, in the zone the
     // cookie has now.

@@ -82,8 +82,8 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 3   | [The same guarantees on every database Rails supports](0003-any-database-rails-supports.md)            | portability | open   | 2026-11-11 |
 | 4   | [Many people changing many things at once](0004-many-people-many-changes-at-once.md)                   | concurrency | done   | 2026-11-15 |
 | 5   | [Time zone rules change](0005-time-zone-rules-change.md)                                               | time        | open   | 2026-11-07 |
-| 6   | [Dates far in the future](0006-dates-far-in-the-future.md)                                             | time        | open   | 2026-11-07 |
-| 7   | [Pricing rules that change over time](0007-rules-that-change-over-time.md)                             | money       | open   | 2026-11-11 |
+| 6   | [Dates far in the future](0006-dates-far-in-the-future.md)                                             | time        | done   | 2026-11-15 |
+| 7   | [Pricing rules that change over time](0007-rules-that-change-over-time.md)                             | money       | open   | 2026-11-15 |
 | 8   | [Birthdays on February 29](0008-february-29-birthdays.md)                                              | time        | done   | 2026-11-07 |
 | 9   | [Inflation and the limit on one bill](0009-inflation-and-the-bill-limit.md)                            | money       | open   | 2026-11-13 |
 | 10  | [A currency other than the US dollar](0010-a-second-currency.md)                                       | money       | open   | 2026-11-07 |

@@ -359,6 +359,11 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/api/v1/common_house_reservation_race_spec.rb' =>
     %w[ConstraintMessages CommonHouseReservation Api::V1::CommonHouseReservationsController],
   'spec/requests/admin/one_day_spec.rb' => %w[Event CommonHouseReservation Community#date_of],
+  # The four models' rule, and the meal's storable_time guard it needed.
+  'spec/models/calendar_window_validator_spec.rb' => %w[CalendarWindowValidator CalendarWindow Meal#storable_date?],
+  # Each way in reaches the rule and shows its words.
+  'spec/requests/calendar_window_entry_points_spec.rb' =>
+    %w[CalendarWindowValidator CalendarWindow Meal#storable_date?],
   'spec/models/guest_room_reservation_spec.rb' =>
     %w[GuestRoomReservation LiveUpdate BelongsToTheCommunity StorableTimeValidator StorableTime],
   'spec/models/rotation_spec.rb' => %w[Rotation LiveUpdate BelongsToTheCommunity],

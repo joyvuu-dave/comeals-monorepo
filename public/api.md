@@ -765,6 +765,14 @@ exist. A start or end the database cannot store also returns that 400:
 before midnight UTC on November 24, 4714 BC (`start_year` -4713, since
 year 0 is 1 BC), or after the end of 294276 in UTC.
 
+A start or end more than 10 years before or after the community's
+today, or after December 31, 9999, returns `400` with
+`"Start date is more than 10 years from today"` (and the same for
+`End date`). The window moves with today, so the app never runs out of
+days. An update that leaves the times as they are is not refused for
+them. The same rule holds for guest room and common house reservations,
+and for dinners in admin.
+
 Times are read in the community's time zone. A time that the clock
 skips when daylight saving time starts is read with the UTC offset from
 before the skip: in America/Los_Angeles, 02:30 on 2026-03-08 is saved
@@ -794,7 +802,9 @@ A day that is already taken returns `400`. So does a day the database
 cannot store, with `"Date is not a date the database can store"`:
 before November 24, 4714 BC (`-4713-11-24`, since year 0 is 1 BC),
 after December 31, 5874897, or a day the Gregorian calendar does not
-have, such as `1500-02-29`.
+have, such as `1500-02-29`. A day more than 10 years before or after
+the community's today, or after December 31, 9999, returns `400`
+with `"Date is more than 10 years from today"`, the rule for events.
 
 ## Common house reservations
 
@@ -830,7 +840,8 @@ returns `400 "Error: Invalid date"`. A time on a daylight saving night
 is read the same way as for an event: 02:30 on 2026-03-08 is saved as
 03:30 PDT, and 01:30 on 2026-11-01 is the first 01:30, in PDT. A block
 that overlaps another returns `400 "Time period is already taken"`,
-also when two requests for the same time arrive at once.
+also when two requests for the same time arrive at once. A start or
+end more than 10 years from today returns `400`, the rule for events.
 
 End must be after start, the same as for an event. A block that ends
 when it starts lasts zero minutes, so it would stop no one from booking the

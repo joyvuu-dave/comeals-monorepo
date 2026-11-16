@@ -16,13 +16,13 @@
 # on, today plus 10 years would be the year 10000.
 #
 # February 29 plus or minus 10 years is February 28, as Rails' Date#advance
-# moves it, so the window on a leap day is one day shorter at each end.
+# moves it, so on a leap day the window starts and ends on February 28.
 module CalendarWindow
   extend T::Sig
 
   YEARS = 10
   LAST_DAY = T.let(Date.new(9999, 12, 31), Date)
-  MESSAGE = "is more than #{YEARS} years from today".freeze
+  MESSAGE = T.let("is more than #{YEARS} years from today".freeze, String)
 
   sig { params(today: Date).returns(T::Range[Date]) }
   def self.days(today)

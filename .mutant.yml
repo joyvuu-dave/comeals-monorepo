@@ -163,6 +163,8 @@ matcher:
     - SettlementCorrectionCharge*
     - SettlementCorrectionLine*
     - SettlementLineMark*
+    - CalendarWindow*
+    - CalendarWindowValidator*
     - StorableTime*
     - StorableTimeValidator*
     - ThrottleCount*
