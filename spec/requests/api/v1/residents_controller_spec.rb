@@ -222,28 +222,17 @@ RSpec.describe 'Residents API' do
     end
   end
 
-  # Where a reset page loaded before 2026-10-23 sends the token: in the
-  # path. Those tokens were all cleared, so the answer says to ask for a
-  # new link, and it looks nothing up, even for a token that works.
-  describe 'the reset requests of the page before 2026-10-23' do
-    let(:retired) { 'This password reset link no longer works. Please request a new one.' }
-
-    it 'answers the old name request with a 400 that says to ask for a new link' do
+  # The reset page sent the token in the path until 2026-10-23. Those
+  # addresses answered a 400 until 2026-11-16 and are now gone: no page
+  # calls them, and a reset token lasts 24 hours. A token in the path
+  # still does nothing.
+  describe 'the reset addresses with the token in the path' do
+    it 'are not routes any more' do
       token = give_reset_token(resident)
 
-      get "/api/v1/residents/name/#{token}"
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => retired)
-    end
-
-    it 'answers the old new-password request with the same 400, and changes no password' do
-      token = give_reset_token(resident)
-
-      post "/api/v1/residents/password-reset/#{token}", params: { password: 'new one' }
-
-      expect(response).to have_http_status(:bad_request)
-      expect(response.parsed_body).to eq('message' => retired)
+      expect { get "/api/v1/residents/name/#{token}" }.to raise_error(ActionController::RoutingError)
+      expect { post "/api/v1/residents/password-reset/#{token}", params: { password: 'new one' } }
+        .to raise_error(ActionController::RoutingError)
       expect(resident.reload.authenticate('new one')).to be(false)
       expect(PasswordReset.resident_for(token)).to eq(resident)
     end

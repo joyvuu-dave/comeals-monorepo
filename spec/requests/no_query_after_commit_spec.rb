@@ -162,18 +162,6 @@ RSpec.describe 'what a write runs after its commit' do
     expect(result.committed).to be(false)
   end
 
-  # The request of a reset page loaded before 2026-10-23. It answers a 400
-  # and writes nothing.
-  it 'POST /api/v1/residents/password-reset/:old_token commits nothing',
-     route: 'POST /api/v1/residents/password-reset/:old_token' do
-    result = after_commit_queries do
-      post '/api/v1/residents/password-reset/a-reset-token', params: { password: 'a-new-password' }
-    end
-
-    expect(response).to have_http_status(:bad_request)
-    expect(result.committed).to be(false)
-  end
-
   # Its one write is the job it queues, a Solid Queue row.
   write 'POST /api/v1/browser-reports' do
     iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 ' \

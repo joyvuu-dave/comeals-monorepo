@@ -23,8 +23,6 @@ RSpec.describe 'API authentication boundary' do
       %w[POST /api/v1/residents/password-reset/name],
       %w[POST /api/v1/residents/password-reset/new],
       %w[POST /api/v1/profile/email-confirm],
-      %w[POST /api/v1/residents/password-reset/:old_token],
-      %w[GET /api/v1/residents/name/:old_token],
       %w[GET /api/v1/residents/:id/ical],
       %w[GET /api/v1/communities/:id/ical],
       %w[GET /api/v1/version],

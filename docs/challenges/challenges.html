@@ -2163,6 +2163,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-16: The owner decided, after a hostile review: the server answers 404 for every address that is not one of the app’s pages (on the resident site; the API and admin do not change), and the app’s login route becomes exactly <code>/</code>, <code>/reset-password</code> and <code>/confirm-email</code>. Old addresses from 2017–2018 are not kept. A 404 sends the plain 404 page, so a page missing from the list is seen at once. One list of pages, read by both the app and the server, with guards so a missed page fails a check before a deploy.</p>
 </li><li>
 <p>2026-11-16: Built: the list, the 404 rule, the guards, and the checks in <code>bin/deploy</code> and <code>bin/watch-deploy</code> (ADR 0016). Status done.</p>
+</li><li>
+<p>2026-11-16: The owner decided to remove the two API addresses of the old reset link (<code>/api/v1/residents/name/:token</code> and <code>/api/v1/residents/password-reset/:token</code>). They now get the API’s usual 404.</p>
 </li></ul>
 </div>
 </details>

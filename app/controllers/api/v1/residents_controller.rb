@@ -12,11 +12,6 @@ module Api
       # newer reset request), so both answer with the same words.
       UNKNOWN_RESET_TOKEN = 'Password reset link is incorrect or expired.'
 
-      # The answer for a reset link of the kind mailed before 2026-10-23,
-      # with the token in the path. Those tokens were cleared by the deploy
-      # that changed the link (2026-10-24), so none can work.
-      RETIRED_RESET_LINK = 'This password reset link no longer works. Please request a new one.'
-
       COMMON_HOUSE_NOT_SET_UP = 'The Common House login is not set up yet. Ask an admin.'
       COMMON_HOUSE_PASSWORD_BY_ADMIN = 'An admin sets the Common House password. Ask an admin to change it.'
 
@@ -138,13 +133,6 @@ module Api
         render json: { message: 'Password updated!' } and return if resident.save
 
         refuse_for_the_row(resident, 'Your password was not changed:')
-      end
-
-      # GET /api/v1/residents/name/:old_token
-      # POST /api/v1/residents/password-reset/:old_token
-      # What the reset page asked before 2026-10-23. It looks nothing up.
-      def retired_reset_link
-        render json: { message: RETIRED_RESET_LINK }, status: :bad_request
       end
 
       # GET api/v1/residents/:id/ical

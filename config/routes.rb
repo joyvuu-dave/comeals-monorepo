@@ -36,10 +36,6 @@ Rails.application.routes.draw do
       # Rails and Heroku's router log every path (ResidentsController).
       post '/residents/password-reset/name', to: 'residents#show_name', format: false
       post '/residents/password-reset/new', to: 'residents#password_new', format: false
-      # Where the reset page sent the token before 2026-10-23, in the path.
-      # A page loaded before that deploy still asks here.
-      get '/residents/name/:old_token', to: 'residents#retired_reset_link'
-      post '/residents/password-reset/:old_token', to: 'residents#retired_reset_link', format: false
       delete '/sessions/current', to: 'sessions#destroy_current'
       get '/profile', to: 'profiles#show'
       patch '/profile', to: 'profiles#update', format: false
