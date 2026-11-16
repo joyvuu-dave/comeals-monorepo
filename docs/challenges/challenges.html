@@ -1449,7 +1449,7 @@ UNIQUE (idempotency_key)</pre>
 <ul><li>
 <p>DNS is at DNSimple. <code>status.comeals.com</code> is a CNAME there (AGENTS.md, site monitoring).</p>
 </li><li>
-<p>Better Stack checks <code>https://comeals.com</code> every 3 minutes, so an outage is noticed. It does not warn before the domain expires.</p>
+<p>Better Stack checks <code>https://comeals.com</code> every 3 minutes, so an outage is noticed. Its SSL/TLS verification is on, so it alerts once the <code>comeals.com</code> certificate has run out or is wrong. It does not warn before the certificate or the domain runs out: on the free plan those settings are locked. (checked 2026-11-16, in the monitor’s settings: “Upgrade your account to check for SSL expiration”, and the same for domain expiration)</p>
 </li><li>
 <p>The certificates are Let’s Encrypt certificates from Heroku’s Automatic Certificate Management, one for each of <code>comeals.com</code>, <code>www.comeals.com</code>, <code>admin.comeals.com</code> and <code>api.comeals.com</code>. Each lasts 90 days, and Heroku renews it about 30 days before it runs out. (checked 2026-11-16: <code>heroku certs -a comeals-monorepo</code> listed all four as ACM and trusted, running out between 2026-12-16 and 2027-01-12)</p>
 </li><li>
@@ -1465,7 +1465,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>Renew the domain for the longest term the registrar allows.</p>
 </li><li>
-<p>A monitor that warns 60 days before the domain or the certificate expires. For the certificates, Better Stack can alert before one runs out; it is a setting on each monitor, and today only <code>comeals.com</code> has a monitor.</p>
+<p>A monitor that warns 60 days before the domain or the certificate expires. Better Stack can do this, but only on a paid plan.</p>
 </li><li>
 <p>A second person with access to the DNSimple account (see challenge 23).</p>
 </li></ol>
@@ -1476,6 +1476,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-07: Opened.</p>
 </li><li>
 <p>2026-11-16: The owner asked for a certificate check in <code>bin/deploy</code> and <code>bin/watch-deploy</code> (#297), and the Better Stack certificate alert. The check is built; the Better Stack setting is in the owner’s account.</p>
+</li><li>
+<p>2026-11-16: Better Stack’s warnings before a certificate or the domain runs out need a paid plan. The owner chose to change nothing in Better Stack, so the early warning for the certificates is only the check in <code>bin/deploy</code> and <code>bin/watch-deploy</code>.</p>
 </li></ul>
 </div>
 </details>
