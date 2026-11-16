@@ -31,6 +31,14 @@ there when you know why it is fine.
 Bugsnag needs `BUGSNAG_AUTH_TOKEN` in `.env`. Without it, that check says
 "not checked" and is not counted.
 
+The site check opens `/`, `/api/v1/version` and every example address in
+`app/frontend/src/routes.json`, and expects 200 from each. It also opens
+`/.well-known/comeals-deploy-check`, which is not a page, and expects 404
+(ADR 0016). `bin/deploy` does the same once, after its health check, and
+stops with "PAGE CHECK FAILED" when an answer is wrong. A page that
+answers 404 means the server does not send the app for it: residents get
+the plain "Page not found" page there. Roll back.
+
 ## When bin/deploy stops because the ledger check failed
 
 After the balance refresh, `bin/deploy` runs `rake ledger:verify`, which
@@ -398,8 +406,8 @@ step 2.)
    the id: this is "the backup before the deploy"), maintenance mode when
    a migration changed (it goes off only once web is up on the new
    release), the push, the release phase, the cache clear and the
-   balance refresh, the worker, the health check, the Solid Queue check
-   and the smoke test. It pushes to staging's own git address,
+   balance refresh, the worker, the health check, the page check, the
+   Solid Queue check and the smoke test. It pushes to staging's own git address,
    never to the `heroku` remote. It first refuses a staging app that
    could send mail: staging holds real residents' email addresses, and
    the deploy starts the worker.

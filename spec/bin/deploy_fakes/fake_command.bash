@@ -275,10 +275,14 @@ case "$name" in
     esac
     ;;
   # curl -sL -o /dev/null -w "%{http_code}" URL: the site answers 200 only
-  # while web runs and maintenance is off, like the real one.
+  # while web runs and maintenance is off, like the real one, and 404 for
+  # the address bin/deploy's page check uses because it is not a page.
   curl)
     if [ "$(<"$state/web")" -gt 0 ] && [ "$(<"$state/maintenance")" = off ]; then
-      printf 200
+      case "${*: -1}" in
+        */.well-known/comeals-deploy-check) printf 404 ;;
+        *) printf 200 ;;
+      esac
     else
       printf 503
     fi

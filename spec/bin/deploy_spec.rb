@@ -171,7 +171,8 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(runs.map { it[/deploy:\w+/] }).to eq(%w[deploy:verify_solid_queue deploy:verify_recurring_job])
       expect(deploy.calls_to('curl').map { it.split.last }).to eq(
         %w[https://comeals.com https://comeals.com/api/v1/version https://www.comeals.com
-           https://admin.comeals.com https://api.comeals.com https://comeals-monorepo-b68ce4e5c3d4.herokuapp.com]
+           https://admin.comeals.com https://api.comeals.com https://comeals-monorepo-b68ce4e5c3d4.herokuapp.com
+           https://comeals.com/ https://comeals.com/meals/1/edit https://comeals.com/.well-known/comeals-deploy-check]
       )
     end
 
@@ -1611,6 +1612,54 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
     end
   end
 
+  # The page check opens every example address in routes.json (the
+  # harness's list has / and /meals/1/edit) and one address that is not a
+  # page (ADR 0016).
+  describe 'the page check' do
+    it 'passes when every page answers 200 and the non-page answers 404' do
+      result = deploy.run('--yes')
+
+      expect(result.output).to include('/meals/1/edit returned HTTP 200',
+                                       '/.well-known/comeals-deploy-check returned HTTP 404')
+      expect(result.status).to eq(0)
+    end
+
+    # State left: no maintenance, web at 1, the new code live. Next step:
+    # roll back (docs/runbooks/undo-a-deploy.md).
+    it 'fails, after checking every address, when a page does not answer 200' do
+      deploy.rule('curl', 'https://comeals.com/meals/1/edit$', stdout: '404')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('/meals/1/edit returned HTTP 404, and it is a page of the app',
+                                       '/.well-known/comeals-deploy-check returned HTTP 404',
+                                       'PAGE CHECK FAILED')
+      expect(result.output).not_to include('Solid Queue check', 'Deploy complete!')
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    it 'fails when an address that is not a page answers 200' do
+      deploy.rule('curl', 'comeals-deploy-check$', stdout: '200')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include(
+        '/.well-known/comeals-deploy-check returned HTTP 200, and it is not a page of the app', 'PAGE CHECK FAILED'
+      )
+    end
+
+    it 'counts a curl error as HTTP 000' do
+      deploy.rule('curl', 'https://comeals.com/$', exit: 7)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('/ returned HTTP 000, and it is a page of the app')
+    end
+  end
+
   describe 'the Solid Queue check' do
     it 'tries once more after 30 seconds' do
       deploy.rule('heroku', 'deploy:verify_solid_queue', exit: 1, times: 1)
@@ -2013,7 +2062,10 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
                                       'heroku pg:backups:capture -a comeals-staging',
                                       'heroku ps:scale worker=1 -a comeals-staging',
                                       "smoke #{staging_url}")
-      expect(deploy.calls_to('curl').map { it.split.last }).to eq([staging_url, "#{staging_url}/api/v1/version"])
+      expect(deploy.calls_to('curl').map { it.split.last }).to eq(
+        [staging_url, "#{staging_url}/api/v1/version", "#{staging_url}/", "#{staging_url}/meals/1/edit",
+         "#{staging_url}/.well-known/comeals-deploy-check"]
+      )
       expect(deploy.state[:pushed]).to eq(head)
       expect_production_untouched(result)
     end

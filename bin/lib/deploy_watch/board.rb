@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require_relative 'log_scan'
+require_relative 'reads'
 
 module DeployWatch
   # What the watch knows, and what each check says about it. Only the main
@@ -170,7 +171,10 @@ module DeployWatch
       @site_reads += 1
       data.each do |path, code|
         @site_codes[path] = code
-        problem(:site, "#{path} #{code}", "#{path} answered #{code}", nil, now) if code != '200'
+        next if code == expected_code(path)
+
+        meant = path == Reads::NOT_A_PAGE ? ', and it is not a page' : ''
+        problem(:site, "#{path} #{code}", "#{path} answered #{code}#{meant}", nil, now)
       end
     end
 
@@ -235,9 +239,17 @@ module DeployWatch
       "Solid Queue heartbeat #{@database[:heartbeats].values.max} s ago"
     end
 
+    # Every address the site read opens answers 200, except the one that is
+    # not a page, which answers 404 (Reads::NOT_A_PAGE).
+    def expected_code(path)
+      path == Reads::NOT_A_PAGE ? '404' : '200'
+    end
+
     def site_text
-      summary = @site_codes.keys.join('  and  ')
-      "#{summary} → 200 (checked #{@site_reads} #{@site_reads == 1 ? 'time' : 'times'})"
+      pages = @site_codes.keys.count { expected_code(it) == '200' }
+      summary = "#{pages} #{pages == 1 ? 'address' : 'addresses'} → 200"
+      summary += ' · not a page → 404' if @site_codes.key?(Reads::NOT_A_PAGE)
+      "#{summary} (checked #{@site_reads} #{@site_reads == 1 ? 'time' : 'times'})"
     end
 
     def requests_text

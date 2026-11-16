@@ -1148,6 +1148,43 @@ check_health() {
   done
 }
 
+# The server answers 200 for the pages of app/frontend/src/routes.json and
+# 404 for every other address (ADR 0016). This opens every example address
+# in that list on the deployed app, and one address that is not a page, so
+# it shows that the rule works there: the release read the list, and the
+# server matches the way the tests showed. It cannot find a page that is
+# missing from the list, because the examples come from the list; the
+# browser tests find that before a deploy. No -L: a page answers 200
+# itself, not by a redirect.
+NOT_A_PAGE="/.well-known/comeals-deploy-check"
+check_pages() {
+  step "Page check"
+
+  local path status failed=false
+  while IFS= read -r path; do
+    status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$APP_URL$path" 2>/dev/null || echo "000")
+    if [ "$status" = "200" ]; then
+      ok "$path returned HTTP 200"
+    else
+      fail "$path returned HTTP $status, and it is a page of the app"
+      failed=true
+    fi
+  done < <(ruby -rjson -e 'puts JSON.parse(File.read("app/frontend/src/routes.json")).fetch("pages").values.flat_map { |page| page.fetch("examples") }.uniq')
+
+  status=$(curl -s -o /dev/null -w "%{http_code}" --max-time 20 "$APP_URL$NOT_A_PAGE" 2>/dev/null || echo "000")
+  if [ "$status" = "404" ]; then
+    ok "$NOT_A_PAGE returned HTTP 404"
+  else
+    fail "$NOT_A_PAGE returned HTTP $status, and it is not a page of the app"
+    failed=true
+  fi
+
+  if [ "$failed" = true ]; then
+    fail "PAGE CHECK FAILED — the deployed app does not answer its pages the way the tests showed. Roll back (docs/runbooks/undo-a-deploy.md)."
+    exit 1
+  fi
+}
+
 # Solid Queue's supervisor starts with the worker dyno, and it can still
 # fail to start, so ask the app: every process kind must have a fresh
 # heartbeat (rake deploy:verify_solid_queue). Two tries, because the
@@ -1258,6 +1295,7 @@ main() {
 
   check_logs
   check_health
+  check_pages
   check_solid_queue
   check_recurring_job
   run_smoke

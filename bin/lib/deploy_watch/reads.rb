@@ -17,6 +17,25 @@ module DeployWatch
     COMMAND_TIMEOUT = 60
     LOG_LINES = 1500
     SITE_PATHS = ['/', '/api/v1/version'].freeze
+    # The server answers 200 for the pages of routes.json and 404 for every
+    # other address (ADR 0016). The site read opens every example address
+    # in that list, and this one address that is not a page, so the watch
+    # shows that the rule keeps working. It cannot find a page missing from
+    # the list; the browser tests find that before a deploy.
+    PAGES_FILE = File.expand_path('../../../app/frontend/src/routes.json', __dir__)
+    NOT_A_PAGE = '/.well-known/comeals-deploy-check'
+
+    # Every address the site read opens, in order: the two above, then each
+    # example in routes.json, then the one that is not a page.
+    def self.site_paths(file = PAGES_FILE)
+      pages = JSON.parse(File.read(file)).fetch('pages')
+      raise KeyError, 'pages is not a list of pages' unless pages.is_a?(Hash) && pages.values.all?(Hash)
+
+      examples = pages.values.flat_map { it.fetch('examples') }
+      (SITE_PATHS + examples + [NOT_A_PAGE]).uniq
+    rescue SystemCallError, JSON::ParserError, KeyError => e
+      raise Unreadable, "the pages in #{file}: #{e.message}"
+    end
     BUGSNAG_API = 'https://api.bugsnag.com'
     # Bugsnag's filter takes "1d" reliably. The time and the stage are then
     # compared here, from what each error says.
@@ -44,9 +63,10 @@ module DeployWatch
       SQL
     end
 
-    def initialize(app:, url:, since:, token:)
+    def initialize(app:, url:, since:, token:, site_paths: nil)
       @app = app
       @url = url
+      @site_paths = site_paths
       @since = since
       @token = token
     end
@@ -82,7 +102,10 @@ module DeployWatch
     end
 
     def site
-      SITE_PATHS.to_h do |path|
+      # Read on each site read, so a list that cannot be read shows as
+      # "could not check", never as passed.
+      paths = @site_paths || self.class.site_paths
+      paths.to_h do |path|
         result = Shell.run('curl', '-sS', '-L', '-o', '/dev/null', '-w', '%{http_code}', '--max-time', '20', "#{@url}#{path}",
                            timeout: COMMAND_TIMEOUT)
         raise Unreadable, "curl #{path}: #{result.error}" unless result.ok

@@ -77,6 +77,8 @@ class WatchHarness
     answers(:tail, out: LINES, hang: true)
     answers(:logs, out: LINES)
     answers(:site, out: '200')
+    answers(:pages, out: '200')
+    answers(:not_a_page, out: '404')
     answers(:version, out: '200')
     answers(:organizations, out: [{ id: 'org1' }].to_json)
     answers(:projects, out: [{ id: 'other', slug: 'x' }, { id: 'proj1', slug: 'comeals' }].to_json)
@@ -229,7 +231,9 @@ class WatchHarness
         */user/organizations) cat >>"$SANDBOX_DIR/curl-stdin"; answer organizations ;;
         */projects) cat >>"$SANDBOX_DIR/curl-stdin"; answer projects ;;
         */errors*) cat >>"$SANDBOX_DIR/curl-stdin"; answer errors ;;
-        *) answer site ;;
+        */.well-known/comeals-deploy-check) answer not_a_page ;;
+        https://*/) answer site ;;
+        *) answer pages ;;
       esac
     BASH
   end

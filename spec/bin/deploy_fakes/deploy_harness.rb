@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'fileutils'
+require 'json'
 require 'pty'
 require 'tmpdir'
 
@@ -279,6 +280,11 @@ class DeployHarness
     @commits[:first_migration] = commit(
       { 'db/migrate/20260101000000_first.rb' => '', 'app/a.rb' => '1',
         'db/production_schema_version.txt' => "# The newest migration production has run.\n#\n#{SCHEMA_VERSION}\n",
+        # Two pages, for bin/deploy's page check after the deploy.
+        'app/frontend/src/routes.json' => JSON.generate(
+          'pages' => { 'login' => { 'path' => '/', 'examples' => ['/'] },
+                       'meal' => { 'path' => '/meals/:id/edit', 'examples' => ['/meals/1/edit'] } }
+        ),
         'db/structure.sql' => structure(RECORDED.first(1)) },
       'first'
     )

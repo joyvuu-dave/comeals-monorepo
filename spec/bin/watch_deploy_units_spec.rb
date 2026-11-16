@@ -259,7 +259,41 @@ RSpec.describe 'bin/watch-deploy, its parts' do
 
       board.apply(:site, good({ '/' => '200', '/api/v1/version' => '200' }), start + 60)
       expect(row('Site').status).to eq(:ok)
-      expect(row('Site').text).to eq('/  and  /api/v1/version → 200 (checked 1 time)')
+      expect(row('Site').text).to eq('2 addresses → 200 (checked 1 time)')
+    end
+
+    it 'expects 404 from the address that is not a page, and calls a 200 there a problem' do
+      board.apply(:site, good({ '/' => '200', DeployWatch::Reads::NOT_A_PAGE => '404' }), start + 30)
+      expect(row('Site').status).to eq(:ok)
+      expect(row('Site').text).to eq('1 address → 200 · not a page → 404 (checked 1 time)')
+
+      board.apply(:site, good({ '/' => '200', DeployWatch::Reads::NOT_A_PAGE => '200' }), start + 60)
+      expect(row('Site').status).not_to eq(:ok)
+      expect(board.problems.map(&:text))
+        .to include('/.well-known/comeals-deploy-check answered 200, and it is not a page')
+    end
+
+    it 'opens every example of routes.json, once each, and the address that is not a page last' do
+      paths = DeployWatch::Reads.site_paths
+      examples = JSON.parse(File.read(DeployWatch::Reads::PAGES_FILE)).fetch('pages').values.flat_map { it['examples'] }
+
+      expect(paths.first(2)).to eq(['/', '/api/v1/version'])
+      expect(paths).to include(*examples)
+      expect(paths.last).to eq(DeployWatch::Reads::NOT_A_PAGE)
+      expect(paths).to eq(paths.uniq)
+    end
+
+    it 'fails the site read, as could not check, when routes.json cannot be read' do
+      Dir.mktmpdir do |dir|
+        missing = File.join(dir, 'routes.json')
+        expect { DeployWatch::Reads.site_paths(missing) }
+          .to raise_error(DeployWatch::Reads::Unreadable, /the pages in #{missing}/)
+        File.write(missing, '{"no": "pages"}')
+        expect { DeployWatch::Reads.site_paths(missing) }.to raise_error(DeployWatch::Reads::Unreadable)
+        File.write(missing, '{"pages": ["/"]}')
+        expect { DeployWatch::Reads.site_paths(missing) }
+          .to raise_error(DeployWatch::Reads::Unreadable, /pages is not a list of pages/)
+      end
     end
 
     it 'shows could not check when too long passed with no good read, even if the reads now work' do

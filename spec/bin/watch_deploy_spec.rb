@@ -2,6 +2,7 @@
 
 require 'rails_helper'
 require_relative 'watch_deploy_fakes/watch_harness'
+require_relative '../../bin/lib/deploy_watch/reads'
 
 # bin/watch-deploy, run for real against fake heroku and curl commands, with a
 # clock that runs 60 times faster than real time, so a one-minute watch takes
@@ -46,7 +47,7 @@ RSpec.describe 'bin/watch-deploy' do
         'Release        v619 running c28c3052, maintenance off',
         'Web            up · 212 MB of 512 MB · no restarts',
         'Worker         up · 241 MB · Solid Queue heartbeat 18 s ago',
-        'Site           /  and  /api/v1/version → 200 (checked 3 times)',
+        'Site           9 addresses → 200 · not a page → 404 (checked 3 times)',
         'Requests       2 · no 5xx · no H or R codes',
         'App errors     none',
         'Jobs           no scheduled job due before 7:01 am (next: clear_finished_jobs 7:12 am)',
@@ -72,9 +73,11 @@ RSpec.describe 'bin/watch-deploy' do
       expect(watch.heroku_calls.join("\n")).not_to match(/releases:info|ledger:verify|heroku config -|heroku run/)
     end
 
-    it 'checks the site at both paths' do
-      expect(watch.curl_calls.map { it.split.last }.uniq).to contain_exactly('https://comeals.com/',
-                                                                             'https://comeals.com/api/v1/version')
+    it 'checks the site, every page of routes.json, and an address that is not a page' do
+      # The fake's log is one file per call, so it does not keep the order.
+      expect(watch.curl_calls.map { it.split.last }.uniq).to match_array(
+        DeployWatch::Reads.site_paths.map { "https://comeals.com#{it}" }
+      )
     end
   end
 
@@ -282,6 +285,24 @@ RSpec.describe 'bin/watch-deploy' do
 
       expect(result.status.exitstatus).to eq(1)
       expect(result.output).to include('Site: / answered 503')
+    end
+
+    it 'calls the site a problem when a page answers 404' do
+      watch.answers(:pages, { out: '200' }, { out: '404' }, { out: '200' })
+
+      result = watch.run('--minutes', '1')
+
+      expect(result.status.exitstatus).to eq(1)
+      expect(result.output).to match(%r{Site: /\S+ answered 404})
+    end
+
+    it 'calls the site a problem when the address that is not a page answers 200' do
+      watch.answers(:not_a_page, out: '200')
+
+      result = watch.run('--minutes', '1')
+
+      expect(result.status.exitstatus).to eq(1)
+      expect(result.output).to include('Site: /.well-known/comeals-deploy-check answered 200, and it is not a page')
     end
   end
 
