@@ -1850,7 +1850,7 @@ UNIQUE (idempotency_key)</pre>
 </details>
 <details class="challenge" id="challenge-29" data-status="done" data-area="proof">
   <summary><span class="num">29</span> <span class="title">A test catches every code change</span> <span class="chip status-done">Done</span> <span class="chip area-proof">proof</span><span class="badge">1 not checked</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-12 · <code>docs/challenges/0029-every-mutant-is-caught.md</code></div>
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-16 · <code>docs/challenges/0029-every-mutant-is-caught.md</code></div>
   <details class="watches"><summary>Watches 3 files</summary><ul><li><code>docs/mutation-testing.md</code></li><li><code>bin/lib/mutant_survivors.rb</code></li><li><code>.github/workflows/mutant.yml</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
@@ -1871,6 +1871,8 @@ UNIQUE (idempotency_key)</pre>
 <p><code>bin/mutant</code> and the Mutant workflow read every mutation from the session file mutant writes, and fail on a survivor with no entry, or an entry that no longer survives (<code>bin/lib/mutant_survivors.rb</code>, <code>spec/bin/mutant_report_spec.rb</code>). A timeout or a crashed process counts as a survivor (<code>coverage_criteria</code> in <code>.mutant.yml</code>).</p>
 </li><li>
 <p>The Mutant workflow runs every class every Saturday (<code>.github/workflows/mutant.yml</code>), and fails when a piece leaves no result.</p>
+</li><li>
+<p>An example that fails for a reason that has nothing to do with the mutation counts as a kill. On 2026-11-16 <code>spec/lib/app_pages_contract_spec.rb</code> needed Node, which the mutant jobs did not install, so it would have failed for every mutation of <code>AppPages</code>. Both mutant jobs install Node now (<code>.github/workflows/ci.yml</code>, <code>.github/workflows/mutant.yml</code>). Nothing checks for this in general.</p>
 </li><li>
 <p>CI’s <code>mutant-changed</code> job mutates the methods each push to <code>main</code> changes, and the methods whose spec files it changes or deletes (<code>.github/workflows/ci.yml</code>, <code>bin/mutant-spec-subjects</code>), and the deploy waits for CI. When the examples of more than 10 methods change with no code change, those methods are left to the Saturday run, and mutant stops after 60 minutes with a failure (docs/mutation-testing.md). A change to <code>spec/support</code>, a factory or <code>rails_helper</code> can weaken any example; only the Saturday run catches that.</p>
 </li><li>
@@ -1906,6 +1908,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-11: The owner asked for the edge cases to be fixed, not written down. The <code>mutant-changed</code> job now also runs on the methods whose spec files changed or were deleted.</p>
 </li><li>
 <p>2026-11-11: That job ran for 6 hours on main, when one removed example chose 113 methods. The owner chose a limit on the methods found through examples, and a 60-minute stop that fails the job. The limit is 10, not the 20 first proposed: a method takes 2 to 6 minutes, so 20 would often pass 60 minutes.</p>
+</li><li>
+<p>2026-11-16: Found that an example failing for an outside reason (no Node in the mutant jobs) counts as a kill; the mutant jobs install Node now (PR #296).</p>
 </li></ul>
 </div>
 </details>
