@@ -2,6 +2,7 @@
 
 require 'fileutils'
 require 'json'
+require 'openssl'
 require 'pty'
 require 'tmpdir'
 
@@ -18,7 +19,7 @@ class DeployHarness
   ROOT = File.expand_path('../../..', __dir__)
   SCRIPT = File.join(ROOT, 'bin/deploy')
   FAKE = File.join(__dir__, 'fake_command.bash')
-  FAKE_NAMES = %w[heroku git gh curl bundle npm npx sleep].freeze
+  FAKE_NAMES = %w[heroku git gh curl openssl bundle npm npx sleep].freeze
   # The local tools bin/deploy (and the fakes) run. None talks to another
   # machine.
   LOCAL_TOOLS = %w[awk cat date dirname grep head mkdir python3 ruby tail tee].freeze
@@ -44,7 +45,8 @@ class DeployHarness
     @scenario = { check_runs: "test|completed|success\nlint|completed|skipped\n", logs: '', push_output: '' }
     @state = {
       maintenance: 'off', web: 1, worker: 1, backups: 0, release: 700, releases: [], pushed: '', heroku_sha: '',
-      schema_version: SCHEMA_VERSION, tables: %w[meals schema_migrations], config: {}
+      schema_version: SCHEMA_VERSION, tables: %w[meals schema_migrations], config: {},
+      certificate_days: 60, certificate_verify: '0 (ok)'
     }
     build_path
     build_repo
@@ -207,7 +209,8 @@ class DeployHarness
       'state/worker' => @state[:worker].to_s,
       'state/backups' => @state[:backups].to_s, 'state/release' => @state[:release].to_s,
       'state/releases' => @state[:releases].map { "#{it}\n" }.join,
-      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha])
+      'state/pushed' => @state[:pushed], 'state/heroku_sha' => @state.fetch(:git_sha, @state[:heroku_sha]),
+      'state/certificate' => certificate_answer
     ).merge(schema_files)
     @state[:config].each { |var, value| files["state/config/#{var}"] = value }
     files['state/config/HEROKU_SLUG_COMMIT'] = @state[:heroku_sha]
@@ -215,6 +218,21 @@ class DeployHarness
       FileUtils.mkdir_p(File.dirname(File.join(fake_home, path)))
       File.write(File.join(fake_home, path), body)
     end
+  end
+
+  # What `openssl s_client` answers for every hostname: a certificate that
+  # runs out certificate_days from now, cut down to the lines that are read.
+  def certificate_answer
+    key = OpenSSL::PKey::EC.generate('prime256v1')
+    cert = OpenSSL::X509::Certificate.new
+    cert.version = 2
+    cert.serial = 1
+    cert.subject = cert.issuer = OpenSSL::X509::Name.parse('/CN=comeals.com')
+    cert.public_key = key
+    cert.not_before = Time.now.utc - 86_400
+    cert.not_after = Time.now.utc + (@state[:certificate_days] * 86_400) + 3600
+    cert.sign(key, OpenSSL::Digest.new('SHA256'))
+    "CONNECTED(00000003)\n#{cert.to_pem}---\nVerify return code: #{@state[:certificate_verify]}\n"
   end
 
   # What `heroku pg:psql` answers about the database's schema.

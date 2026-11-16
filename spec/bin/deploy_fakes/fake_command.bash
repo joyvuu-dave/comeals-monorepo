@@ -1,5 +1,5 @@
 # One fake for every outside command bin/deploy runs: heroku, git (only
-# the parts that talk to a remote), gh, curl, bundle, npm, sleep and
+# the parts that talk to a remote), gh, curl, openssl, bundle, npm, sleep and
 # bin/smoke. spec/bin/deploy_fakes/deploy_harness.rb copies this file once
 # per command name into a folder it puts first on the PATH, so the name it
 # runs under says which command it plays. It is bash, not Ruby, because it
@@ -15,7 +15,8 @@
 #                makes, one per line), pushed, heroku_sha (the main branch
 #                of Heroku's git repository), schema_version (the newest
 #                version in schema_migrations, or none), schema_versions
-#                (its rows, one a line), tables (the database's tables)
+#                (its rows, one a line), tables (the database's tables),
+#                certificate (what openssl s_client prints)
 #   calls/       one file per call: the name and the arguments, NUL-separated
 #   unexpected   every call no rule and no default answered
 #   smoke_env    the credentials the last bin/smoke call was given
@@ -287,6 +288,8 @@ case "$name" in
       printf 503
     fi
     ;;
+  # Every hostname gets the same certificate (state/certificate).
+  openssl) cat "$state/certificate" ;;
   # bin/smoke: note the credentials it was given, so a spec can check
   # them without anything printing them.
   smoke)

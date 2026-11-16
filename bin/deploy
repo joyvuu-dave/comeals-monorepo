@@ -53,6 +53,14 @@ set -euo pipefail
 # deploy that must go out while production fails the smoke test (say,
 # the deploy that fixes it). Any other value but empty or skip is
 # refused before anything runs.
+#
+# Before it changes anything, it also reads the HTTPS certificate of
+# every public hostname, and stops when one runs out in fewer than 21
+# days, is not trusted for its name, or cannot be read
+# (preflight_certificates, bin/lib/certificate_check.rb). A deploy cannot
+# fix or break a certificate, so CERT_CHECK=skip deploys anyway, for a
+# fix that must go out first. Like SMOKE_BEFORE, any other value but
+# empty or skip is refused.
 # ==============================================================================
 
 MAINTENANCE_ENABLED=false
@@ -135,6 +143,11 @@ esac
 SMOKE_BEFORE="${SMOKE_BEFORE:-}"
 if [ -n "$SMOKE_BEFORE" ] && [ "$SMOKE_BEFORE" != skip ]; then
   fail "SMOKE_BEFORE is \"$SMOKE_BEFORE\". It must be empty or skip. Nothing was changed."
+  exit 1
+fi
+CERT_CHECK="${CERT_CHECK:-}"
+if [ -n "$CERT_CHECK" ] && [ "$CERT_CHECK" != skip ]; then
+  fail "CERT_CHECK is \"$CERT_CHECK\". It must be empty or skip. Nothing was changed."
   exit 1
 fi
 
@@ -1185,6 +1198,28 @@ check_pages() {
   fi
 }
 
+# Heroku renews each certificate about 30 days before it runs out, so
+# fewer than 21 days left means renewals have failed for over a week.
+# Residents see a browser security warning once one runs out.
+preflight_certificates() {
+  step "Pre-flight: certificates"
+
+  local output status=0 line
+  output=$(ruby "$(dirname "$0")/lib/certificate_check.rb" "$APP" 2>&1) || status=$?
+  while IFS= read -r line; do
+    [ -z "$line" ] || info "$line"
+  done <<<"$output"
+
+  if [ "$status" = 0 ]; then
+    ok "Every certificate has 21 days or more left"
+  elif [ "$CERT_CHECK" = skip ]; then
+    warn "The certificate check failed, and the deploy goes on because CERT_CHECK=skip. Fix the certificates (docs/runbooks/undo-a-deploy.md, \"Certificates\")."
+  else
+    fail "CERTIFICATE CHECK FAILED — nothing was changed. A deploy cannot fix or break a certificate: see docs/runbooks/undo-a-deploy.md, \"Certificates\". To deploy anyway, run again with CERT_CHECK=skip."
+    exit 1
+  fi
+}
+
 # Solid Queue's supervisor starts with the worker dyno, and it can still
 # fail to start, so ask the app: every process kind must have a fresh
 # heartbeat (rake deploy:verify_solid_queue). Two tries, because the
@@ -1250,6 +1285,7 @@ main() {
 
   preflight_quality
   smoke_before_deploy
+  preflight_certificates
 
   # --- Confirmation ---
   echo

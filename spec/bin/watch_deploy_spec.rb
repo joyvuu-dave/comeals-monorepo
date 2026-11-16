@@ -43,11 +43,12 @@ RSpec.describe 'bin/watch-deploy' do
         'Comeals deploy watch · comeals-monorepo · v619 (c28c3052)',
         'Started 7:00 am CDT · ends 7:01 am CDT',
         'ALL CLEAR',
-        'Watched v619 for 1 minute. 10 checks, 0 problems. Not checked: Bugsnag.',
+        'Watched v619 for 1 minute. 11 checks, 0 problems. Not checked: Bugsnag.',
         'Release        v619 running c28c3052, maintenance off',
         'Web            up · 212 MB of 512 MB · no restarts',
         'Worker         up · 241 MB · Solid Queue heartbeat 18 s ago',
         'Site           9 addresses → 200 · not a page → 404 (checked 3 times)',
+        'Certificates   4 hostnames · the first runs out on 2026-12-25, in 55 days',
         'Requests       2 · no 5xx · no H or R codes',
         'App errors     none',
         'Jobs           no scheduled job due before 7:01 am (next: clear_finished_jobs 7:12 am)',
@@ -170,7 +171,7 @@ RSpec.describe 'bin/watch-deploy' do
       expect(result.status.exitstatus).to eq(1)
       expect(result.output).to include(
         'NEEDS A LOOK',
-        'Watched v619 for 1 minute. 10 checks, 1 problem. Not checked: Bugsnag.',
+        'Watched v619 for 1 minute. 11 checks, 1 problem. Not checked: Bugsnag.',
         'Requests: 500 from the router',
         '(2 times), first at 7:00:20 am CDT',
         bad_line.strip,
@@ -303,6 +304,57 @@ RSpec.describe 'bin/watch-deploy' do
 
       expect(result.status.exitstatus).to eq(1)
       expect(result.output).to include('Site: /.well-known/comeals-deploy-check answered 200, and it is not a page')
+    end
+  end
+
+  describe 'the certificates' do
+    it 'reads each production hostname with openssl at the start and at the end' do
+      watch.run('--minutes', '1')
+
+      hosts = %w[comeals.com www.comeals.com admin.comeals.com api.comeals.com]
+      expect(watch.openssl_calls.sort).to eq(
+        (hosts * 2).map { "openssl s_client -connect #{it}:443 -servername #{it} -verify_hostname #{it}" }.sort
+      )
+    end
+
+    it 'reads the staging hostname on staging' do
+      watch.run('--minutes', '1', env: { 'DEPLOY_APP' => 'comeals-staging' })
+
+      host = 'comeals-staging-ad51b8a1eb64.herokuapp.com'
+      expect(watch.openssl_calls.uniq)
+        .to eq(["openssl s_client -connect #{host}:443 -servername #{host} -verify_hostname #{host}"])
+    end
+
+    it 'says NEEDS A LOOK, and that a rollback does not help, when a certificate runs out in fewer than 21 days' do
+      watch.answers(:openssl, { out: WatchHarness.certificate(56) }, { out: WatchHarness.certificate(56) },
+                    { out: WatchHarness.certificate(9) }, { out: WatchHarness.certificate(56) })
+
+      result = watch.run('--minutes', '1')
+
+      expect(result.status.exitstatus).to eq(1)
+      expect(result.output).to include('NEEDS A LOOK',
+                                       'Certificates: admin.comeals.com: the certificate runs out on 2026-11-08, ' \
+                                       'in 8 days · a rollback does not change this ' \
+                                       '(docs/runbooks/undo-a-deploy.md, "Certificates")')
+    end
+
+    it 'says NEEDS A LOOK when a hostname sends a certificate that is not trusted for it' do
+      watch.answers(:openssl, out: WatchHarness.certificate(56, verify: '62 (hostname mismatch)'))
+
+      result = watch.run('--minutes', '1')
+
+      expect(result.status.exitstatus).to eq(1)
+      expect(result.output).to include('Certificates: comeals.com: the certificate is not trusted (hostname mismatch)')
+    end
+
+    it 'says could not check, never passed, when openssl gets no certificate' do
+      watch.answers(:openssl, err: "connect:errno=61\n", exit: 1)
+
+      result = watch.run('--minutes', '1')
+
+      expect(result.status.exitstatus).to eq(1)
+      expect(result.output).to include('UNKNOWN  Certificates   could not check: openssl: comeals.com: ' \
+                                       'no certificate in the answer (connect:errno=61)')
     end
   end
 
@@ -498,7 +550,7 @@ RSpec.describe 'bin/watch-deploy' do
       result = watch.run('--minutes', '1')
 
       expect(result.status.exitstatus).to eq(0)
-      expect(result.output).to include('Bugsnag        no new Bugsnag errors', '11 checks, 0 problems.')
+      expect(result.output).to include('Bugsnag        no new Bugsnag errors', '12 checks, 0 problems.')
       expect(result.output).not_to include('Not checked')
     end
 
@@ -555,6 +607,7 @@ RSpec.describe 'bin/watch-deploy' do
       FileUtils.mkdir_p(File.join(copy, 'docs'))
       FileUtils.mkdir_p(File.join(copy, 'config'))
       FileUtils.cp_r(Rails.root.join('bin/lib/deploy_watch'), File.join(copy, 'bin/lib'))
+      FileUtils.cp(Rails.root.join('bin/lib/certificate_check.rb'), File.join(copy, 'bin/lib'))
       FileUtils.cp(Rails.root.join('bin/watch-deploy'), File.join(copy, 'bin'))
       FileUtils.cp(Rails.root.join('config/recurring.yml'), File.join(copy, 'config'))
       File.write(File.join(copy, 'docs/deploy-known-warnings.txt'), "nonsense: 1\n")

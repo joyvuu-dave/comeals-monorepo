@@ -44,6 +44,7 @@ module DeployWatch
       @log_error = nil
       @site_codes = Hash.new(0)
       @site_reads = 0
+      @certificates = []
       @database = nil
       @jobs_seen = []
     end
@@ -95,6 +96,7 @@ module DeployWatch
         row('Web', :web, [:dynos]) { dyno_text('web', ' · no restarts') },
         row('Worker', :worker, %i[dynos database]) { dyno_text('worker', " · #{heartbeat_text}") },
         row('Site', :site, [:site]) { site_text },
+        row('Certificates', :certificates, [:certificates]) { certificates_text(now) },
         row('Requests', :requests, [:logs]) { requests_text },
         row('App errors', :app_errors, [:logs]) { app_errors_text },
         jobs_row(now),
@@ -178,6 +180,16 @@ module DeployWatch
       end
     end
 
+    # A deploy cannot change a certificate, so the text says a rollback does
+    # not help.
+    def apply_certificates(data, now)
+      @certificates = data
+      data.flat_map { CertificateCheck.problems(it, now) }.each do |line|
+        problem(:certificates, line, "#{line} · a rollback does not change this (docs/runbooks/undo-a-deploy.md, " \
+                                     '"Certificates")', nil, now)
+      end
+    end
+
     def apply_database(data, now)
       @database = data
       check_heartbeats(data[:heartbeats], now)
@@ -250,6 +262,12 @@ module DeployWatch
       summary = "#{pages} #{pages == 1 ? 'address' : 'addresses'} → 200"
       summary += ' · not a page → 404' if @site_codes.key?(Reads::NOT_A_PAGE)
       "#{summary} (checked #{@site_reads} #{@site_reads == 1 ? 'time' : 'times'})"
+    end
+
+    def certificates_text(now)
+      first = @certificates.min_by(&:not_after)
+      "#{@certificates.size} hostnames · the first runs out on #{first.not_after.utc.strftime('%Y-%m-%d')}, " \
+        "in #{CertificateCheck.days_left(first, now)} days"
     end
 
     def requests_text

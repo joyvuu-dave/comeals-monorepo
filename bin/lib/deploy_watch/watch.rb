@@ -73,7 +73,9 @@ module DeployWatch
     # stream this quiet has hung (we saw one hang every 30 minutes).
     STREAM_QUIET = 180
     STREAM_RETRY = 5
-    INTERVALS = { release: 60, dynos: 60, site: 30, database: 60, bugsnag: 120 }.freeze
+    # Each must be shorter than Board::MOST_BLIND, or a check shows "could
+    # not check" between two good reads.
+    INTERVALS = { release: 60, dynos: 60, site: 30, certificates: 120, database: 60, bugsnag: 120 }.freeze
     PROGRESS_EVERY = 300
 
     def initialize(app:, minutes:, out:)

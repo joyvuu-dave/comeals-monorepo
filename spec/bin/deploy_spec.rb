@@ -1615,6 +1615,76 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
   # The page check opens every example address in routes.json (the
   # harness's list has / and /meals/1/edit) and one address that is not a
   # page (ADR 0016).
+  describe 'the certificate check' do
+    def openssl_hosts = deploy.calls_to('openssl').map { it.split[3] }
+
+    it 'reads every public hostname before it changes anything, and goes on when all have 21 days or more' do
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(0)
+      expect(openssl_hosts).to eq(%w[comeals.com:443 www.comeals.com:443 admin.comeals.com:443 api.comeals.com:443])
+      expect(result.output).to include('admin.comeals.com: runs out on', 'Every certificate has 21 days or more left')
+    end
+
+    # Nothing changed. Next step: docs/runbooks/undo-a-deploy.md,
+    # "Certificates".
+    it 'stops before it changes anything when a certificate runs out in fewer than 21 days' do
+      deploy.production(certificate_days: 20)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('comeals.com: the certificate runs out on', 'in 20 days',
+                                       'CERTIFICATE CHECK FAILED',
+                                       'To deploy anyway, run again with CERT_CHECK=skip.')
+      expect(result.output).not_to include('Every certificate has')
+      expect_nothing_changed_in_production
+    end
+
+    it 'stops when a certificate is not trusted for its name' do
+      deploy.production(certificate_verify: '62 (hostname mismatch)')
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('comeals.com: the certificate is not trusted (hostname mismatch)',
+                                       'CERTIFICATE CHECK FAILED')
+      expect_nothing_changed_in_production
+    end
+
+    it 'stops when a certificate cannot be read' do
+      deploy.rule('openssl', 'api\\.comeals\\.com', stdout: '', stderr: "connect:errno=61\n", exit: 1)
+
+      result = deploy.run('--yes')
+
+      expect(result.status).to eq(1)
+      expect(result.output).to include('could not check: api.comeals.com: no certificate in the answer',
+                                       'CERTIFICATE CHECK FAILED')
+      expect_nothing_changed_in_production
+    end
+
+    it 'deploys anyway, with a warning, with CERT_CHECK=skip' do
+      deploy.production(certificate_days: 5)
+
+      result = deploy.run('--yes', env: { 'CERT_CHECK' => 'skip' })
+
+      expect(result.status).to eq(0)
+      expect(result.output).to include('in 5 days', 'the deploy goes on because CERT_CHECK=skip', 'Deploy complete!')
+      expect_production(maintenance: false, web: 1, pushed: true)
+    end
+
+    %w[Skip yes].each do |value|
+      it "refuses CERT_CHECK=#{value.inspect} before it runs anything" do
+        result = deploy.run('--yes', env: { 'CERT_CHECK' => value })
+
+        expect(result.status).to eq(1)
+        expect(result.output).to include("CERT_CHECK is #{value.inspect}. It must be empty or skip. " \
+                                         'Nothing was changed.')
+        expect(deploy.calls).to eq([])
+      end
+    end
+  end
+
   describe 'the page check' do
     it 'passes when every page answers 200 and the non-page answers 404' do
       result = deploy.run('--yes')
@@ -2014,6 +2084,13 @@ RSpec.describe 'bin/deploy', bash_coverage: BashCoverage.new('spec/bin/deploy_sp
       expect(result.output).not_to include('comeals-monorepo', 'https://comeals.com')
       expect(deploy.calls_to('git').grep(/\Agit \S+ heroku\b/)).to eq([])
       expect(deploy.calls_to('heroku').grep(/ -a /)).to all(match(/ -a comeals-staging( |\z)/))
+    end
+
+    it 'reads the certificate of the one staging hostname' do
+      result = deploy.run('--yes', env: staging)
+
+      expect(deploy.calls_to('openssl').map { it.split[3] }).to eq(%w[comeals-staging-ad51b8a1eb64.herokuapp.com:443])
+      expect_production_untouched(result)
     end
 
     it 'deploys to production when it is not set' do

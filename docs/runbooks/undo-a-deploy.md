@@ -39,6 +39,39 @@ stops with "PAGE CHECK FAILED" when an answer is wrong. A page that
 answers 404 means the server does not send the app for it: residents get
 the plain "Page not found" page there. Roll back.
 
+## Certificates
+
+`bin/deploy`, before it changes anything, and `bin/watch-deploy`, every
+2 minutes, read the HTTPS certificate of each public hostname
+(`comeals.com`, `www.comeals.com`, `admin.comeals.com`,
+`api.comeals.com`; on staging its herokuapp hostname). They fail when a
+certificate runs out in fewer than 21 days, is not trusted for its
+name, or cannot be read (`bin/lib/certificate_check.rb`, #297).
+
+A deploy cannot fix or break a certificate, so **do not roll back** for
+this. Heroku's Automatic Certificate Management renews each Let's
+Encrypt certificate about 30 days before it runs out, so fewer than 21
+days left means renewals have failed for over a week. When a
+certificate runs out, residents see a browser security warning in place
+of the app.
+
+1. See what Heroku says about each hostname:
+   `heroku certs:auto -a comeals-monorepo`. A status other than
+   "Cert issued" names the problem, often a DNS record that no longer
+   points at Heroku.
+2. Ask Heroku to try again: `heroku certs:auto:refresh -a comeals-monorepo`.
+3. Run `ruby bin/lib/certificate_check.rb comeals-monorepo` to see the
+   new end dates. It only reads.
+4. If it still fails, open a ticket with Heroku support.
+
+"Not trusted (hostname mismatch)" means the hostname sends a
+certificate for another name, so browsers already show the warning
+there. Treat it as an outage of that hostname.
+
+To deploy while a certificate is being fixed, run
+`CERT_CHECK=skip bin/deploy`. The check still runs and prints its
+result.
+
 ## When bin/deploy stops because the ledger check failed
 
 After the balance refresh, `bin/deploy` runs `rake ledger:verify`, which

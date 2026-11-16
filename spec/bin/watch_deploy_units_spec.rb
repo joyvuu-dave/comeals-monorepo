@@ -296,6 +296,20 @@ RSpec.describe 'bin/watch-deploy, its parts' do
       end
     end
 
+    it 'shows the certificate that runs out first, and a problem that says a rollback does not help' do
+      reading = ->(host, days) { CertificateCheck::Reading.new(host, start + (days * 86_400), nil) }
+      board.apply(:certificates, good([reading.call('comeals.com', 56), reading.call('admin.comeals.com', 30)]),
+                  start + 30)
+      expect(row('Certificates').status).to eq(:ok)
+      expect(row('Certificates').text).to eq('2 hostnames · the first runs out on 2026-11-29, in 29 days')
+
+      board.apply(:certificates, good([reading.call('comeals.com', 56), reading.call('admin.comeals.com', 10)]),
+                  start + 60)
+      expect(row('Certificates').status).to eq(:fail)
+      expect(row('Certificates').text).to end_with('in 9 days · a rollback does not change this ' \
+                                                   '(docs/runbooks/undo-a-deploy.md, "Certificates")')
+    end
+
     it 'shows could not check when too long passed with no good read, even if the reads now work' do
       answer = { '/' => '200', '/api/v1/version' => '200' }
       board.apply(:site, good(answer), start + 30)
@@ -606,6 +620,14 @@ RSpec.describe 'bin/watch-deploy, its parts' do
 
       expect(reads.read(:release)).to have_attributes(ok: false,
                                                       error: 'release: an answer this script cannot read (TypeError)')
+    end
+  end
+
+  describe DeployWatch::Watch do
+    # A read that comes less often than this would show "could not check"
+    # between two good reads, on every watch long enough to see two.
+    it 'reads everything more often than the board allows a check to go without a good read' do
+      expect(DeployWatch::Watch::INTERVALS.values).to all(be < DeployWatch::Board::MOST_BLIND)
     end
   end
 

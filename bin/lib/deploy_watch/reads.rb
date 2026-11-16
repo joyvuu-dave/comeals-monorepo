@@ -3,13 +3,16 @@
 require 'json'
 require 'time'
 require_relative 'shell'
+require_relative '../certificate_check'
 
 module DeployWatch
   # Every read of the outside world. Nothing here writes. These, and the log
   # stream in Watch, are the only commands the watch sends to Heroku:
   # releases --json, config:get HEROKU_SLUG_COMMIT, maintenance, ps --json,
   # pg:psql with a read-only SELECT, pg:backups, and logs. `heroku
-  # releases:info` is never run: it prints the config vars.
+  # releases:info` is never run: it prints the config vars. Besides Heroku,
+  # it runs curl (the site and Bugsnag) and openssl s_client (the
+  # certificates).
   class Reads
     Reading = Struct.new(:ok, :data, :error)
     class Unreadable < StandardError; end
@@ -112,6 +115,14 @@ module DeployWatch
 
         [path, result.out.strip]
       end
+    end
+
+    # Every public hostname's certificate, read the way bin/deploy reads it
+    # (bin/lib/certificate_check.rb).
+    def certificates
+      CertificateCheck::HOSTS.fetch(@app).map { |host| CertificateCheck.read(host) }
+    rescue CertificateCheck::Unreadable => e
+      raise Unreadable, "openssl: #{e.message}"
     end
 
     def database

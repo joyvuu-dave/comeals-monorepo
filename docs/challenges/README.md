@@ -97,7 +97,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 18  | [Password hashing gets weaker over time](0018-password-hashing-gets-old.md)                            | security    | open   | 2026-11-07 |
 | 19  | [A stolen superuser account](0019-a-stolen-admin-account.md)                                           | security    | open   | 2026-11-07 |
 | 20  | [The cryptography has to change](0020-cryptography-has-to-change.md)                                   | security    | open   | 2026-11-07 |
-| 21  | [The domain or its certificate expires](0021-the-domain-or-certificate-expires.md)                     | operations  | open   | 2026-11-07 |
+| 21  | [The domain or its certificate expires](0021-the-domain-or-certificate-expires.md)                     | operations  | open   | 2026-11-16 |
 | 22  | [An outside service shuts down](0022-an-outside-service-shuts-down.md)                                 | operations  | open   | 2026-11-07 |
 | 23  | [Someone else has to take over](0023-someone-else-takes-over.md)                                       | operations  | open   | 2026-11-07 |
 | 24  | [No internet at dinner time](0024-no-internet-at-dinner.md)                                            | operations  | open   | 2026-11-07 |

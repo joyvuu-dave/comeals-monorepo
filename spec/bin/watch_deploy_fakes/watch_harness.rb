@@ -1,6 +1,7 @@
 # frozen_string_literal: true
 
 require 'json'
+require 'openssl'
 require 'pty'
 require 'rbconfig'
 
@@ -67,6 +68,21 @@ class WatchHarness
                     'sample#memory_quota=512.00MB'),
            router(8)].join.freeze
 
+  # What openssl s_client prints for a certificate that runs out `days`
+  # after the watch starts, cut down to the lines the watch reads.
+  def self.certificate(days, verify: '0 (ok)')
+    key = OpenSSL::PKey::EC.generate('prime256v1')
+    cert = OpenSSL::X509::Certificate.new
+    cert.version = 2
+    cert.serial = 1
+    cert.subject = cert.issuer = OpenSSL::X509::Name.parse('/CN=comeals.com')
+    cert.public_key = key
+    cert.not_before = START_TIME - 86_400
+    cert.not_after = START_TIME + (days * 86_400)
+    cert.sign(key, OpenSSL::Digest.new('SHA256'))
+    "CONNECTED(00000003)\n#{cert.to_pem}---\nVerify return code: #{verify}\n"
+  end
+
   def healthy
     answers(:releases, out: RELEASES.to_json)
     answers(:commit, out: "#{COMMIT}\n")
@@ -80,6 +96,7 @@ class WatchHarness
     answers(:pages, out: '200')
     answers(:not_a_page, out: '404')
     answers(:version, out: '200')
+    answers(:openssl, out: self.class.certificate(56))
     answers(:organizations, out: [{ id: 'org1' }].to_json)
     answers(:projects, out: [{ id: 'other', slug: 'x' }, { id: 'proj1', slug: 'comeals' }].to_json)
     answers(:errors, out: '[]')
@@ -168,6 +185,8 @@ class WatchHarness
 
   def curl_calls = calls_of('curl')
 
+  def openssl_calls = calls_of('openssl')
+
   private
 
   def env(extra)
@@ -179,6 +198,7 @@ class WatchHarness
   def install_fakes
     install_heroku
     install_curl
+    install_openssl
   end
 
   # Writes this call to the fake's own log, then uses the next answer.
@@ -219,6 +239,13 @@ class WatchHarness
       esac
       echo "fake heroku: no answer for: $*" >&2
       exit 97
+    BASH
+  end
+
+  def install_openssl
+    sandbox.fake('openssl', <<~BASH)
+      #{fake_start('openssl')}
+      answer openssl
     BASH
   end
 
