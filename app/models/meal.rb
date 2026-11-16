@@ -227,7 +227,12 @@ class Meal < ApplicationRecord
             allow_nil: true,
             if: :will_save_change_to_max?
 
-  validates :date, uniqueness: true
+  # The uniqueness query cannot run with a day the database cannot
+  # store: PostgreSQL refuses the whole statement, and the admin form
+  # answered with an error page. The storable_time rule reports that day.
+  validates :date, storable_time: true
+  validates :date, calendar_window: true
+  validates :date, uniqueness: { if: :storable_date? }
 
   # A cancelled dinner (ADR 0011 rule 11) charges nobody, so a cook's
   # money on it would be credited $0: a dinner with money on a cost cannot
@@ -320,6 +325,12 @@ class Meal < ApplicationRecord
     return if new_date.nil? || last_date.nil? || new_date <= last_date
 
     errors.add(:base, :after_the_last_rotation, ends_on: last_date.strftime('%b %-d, %Y'))
+  end
+
+  sig { returns(T::Boolean) }
+  def storable_date?
+    date = self.date
+    !date.nil? && StorableTime.date?(date)
   end
 
   # closed_at is the "extras" boundary (ClosedMealAttendanceFreeze): an

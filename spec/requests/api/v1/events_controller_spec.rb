@@ -201,7 +201,7 @@ RSpec.describe 'Events API' do
       expect(Event.pluck(:start_date, :end_date)).to eq([[Time.zone.local(2026, 3, 8)] * 2])
     end
 
-    describe 'the date and time parts (#102)' do
+    describe 'the date and time parts (#102)', :calendar_window_open do
       let(:parts) do
         { start_year: 2026, start_month: 4, start_day: 15,
           start_hours: 19, start_minutes: 0, end_hours: 21, end_minutes: 30 }
@@ -538,7 +538,7 @@ RSpec.describe 'Events API' do
       # pins the difference that ApiController#parse_start_end_params
       # writes down: if it starts to fail, that comment and public/api.md
       # are out of date.
-      it 'saves a time shown twice in 1883 as the second one, which is not the RFC answer' do
+      it 'saves a time shown twice in 1883 as the second one, which is not the RFC answer', :calendar_window_open do
         post_event(start_year: 1883, start_month: 11, start_day: 18,
                    start_hours: 12, start_minutes: 5, end_hours: 13, end_minutes: 0)
 

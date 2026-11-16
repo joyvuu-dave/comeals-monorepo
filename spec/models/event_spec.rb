@@ -61,7 +61,7 @@ RSpec.describe Event do
   # The admin forms and a task save through the model, not the API's
   # parser, so the model refuses a time the database cannot store
   # (StorableTime). Before, PostgreSQL refused it on save: a 500.
-  describe 'a time the database cannot store' do
+  describe 'a time the database cannot store', :calendar_window_open do
     let(:first) { StorableTime::TIMESTAMPS.begin }
     let(:last) { StorableTime::TIMESTAMPS.end - Rational(1, 1_000_000) }
     let(:refused) { ['is not a date the database can store'] }

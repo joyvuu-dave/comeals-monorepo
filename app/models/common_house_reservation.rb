@@ -39,6 +39,7 @@ class CommonHouseReservation < ApplicationRecord
   validates :start_date, presence: true
   validates :end_date, presence: true
   validates :start_date, :end_date, storable_time: true
+  validates :start_date, :end_date, calendar_window: true
 
   END_BEFORE_START = 'Start time must occur before end time'
   TAKEN = 'Time period is already taken'

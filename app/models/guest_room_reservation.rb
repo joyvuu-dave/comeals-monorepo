@@ -35,6 +35,7 @@ class GuestRoomReservation < ApplicationRecord
 
   validates :date, presence: true
   validates :date, storable_time: true
+  validates :date, calendar_window: true
   validates :date, uniqueness: { if: :storable_date? }
 
   after_destroy :note_live_update

@@ -204,7 +204,8 @@ RSpec.describe 'Common House Reservations API' do
     # November 24, 4714 BC or after the last microsecond of 294276. Before,
     # the overlap check read the database with the time and raised
     # PG::DatetimeFieldOverflow, a 500.
-    it 'refuses a time the database cannot store, one minute past each end, and takes the minute inside' do
+    it 'refuses a time the database cannot store, one minute past each end, and takes the minute inside',
+       :calendar_window_open do
       outside_and_inside = [
         [{ start_year: 294_276, start_month: 12, start_day: 31, start_hours: 15, start_minutes: 0 },
          { end_hours: 16, end_minutes: 0 }, { end_hours: 15, end_minutes: 59 }],

@@ -69,7 +69,7 @@ RSpec.describe CommonHouseReservation do
   # parser, so the model refuses a time the database cannot store
   # (StorableTime). Before, the overlap check sent the time to
   # PostgreSQL, which refused the query: a 500.
-  describe 'a time the database cannot store' do
+  describe 'a time the database cannot store', :calendar_window_open do
     let(:first) { StorableTime::TIMESTAMPS.begin }
     let(:last) { StorableTime::TIMESTAMPS.end - Rational(1, 1_000_000) }
     let(:refused) { ['is not a date the database can store'] }

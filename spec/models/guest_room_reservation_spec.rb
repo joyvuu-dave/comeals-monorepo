@@ -50,7 +50,7 @@ RSpec.describe GuestRoomReservation do
   # 5874897. Ruby's Date writes days before October 15, 1582 in the
   # Julian calendar, so it has February 29, 1500, which PostgreSQL
   # does not.
-  describe 'a day the database cannot store' do
+  describe 'a day the database cannot store', :calendar_window_open do
     def errors_of(date)
       reservation = build(:guest_room_reservation, date: date)
       reservation.validate

@@ -37,12 +37,15 @@ FactoryBot.define do
     # spec has already created with a default date. Many specs depend on
     # that: they build a meal, then create a reconciliation to settle it.
     #
-    # The factory's own meal is dated in 2000, decades before the meal
-    # factory's dates (which count back from today), so it sorts clear of any
-    # meal a spec created and cannot collide with one. Each call gets its own
-    # day, because meals.date carries a unique index.
+    # The factory's own meal is dated in the oldest days a new meal may
+    # have (CalendarWindow: 10 years before today), years before the meal
+    # factory's dates (which go back two years from today), so it sorts
+    # clear of any meal a spec created and cannot collide with one. Each
+    # call gets its own day, because meals.date carries a unique index.
+    # The count starts again after 1000 days, so the day stays more than
+    # 7 years back however many reconciliations the suite makes.
     transient do
-      sequence(:settled_meal_date) { |n| Date.new(2000, 1, 1) + n.days }
+      sequence(:settled_meal_number)
     end
 
     end_date { Reconciliation.latest_cutoff(community.today) }
@@ -54,7 +57,9 @@ FactoryBot.define do
     before(:create) do |reconciliation, evaluator|
       unit = create(:unit, community: reconciliation.community)
       cook = create(:resident, community: reconciliation.community, unit: unit)
-      meal = create(:meal, community: reconciliation.community, date: evaluator.settled_meal_date)
+      oldest = reconciliation.community.today.advance(years: -CalendarWindow::YEARS)
+      meal = create(:meal, community: reconciliation.community,
+                           date: oldest + (evaluator.settled_meal_number % 1000).days)
       create(:bill, meal: meal, resident: cook, community: reconciliation.community,
                     amount: BigDecimal('10'))
       create(:meal_resident, meal: meal, resident: cook, community: reconciliation.community)

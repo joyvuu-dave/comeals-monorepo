@@ -64,7 +64,9 @@ class MealSchedule
     weeks[week_index(date)].include?(date.wday)
   end
 
-  # The next `count` meal dates starting at `from`, skipping holidays.
+  # The next `count` meal dates starting at `from`, skipping holidays,
+  # and none after the last day a dinner may have (CalendarWindow), so
+  # near the end of 9999 there are fewer than `count`, and then none.
   def upcoming_dates(from:, count:)
     dates = []
     date = from.to_date
@@ -74,7 +76,7 @@ class MealSchedule
     # constraint raises an error instead of looping forever.
     scan_limit = (count * cycle_length * 7) + 366
     scanned = 0
-    while dates.length < count
+    while dates.length < count && date <= CalendarWindow::LAST_DAY
       if scanned > scan_limit
         raise "Scanned #{scanned} days from #{from} and found only #{dates.length} of " \
               "#{count} meal days — the schedule #{weeks.inspect} looks broken"

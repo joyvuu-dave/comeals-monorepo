@@ -358,10 +358,15 @@ class Community < ApplicationRecord
   # Which dates those are is entirely MealSchedule's answer — its fixed epoch
   # makes the cycle phase arithmetic, so nothing here needs to look at past
   # meals to know which week of the cycle comes next.
+  #
+  # Returns the rotation, or nil when no meal day is left before the last
+  # day a dinner may have, December 31, 9999 (CalendarWindow). The
+  # rotation before that is shorter than meals_per_rotation.
   def create_next_rotation
     day_after_last_meal = meals.order(:date).last&.date&.tomorrow
     start = [today, day_after_last_meal].compact.max
     dates = meal_schedule.upcoming_dates(from: start, count: meals_per_rotation)
+    return if dates.empty?
 
     rotations.create!(meals_attributes: dates.map { |date| { date: date } })
   end

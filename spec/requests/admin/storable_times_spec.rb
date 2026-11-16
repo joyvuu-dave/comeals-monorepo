@@ -10,7 +10,7 @@ require 'rails_helper'
 # instead of the form. The API refuses these times in its own parser
 # (events_controller_spec.rb); this is the admin side of the same
 # records.
-RSpec.describe 'Admin forms and a time the database cannot store' do
+RSpec.describe 'Admin forms and a time the database cannot store', :calendar_window_open do
   let(:community) { create(:community) }
   let(:unit) { create(:unit, community: community) }
   let(:admin_user) { create(:admin_user, community: community, superuser: true) }

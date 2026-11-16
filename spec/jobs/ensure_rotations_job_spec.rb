@@ -70,4 +70,28 @@ RSpec.describe EnsureRotationsJob do
       expect { described_class.perform_now }.not_to change(Rotation, :count)
     end
   end
+
+  # The last day a dinner may have is December 31, 9999 (CalendarWindow).
+  # From July 9999 on, six months ahead is the year 10000, which the
+  # window refuses. The job makes dinners up to the last day, and then
+  # stops without an error, every night until the end.
+  describe 'at the end of 9999' do
+    it 'makes dinners up to December 31, 9999 and none after' do
+      travel_to(Time.zone.local(9999, 9, 1, 12)) { described_class.perform_now }
+
+      last = community.meals.maximum(:date)
+      expect(last).to be <= CalendarWindow::LAST_DAY
+      expect(community.meal_schedule.upcoming_dates(from: last + 1, count: 1)).to eq([])
+      expect(JobRun.find_by!(name: 'ensure_rotations').outcome).to eq('ok')
+    end
+
+    it 'does nothing, and says so, on a run after the last dinner is made' do
+      travel_to(Time.zone.local(9999, 9, 1, 12)) { described_class.perform_now }
+
+      travel_to(Time.zone.local(9999, 12, 31, 12)) do
+        expect { described_class.perform_now }.not_to change(Rotation, :count)
+      end
+      expect(JobRun.where(name: 'ensure_rotations').last.outcome).to eq('ok')
+    end
+  end
 end

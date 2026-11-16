@@ -40,6 +40,7 @@ class Event < ApplicationRecord
   validates :allday, inclusion: { in: [true, false], message: TrueOrFalse::MESSAGE }
   validates :start_date, presence: true
   validates :start_date, :end_date, storable_time: true
+  validates :start_date, :end_date, calendar_window: true
 
   END_BEFORE_START = 'Start time must occur before end time'
   SAME_DAY = 'An event must start and end on the same day.'

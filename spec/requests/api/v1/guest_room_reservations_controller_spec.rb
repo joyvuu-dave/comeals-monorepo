@@ -79,7 +79,7 @@ RSpec.describe 'Guest Room Reservations API' do
   # in the Gregorian calendar carried back before 1582. A day outside
   # that, or a day only the Julian calendar has, like February 29, 1500,
   # raised PG::DatetimeFieldOverflow in the check for a taken day: a 500.
-  describe 'a day the database cannot store' do
+  describe 'a day the database cannot store', :calendar_window_open do
     let(:refused) { 'Date is not a date the database can store' }
 
     it 'is refused on create at both ends and for a Julian leap day, and the day next to each is taken' do
