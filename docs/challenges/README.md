@@ -110,7 +110,7 @@ bin/challenges new AREA TITLE     start a new challenge from the template, with 
 | 31  | [Replay any failure exactly](0031-replay-any-failure-exactly.md)                                       | proof       | done   | 2026-11-15 |
 | 32  | [Everyone can use it](0032-everyone-can-use-it.md)                                                     | quality     | open   | 2026-11-07 |
 | 33  | [Deploys with no downtime](0033-deploys-with-no-downtime.md)                                           | operations  | open   | 2026-11-07 |
-| 34  | [Unknown paths answer with the app page](0034-unknown-paths-answer-with-the-app.md)                    | quality     | open   | 2026-11-07 |
+| 34  | [Unknown paths answer with the app page](0034-unknown-paths-answer-with-the-app.md)                    | quality     | done   | 2026-11-16 |
 | 35  | [Measure the pages people use](0035-measure-the-signed-in-pages.md)                                    | quality     | open   | 2026-11-07 |
 
 <!-- End of the index. -->
