@@ -20,9 +20,11 @@ class FallbackController < ActionController::API
   # Rails sends for a missing admin page. no-store, so that a page left
   # out of routes.json by mistake shows as soon as it is added back,
   # not when a browser or a proxy lets a kept 404 go. It reads no
-  # database.
+  # database. inline, because send_file's default is attachment, which
+  # makes a browser save the page instead of showing it. send_file reads
+  # the type, text/html, from the file's name.
   def not_found
-    response.headers['Cache-Control'] = 'no-store'
-    send_file Rails.public_path.join('404.html'), type: 'text/html', disposition: 'inline', status: :not_found
+    no_store
+    send_file Rails.public_path.join('404.html'), disposition: 'inline', status: :not_found
   end
 end

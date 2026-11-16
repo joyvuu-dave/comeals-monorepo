@@ -250,9 +250,9 @@ MUTANT_SPEC_ROWS = {
   'spec/requests/fallback_controller_spec.rb' => %w[FallbackController PageSettings SpaPageRedirect],
   'spec/lib/spa_page_redirect_spec.rb' => %w[SpaPageRedirect],
   'spec/requests/routing_spec.rb' => %w[FallbackController],
-  # Not app_pages_contract_spec.rb: it runs Node, which the mutant jobs
-  # do not install. AppPages is mutated against app_pages_spec.rb, which
-  # describes it, and this file.
+  # AppPages is also mutated against app_pages_spec.rb and
+  # app_pages_contract_spec.rb, which describe it. The contract spec runs
+  # Node, so both mutant jobs install it.
   'spec/requests/unknown_paths_spec.rb' => %w[FallbackController AppPages],
   'spec/requests/admin/money_field_rendering_spec.rb' => %w[MoneyFieldHelper],
   'spec/requests/admin/schedule_grid_labels_spec.rb' => %w[ScheduleWeekLabelHelper],

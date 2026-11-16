@@ -109,6 +109,15 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
+      # Node and the npm packages, for spec/lib/app_pages_contract_spec.rb,
+      # which mutant runs for AppPages: it asks React Router itself which
+      # paths are pages (ADR 0016). Without Node that spec fails for every
+      # mutation, and a failure counts as a kill.
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
       - run: bin/rails db:schema:load
 
       # Every Nth subject, starting at this piece's number. A subject is a

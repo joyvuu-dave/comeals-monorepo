@@ -23,8 +23,10 @@ RSpec.describe AppPages do
 
     def expect_agreement(paths)
       react_router = react_router_pages(paths)
+      # Built here, so a change to compile changes the answer.
+      patterns = described_class.patterns(described_class.load(AppPages::FILE))
       differences = paths.zip(react_router).filter_map do |path, theirs|
-        ours = AppPages.page?(path)
+        ours = described_class.page?(path, patterns:)
         if ours != theirs
           "#{path.inspect}: React Router #{theirs ? 'page' : 'not a page'}, AppPages #{ours ? 'page' : 'not a page'}"
         end

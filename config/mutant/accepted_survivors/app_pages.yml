@@ -1,0 +1,236 @@
+---
+- subject: AppPages.decode
+  kind: same-answer
+  why: >-
+    Another limit for split only keeps or drops the empty parts at the end of the path, which come from slashes at the end.
+    Those parts decode to themselves and never make the path fail to decode, and every pattern takes any number of slashes
+    at the end (compile ends each with /*), so the joined path matches the same patterns.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def self.decode(path)
+    -  parts = path.split("/", -1).map { |part|
+    +  parts = path.split("/").map { |part|
+         decode_part(part)
+       }
+       if parts.all?
+         parts.join("/")
+       else
+         path
+       end
+     end
+- subject: AppPages.decode
+  kind: same-answer
+  why: >-
+    Another limit for split only keeps or drops the empty parts at the end of the path, which come from slashes at the end.
+    Those parts decode to themselves and never make the path fail to decode, and every pattern takes any number of slashes
+    at the end (compile ends each with /*), so the joined path matches the same patterns.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def self.decode(path)
+    -  parts = path.split("/", -1).map { |part|
+    +  parts = path.split("/", -2).map { |part|
+         decode_part(part)
+       }
+       if parts.all?
+         parts.join("/")
+       else
+         path
+       end
+     end
+- subject: AppPages.decode
+  kind: same-answer
+  why: >-
+    Another limit for split only keeps or drops the empty parts at the end of the path, which come from slashes at the end.
+    Those parts decode to themselves and never make the path fail to decode, and every pattern takes any number of slashes
+    at the end (compile ends each with /*), so the joined path matches the same patterns.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def self.decode(path)
+    -  parts = path.split("/", -1).map { |part|
+    +  parts = path.split("/", 167).map { |part|
+         decode_part(part)
+       }
+       if parts.all?
+         parts.join("/")
+       else
+         path
+       end
+     end
+- subject: AppPages.decode
+  kind: same-answer
+  why: >-
+    Another limit for split only keeps or drops the empty parts at the end of the path, which come from slashes at the end.
+    Those parts decode to themselves and never make the path fail to decode, and every pattern takes any number of slashes
+    at the end (compile ends each with /*), so the joined path matches the same patterns.
+  diff: |
+    @@ -1,10 +1,10 @@
+     def self.decode(path)
+    -  parts = path.split("/", -1).map { |part|
+    +  parts = path.split("/", 0).map { |part|
+         decode_part(part)
+       }
+       if parts.all?
+         parts.join("/")
+       else
+         path
+       end
+     end
+- subject: AppPages.load
+  kind: same-answer
+  why: >-
+    The is_a?(Array) before it is true only when the key is there, so page["examples"] and page.fetch("examples") give the
+    same Array.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.load(file)
+       pages = JSON.parse(File.read(file)).fetch("pages")
+       unless pages.is_a?(Hash) && !pages.empty?
+         raise(Invalid, "#{file} lists no pages")
+       end
+       pages.each { |name, page|
+         path = page["path"]
+         unless path.is_a?(String)
+           raise(Invalid, "the page #{name} in #{file} has no path")
+         end
+    -    unless page["examples"].is_a?(Array) && !page["examples"].empty?
+    +    unless page["examples"].is_a?(Array) && !page.fetch("examples").empty?
+           raise(Invalid, "the page #{name} in #{file} has no example")
+         end
+         compile(path)
+       }
+       pages
+     rescue JSON::ParserError, KeyError, Errno::ENOENT => e
+       raise(Invalid, "could not read the app's pages from #{file}: #{e.message}")
+     end
+- subject: AppPages.load
+  kind: same-answer
+  why: Hash#each returns the Hash it was called on, so with the last line gone load still returns pages.
+  diff: |
+    @@ -1,19 +1,18 @@
+     def self.load(file)
+       pages = JSON.parse(File.read(file)).fetch("pages")
+       unless pages.is_a?(Hash) && !pages.empty?
+         raise(Invalid, "#{file} lists no pages")
+       end
+       pages.each { |name, page|
+         path = page["path"]
+         unless path.is_a?(String)
+           raise(Invalid, "the page #{name} in #{file} has no path")
+         end
+         unless page["examples"].is_a?(Array) && !page["examples"].empty?
+           raise(Invalid, "the page #{name} in #{file} has no example")
+         end
+         compile(path)
+       }
+    -  pages
+     rescue JSON::ParserError, KeyError, Errno::ENOENT => e
+       raise(Invalid, "could not read the app's pages from #{file}: #{e.message}")
+     end
+- subject: AppPages.load
+  kind: same-answer
+  why: >-
+    Exception#to_s is its message for every error rescued here (JSON::ParserError, KeyError, Errno::ENOENT), so the two strings
+    are the same.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.load(file)
+       pages = JSON.parse(File.read(file)).fetch("pages")
+       unless pages.is_a?(Hash) && !pages.empty?
+         raise(Invalid, "#{file} lists no pages")
+       end
+       pages.each { |name, page|
+         path = page["path"]
+         unless path.is_a?(String)
+           raise(Invalid, "the page #{name} in #{file} has no path")
+         end
+         unless page["examples"].is_a?(Array) && !page["examples"].empty?
+           raise(Invalid, "the page #{name} in #{file} has no example")
+         end
+         compile(path)
+       }
+       pages
+     rescue JSON::ParserError, KeyError, Errno::ENOENT => e
+    -  raise(Invalid, "could not read the app's pages from #{file}: #{e.message}")
+    +  raise(Invalid, "could not read the app's pages from #{file}: #{e}")
+     end
+- subject: AppPages.load
+  kind: same-answer
+  why: >-
+    JSON.parse makes only plain Hash, Array, String, Integer, Float, true, false and nil, never a subclass, so instance_of?
+    and is_a? agree on every value it can read.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.load(file)
+       pages = JSON.parse(File.read(file)).fetch("pages")
+    -  unless pages.is_a?(Hash) && !pages.empty?
+    +  unless pages.instance_of?(Hash) && !pages.empty?
+         raise(Invalid, "#{file} lists no pages")
+       end
+       pages.each { |name, page|
+         path = page["path"]
+         unless path.is_a?(String)
+           raise(Invalid, "the page #{name} in #{file} has no path")
+         end
+         unless page["examples"].is_a?(Array) && !page["examples"].empty?
+           raise(Invalid, "the page #{name} in #{file} has no example")
+         end
+         compile(path)
+       }
+       pages
+     rescue JSON::ParserError, KeyError, Errno::ENOENT => e
+       raise(Invalid, "could not read the app's pages from #{file}: #{e.message}")
+     end
+- subject: AppPages.load
+  kind: same-answer
+  why: >-
+    JSON.parse makes only plain Hash, Array, String, Integer, Float, true, false and nil, never a subclass, so instance_of?
+    and is_a? agree on every value it can read.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.load(file)
+       pages = JSON.parse(File.read(file)).fetch("pages")
+       unless pages.is_a?(Hash) && !pages.empty?
+         raise(Invalid, "#{file} lists no pages")
+       end
+       pages.each { |name, page|
+         path = page["path"]
+    -    unless path.is_a?(String)
+    +    unless path.instance_of?(String)
+           raise(Invalid, "the page #{name} in #{file} has no path")
+         end
+         unless page["examples"].is_a?(Array) && !page["examples"].empty?
+           raise(Invalid, "the page #{name} in #{file} has no example")
+         end
+         compile(path)
+       }
+       pages
+     rescue JSON::ParserError, KeyError, Errno::ENOENT => e
+       raise(Invalid, "could not read the app's pages from #{file}: #{e.message}")
+     end
+- subject: AppPages.load
+  kind: same-answer
+  why: >-
+    JSON.parse makes only plain Hash, Array, String, Integer, Float, true, false and nil, never a subclass, so instance_of?
+    and is_a? agree on every value it can read.
+  diff: |
+    @@ -1,19 +1,19 @@
+     def self.load(file)
+       pages = JSON.parse(File.read(file)).fetch("pages")
+       unless pages.is_a?(Hash) && !pages.empty?
+         raise(Invalid, "#{file} lists no pages")
+       end
+       pages.each { |name, page|
+         path = page["path"]
+         unless path.is_a?(String)
+           raise(Invalid, "the page #{name} in #{file} has no path")
+         end
+    -    unless page["examples"].is_a?(Array) && !page["examples"].empty?
+    +    unless page["examples"].instance_of?(Array) && !page["examples"].empty?
+           raise(Invalid, "the page #{name} in #{file} has no example")
+         end
+         compile(path)
+       }
+       pages
+     rescue JSON::ParserError, KeyError, Errno::ENOENT => e
+       raise(Invalid, "could not read the app's pages from #{file}: #{e.message}")
+     end

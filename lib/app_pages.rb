@@ -40,10 +40,17 @@ module AppPages
   # One part of a pattern: a static name, or :name; either may end in ?.
   PART = T.let(/\A(?<param>:)?(?<name>[A-Za-z0-9_.~-]+)(?<optional>\?)?\z/, Regexp)
 
-  sig { params(path: String).returns(T::Boolean) }
-  def self.page?(path)
+  # patterns: the ones built when this file loads. A spec passes ones it
+  # builds itself (AppPages.patterns), so that it tests compile as well.
+  sig { params(path: String, patterns: T::Array[Regexp]).returns(T::Boolean) }
+  def self.page?(path, patterns: PATTERNS)
     decoded = decode(path)
-    PATTERNS.any? { |pattern| pattern.match?(decoded) }
+    patterns.any? { |pattern| pattern.match?(decoded) }
+  end
+
+  sig { params(pages: T::Hash[String, T::Hash[String, T.untyped]]).returns(T::Array[Regexp]) }
+  def self.patterns(pages)
+    pages.values.map { |page| compile(page.fetch('path')) }
   end
 
   # The pages, name -> { 'path' =>, 'examples' => [...] }, as routes.json
@@ -96,24 +103,23 @@ module AppPages
   # part that does not decode is used as it was sent.
   sig { params(path: String).returns(String) }
   def self.decode(path)
-    path.split('/', -1).map { |part| decode_part(part) }.join('/')
-  rescue ArgumentError
-    path
+    parts = path.split('/', -1).map { |part| decode_part(part) }
+    parts.all? ? parts.join('/') : path
   end
 
-  # decodeURIComponent, which throws on a % not followed by two hex
-  # digits and on bytes that are not UTF-8.
-  sig { params(part: String).returns(String) }
+  # decodeURIComponent, which fails on a % not followed by two hex digits
+  # and on bytes that are not UTF-8. nil when it would fail.
+  sig { params(part: String).returns(T.nilable(String)) }
   def self.decode_part(part)
-    raise ArgumentError, 'a lone %' if part.match?(/%(?!\h\h)/)
+    return nil if part.match?(/%(?!\h\h)/)
 
     decoded = part.gsub(/%\h\h/) { |code| T.must(code[1, 2]).hex.chr }.force_encoding(Encoding::UTF_8)
-    raise ArgumentError, 'not UTF-8' unless decoded.valid_encoding?
+    return nil unless decoded.valid_encoding?
 
     decoded.gsub('/', '%2F')
   end
 
   PAGES = T.let(load(FILE).freeze, T::Hash[String, T::Hash[String, T.untyped]])
-  PATTERNS = T.let(PAGES.values.map { |page| compile(page.fetch('path')) }.freeze, T::Array[Regexp])
+  PATTERNS = T.let(patterns(PAGES).freeze, T::Array[Regexp])
   private_class_method :part_source, :decode_part
 end

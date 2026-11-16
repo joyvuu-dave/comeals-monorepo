@@ -85,6 +85,9 @@ RSpec.describe 'Addresses that are not pages of the app' do
     get '/foo.json'
 
     expect(response.headers['Cache-Control']).to eq('no-store')
+    # Shown, not saved: send_file's default disposition is attachment.
+    expect(response.headers['Content-Disposition']).to start_with('inline')
+    expect(response.content_type).to start_with('text/html')
   end
 
   it 'gives a person a way back into the app' do
