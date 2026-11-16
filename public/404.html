@@ -1,69 +1,77 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
     <title>The page you were looking for doesn't exist (404)</title>
+    <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <!--
+      Sent with a 404 for every address that is not a page: on the
+      resident site by FallbackController#not_found (ADR 0016), and on
+      the admin site by Rails. The link goes to / on the site it is
+      on: the app, or the admin home page. Plain HTML and inline CSS
+      only: it must work when nothing else on the site does.
+    -->
     <style>
-      .rails-default-error-page {
-        background-color: #efefef;
-        color: #2e2f30;
-        text-align: center;
-        font-family: arial, sans-serif;
+      :root {
+        --bg: #ccdeea;
+        --card: #ffffff;
+        --fg: #1d2733;
+        --muted: #4f5d6a;
+        --link: #1f5f8b;
+        color-scheme: light;
+      }
+      @media (prefers-color-scheme: dark) {
+        :root {
+          --bg: #15202a;
+          --card: #1e2a35;
+          --fg: #e6edf3;
+          --muted: #a8b6c3;
+          --link: #8cc4ec;
+          color-scheme: dark;
+        }
+      }
+      body {
         margin: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family:
+          -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica,
+          Arial, sans-serif;
+        line-height: 1.5;
       }
-
-      .rails-default-error-page div.dialog {
-        width: 95%;
-        max-width: 33em;
+      main {
+        max-width: 32em;
         margin: 4em auto 0;
+        padding: 1.5em max(16px, 5%);
+        background: var(--card);
+        border-radius: 8px;
       }
-
-      .rails-default-error-page div.dialog > div {
-        border: 1px solid #ccc;
-        border-right-color: #999;
-        border-left-color: #999;
-        border-bottom-color: #bbb;
-        border-top: #b00100 solid 4px;
-        border-top-left-radius: 9px;
-        border-top-right-radius: 9px;
-        background-color: white;
-        padding: 7px 12% 0;
-        box-shadow: 0 3px 8px rgba(50, 50, 50, 0.17);
+      .name {
+        margin: 0;
+        font-size: 1rem;
+        color: var(--muted);
+        letter-spacing: 0.04em;
       }
-
-      .rails-default-error-page h1 {
-        font-size: 100%;
-        color: #730e15;
-        line-height: 1.5em;
+      h1 {
+        margin: 0.25em 0 0.5em;
+        font-size: 1.5rem;
       }
-
-      .rails-default-error-page div.dialog > p {
+      p {
         margin: 0 0 1em;
-        padding: 1em;
-        background-color: #f7f7f7;
-        border: 1px solid #ccc;
-        border-right-color: #999;
-        border-left-color: #999;
-        border-bottom-color: #999;
-        border-bottom-left-radius: 4px;
-        border-bottom-right-radius: 4px;
-        border-top-color: #dadada;
-        color: #666;
-        box-shadow: 0 3px 8px rgba(50, 50, 50, 0.17);
+      }
+      a {
+        color: var(--link);
+        font-weight: 600;
       }
     </style>
   </head>
 
-  <body class="rails-default-error-page">
-    <!-- This file lives in public/404.html -->
-    <div class="dialog">
-      <div>
-        <h1>The page you were looking for doesn't exist.</h1>
-        <p>You may have mistyped the address or the page may have moved.</p>
-      </div>
-      <p>
-        If you are the application owner check the logs for more information.
-      </p>
-    </div>
+  <body>
+    <main>
+      <p class="name">Comeals</p>
+      <h1>Page not found</h1>
+      <p>There is no page at this address. It may have a typo in it.</p>
+      <p><a href="/">Go to the Comeals home page</a></p>
+    </main>
   </body>
 </html>

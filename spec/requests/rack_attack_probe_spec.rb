@@ -99,7 +99,7 @@ RSpec.describe 'Rack::Attack refuses requests for secret files' do
       expect(status_of('/', env: scanner)).to eq(200)
       expect(status_of('/calendar/all/2026-04-01', env: scanner)).to eq(200)
       expect(status_of('/meals/1/edit', env: scanner)).to eq(200)
-      expect(status_of('/reset-password/AbC-dEf_123', env: scanner)).to eq(200)
+      expect(status_of('/reset-password', env: scanner)).to eq(200)
       expect(status_of('/api/v1/version', env: scanner)).to eq(200)
       expect(status_of('/login', host: 'admin.example.com', env: scanner)).to eq(200)
       expect(status_of('/', env: scanner)).to eq(200)

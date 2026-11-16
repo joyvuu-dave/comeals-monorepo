@@ -95,6 +95,14 @@ jobs:
       - uses: ruby/setup-ruby@v1
         with:
           bundler-cache: true
+      # Node and the npm packages, for spec/lib/app_pages_contract_spec.rb:
+      # it asks React Router itself which paths are pages, and checks the
+      # server agrees (ADR 0016).
+      - uses: actions/setup-node@v6
+        with:
+          node-version-file: package.json
+          cache: npm
+      - run: npm ci
       # No front-end build here, on purpose: the request specs bring
       # their own index.html and manifest.json when there is none
       # (spec/support/spa_page.rb, asset_cache_control_spec.rb), and

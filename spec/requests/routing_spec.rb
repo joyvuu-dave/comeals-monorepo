@@ -26,8 +26,10 @@ RSpec.describe 'Routing' do
 
     it 'does not serve ActiveAdmin on the main domain' do
       get '/login'
-      # Without admin subdomain, /login falls through to SPA catch-all
-      expect(response.body).to include('<div id="root">')
+      # Without the admin subdomain, /login is an address the app has no
+      # page for (AppPages), so it gets the plain 404 page.
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).not_to include('id="admin_user_email"')
     end
   end
 
@@ -79,11 +81,15 @@ RSpec.describe 'Routing' do
       expect(response.body).to include("The page you were looking for doesn't exist (404)")
     end
 
-    it 'still serves the SPA at a path that only starts like an asset folder' do
+    # The asset rule matches whole folder names only. /assets-list is not
+    # under /assets/, so the resident site's own rule answers it: it is
+    # not a page of the app either, so a 404 that no one may keep
+    # (FallbackController#not_found).
+    it 'leaves a path that only starts like an asset folder to the resident site' do
       host! 'www.example.com'
       get '/assets-list'
-      expect(response).to have_http_status(:ok)
-      expect(response.body).to include('<div id="root">')
+      expect(response).to have_http_status(:not_found)
+      expect(response.headers['Cache-Control']).to eq('no-store')
     end
   end
 

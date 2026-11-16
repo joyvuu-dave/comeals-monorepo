@@ -97,8 +97,10 @@ RSpec.describe 'Admin smoke tests' do
     it 'admin routes are NOT accessible without admin subdomain' do
       host! 'www.example.com'
       get '/login'
-      # Without admin subdomain, /login should fall through to SPA catch-all
-      expect(response.body).to include('<div id="root">')
+      # Without the admin subdomain, /login is not a page of the resident
+      # app either (AppPages), so it gets the plain 404 page.
+      expect(response).to have_http_status(:not_found)
+      expect(response.body).not_to include('id="admin_user_email"')
     end
   end
 end

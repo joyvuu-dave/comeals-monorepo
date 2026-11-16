@@ -1,6 +1,8 @@
 # typed: false
 # frozen_string_literal: true
 
+require_relative '../lib/app_pages'
+
 Rails.application.routes.draw do
   mount LetterOpenerWeb::Engine, at: '/letter_opener' if Rails.env.development?
 
@@ -89,12 +91,27 @@ Rails.application.routes.draw do
   get '/assets(/*rest)', to: 'application#not_found'
   get '/vite-assets(/*rest)', to: 'application#not_found'
 
-  # SPA catch-all (must be last; only on non-admin subdomains). Rails replaces
-  # a scope's lambda constraint with a route-level one instead of merging them,
-  # so each route carries the whole check itself (issue #18).
+  # The resident site's pages, and a 404 for every other address (must be
+  # last; only on non-admin subdomains). A page is an entry of
+  # app/frontend/src/routes.json, the list the app draws its routes from
+  # (AppPages, ADR 0016). Every other address gets the plain 404 page,
+  # so a program asking for a file the app does not have, such as
+  # /.well-known/security.txt, is told it is not there (challenge 34).
+  #
+  # Heroku's router answers /.well-known/acme-challenge/ itself, for the
+  # HTTPS certificates, and never sends it here (checked 2026-11-16, in
+  # docs/challenges/0034-unknown-paths-answer-with-the-app.md). So the
+  # 404 below cannot stop a certificate from renewing.
+  #
+  # Rails replaces a scope's lambda constraint with a route-level one
+  # instead of merging them, so each route carries the whole check itself
+  # (issue #18). format: false keeps a path that ends in .json or .txt
+  # whole, so AppPages sees the path as the browser sent it.
   spa_request = lambda do |req|
     req.subdomain != 'admin' && !req.path.start_with?('/api/', '/letter_opener')
   end
-  root to: 'fallback#index', constraints: spa_request
-  get '*path', to: 'fallback#index', constraints: spa_request
+  app_page = ->(req) { spa_request.call(req) && AppPages.page?(req.path) }
+  root to: 'fallback#index', constraints: app_page
+  get '*path', to: 'fallback#index', constraints: app_page, format: false
+  get '*path', to: 'fallback#not_found', constraints: spa_request, format: false
 end
