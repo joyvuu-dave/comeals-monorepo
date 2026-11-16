@@ -12,18 +12,17 @@ namespace :test do
     # ------------------------------------------------------------------
     # CLEAN
     # ------------------------------------------------------------------
-    # Truncate all tables in FK-safe order. CASCADE handles dependencies.
-    # ledger_check_runs and audits are listed by name: they have no foreign
-    # key to communities, so the CASCADE does not reach them. This suite
-    # shares the RSpec test database, and until 2026-10-14 every run left
-    # its audits there for the next RSpec run to find. common_house_logins
-    # has no foreign key either. RESTART IDENTITY starts every id at 1
-    # again, so the ids do not depend on which rows came before: one check
-    # needs each rotation's id to differ from its place (#267). Inside a
-    # spec's transaction, PostgreSQL undoes the restart with the rollback.
-    ActiveRecord::Base.connection.execute(
-      'TRUNCATE communities, ledger_check_runs, audits, common_house_logins RESTART IDENTITY CASCADE'
-    )
+    # Empty every table but Rails' own two, the way tests/admin/seed.rb
+    # does. A list of tables missed the ones no foreign key reaches: audits
+    # until 2026-10-14, and request_keys until 2026-11-16, whose guest
+    # removal keys from the last run answered this run's removals (#295).
+    # RESTART IDENTITY starts every id at 1 again, so the ids do not
+    # depend on which rows came before: one check needs each rotation's id
+    # to differ from its place (#267). Inside a spec's transaction,
+    # PostgreSQL undoes the restart with the rollback.
+    conn = ActiveRecord::Base.connection
+    tables = conn.tables - %w[schema_migrations ar_internal_metadata]
+    conn.execute("TRUNCATE #{tables.map { |t| conn.quote_table_name(t) }.join(', ')} RESTART IDENTITY CASCADE")
     Current.reset
 
     # ------------------------------------------------------------------

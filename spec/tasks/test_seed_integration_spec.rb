@@ -61,6 +61,26 @@ RSpec.describe 'test:seed_integration', type: :task do
     expect(seed[:rotations].values.pluck(:id)).to all(be < 500)
   end
 
+  # The seed starts the ids again and the suite's clock is frozen, so a
+  # row an earlier run left behind can look like one this run makes. A
+  # guest removal's request key is "remove-guest-<id>": a key left from the
+  # last run answered this run's removal of the new guest with that id
+  # with the saved 200, and removed nothing (#295). So the seed empties
+  # every table, not a list of them, the way tests/admin/seed.rb does.
+  it 'empties every table, including those no foreign key reaches' do
+    conn = ActiveRecord::Base.connection
+    conn.execute(<<~SQL.squish)
+      INSERT INTO request_keys (sender, key, request_sha256, status, body, created_at)
+      VALUES ('Resident:1', 'a key only this example writes', '#{'0' * 64}', 200, '{}', now())
+    SQL
+    conn.execute("INSERT INTO throttle_counts (key, count, expires_at) VALUES ('a', 1, now() + interval '1 hour')")
+
+    seed
+
+    expect(conn.select_value('SELECT count(*) FROM request_keys')).to eq(0)
+    expect(conn.select_value('SELECT count(*) FROM throttle_counts')).to eq(0)
+  end
+
   it 'refuses to run outside the test environment' do
     allow(Rails).to receive(:env).and_return(ActiveSupport::EnvironmentInquirer.new('development'))
 
