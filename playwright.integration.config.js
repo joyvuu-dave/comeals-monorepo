@@ -32,6 +32,9 @@ export default defineConfig({
     // The real server answers the browser check's report
     // (tests/helpers/test.js answers it in the mocked suite).
     browserReports: "server",
+    // Every address the app shows must be a page to the real server
+    // (tests/helpers/test.js, ADR 0016).
+    addressCheck: true,
     screenshot: "only-on-failure",
     // There are no retries, so "on-first-retry" never kept a trace:
     // a failure left only a screenshot (#132).

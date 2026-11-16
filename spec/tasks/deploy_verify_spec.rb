@@ -33,6 +33,19 @@ RSpec.describe 'deploy:verify_solid_queue' do
     end
   end
 
+  # The release phase runs it first (Procfile). A list it cannot read or
+  # match raises AppPages::Invalid when the file is required, which makes
+  # the rake process exit non-zero; spec/lib/app_pages_spec.rb has those
+  # cases. Here, the list in the repository passes and is named.
+  describe 'deploy:verify_app_pages' do
+    after { Rake::Task['deploy:verify_app_pages'].reenable }
+
+    it 'names the pages of routes.json' do
+      expect { Rake::Task['deploy:verify_app_pages'].invoke }
+        .to output(/routes\.json lists 5 pages: login, resetPassword, confirmEmail, calendar, meal\./).to_stdout
+    end
+  end
+
   # The release phase runs it before db:migrate (Procfile). It raises
   # through SquashedMigrationsCheck, which makes the rake process exit
   # non-zero, so Heroku does not promote the release.

@@ -72,6 +72,24 @@ function letTheTestSetTheNetwork() {
   window.__testSetsTheNetwork = true;
 }
 
+// The addresses the address check has already asked the server about,
+// in this worker. Each is asked about once per run.
+const checkedAddresses = new Set();
+
+// Every address the app showed in the address bar during a test, on
+// the app's own server. A full load and a move inside the app both
+// count.
+function recordAddresses(page, baseURL) {
+  const origin = new URL(baseURL).origin;
+  const seen = new Set();
+  page.on("framenavigated", (frame) => {
+    if (frame !== page.mainFrame()) return;
+    const url = new URL(frame.url());
+    if (url.origin === origin) seen.add(url.pathname + url.search);
+  });
+  return seen;
+}
+
 const test = base.test.extend({
   context: async ({ context }, use) => {
     await context.addInitScript(keepTheBrowserOnline);
@@ -96,11 +114,26 @@ const test = base.test.extend({
   // suite sets "server" (playwright.integration.config.js): there the
   // real server answers it.
   browserReports: ["answer", { option: true }],
+  // The integration suite turns this on (playwright.integration.config.js),
+  // because only there does the real server answer. After each test,
+  // every address the app showed is asked of the server again, as a
+  // fresh load, and must answer 200: a page the server does not know
+  // (one missing from routes.json, ADR 0016) fails here, whatever the
+  // list says. A test that opens a non-page on purpose turns it off.
+  addressCheck: [false, { option: true }],
   page: async (
-    { page, allowedConsoleErrors, allowedPageErrors, browserReports },
+    {
+      page,
+      allowedConsoleErrors,
+      allowedPageErrors,
+      browserReports,
+      addressCheck,
+      baseURL,
+    },
     use,
     testInfo,
   ) => {
+    const addresses = addressCheck ? recordAddresses(page, baseURL) : null;
     if (browserReports === "answer") {
       await page.route("**/api/v1/browser-reports*", (route) =>
         route.fulfill({ status: 204 }),
@@ -146,6 +179,26 @@ const test = base.test.extend({
     base
       .expect(consoleErrors, "unexpected console errors during the test")
       .toEqual([]);
+    if (addresses) {
+      const refused = [];
+      for (const address of addresses) {
+        if (checkedAddresses.has(address)) continue;
+        checkedAddresses.add(address);
+        const response = await page
+          .context()
+          .request.get(address, { maxRedirects: 0 });
+        if (response.status() !== 200) {
+          refused.push(`${address} answered ${response.status()}`);
+        }
+      }
+      base
+        .expect(
+          refused,
+          "addresses the app showed that the server does not answer as pages: " +
+            "add the page to app/frontend/src/routes.json (ADR 0016)",
+        )
+        .toEqual([]);
+    }
   },
 });
 
