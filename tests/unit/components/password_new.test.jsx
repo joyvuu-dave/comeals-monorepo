@@ -8,6 +8,7 @@ import {
   act,
 } from "@testing-library/react";
 import { MemoryRouter, Routes, Route, useLocation } from "react-router";
+import { RESET_PASSWORD_PATH } from "../../../app/frontend/src/routes.js";
 
 vi.mock("axios", () => import("../mocks/axios.js"));
 
@@ -17,7 +18,6 @@ import { messagesShown } from "../helpers/form_messages.js";
 import { expectConsole } from "../helpers/console_output.js";
 import ResidentsPasswordNew, {
   NO_TOKEN,
-  RETIRED_LINK,
   tokenFromHash,
 } from "../../../app/frontend/src/components/residents/password_new.jsx";
 
@@ -36,7 +36,7 @@ function renderForm(address = "/reset-password#token=tok-1") {
   render(
     <MemoryRouter initialEntries={[address]}>
       <Routes>
-        <Route path="/:modal/:token?/*" element={<ResidentsPasswordNew />} />
+        <Route path={RESET_PASSWORD_PATH} element={<ResidentsPasswordNew />} />
         <Route path="/" element={<span>login page</span>} />
       </Routes>
       <LocationEcho />
@@ -118,19 +118,6 @@ describe("ResidentsPasswordNew", () => {
       reset_token: "tok-1",
       password: "hunter2hunter2",
     });
-  });
-
-  // A link mailed before 2026-10-23 has the token in the path. Those
-  // tokens were all cleared, so the page asks nothing and says to ask for
-  // a new link. The token in the path goes to no server request either.
-  it("a link of the old kind goes to the login page and says to ask for a new one", async () => {
-    renderForm("/reset-password/tok-1/");
-
-    expect(await screen.findByText("login page")).toBeInTheDocument();
-    expect(
-      toastStore.toasts.map((t) => ({ message: t.message, type: t.type })),
-    ).toEqual([{ message: RETIRED_LINK, type: "error" }]);
-    expect(axios.post).not.toHaveBeenCalled();
   });
 
   // The page was reloaded after it took the token out of the address,

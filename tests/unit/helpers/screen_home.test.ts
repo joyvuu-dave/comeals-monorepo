@@ -181,9 +181,7 @@ describe("pathAfterIdle", () => {
   // login page, which is home already, and the page a reset link opens,
   // where someone may be typing a new password.
   it("leaves every page alone when signed out", () => {
-    expect(
-      pathAfterIdle("/reset-password/abc123/", TODAY, false, CLEAN),
-    ).toBeNull();
+    expect(pathAfterIdle("/reset-password", TODAY, false, CLEAN)).toBeNull();
     expect(pathAfterIdle("/", TODAY, false, CLEAN)).toBeNull();
     expect(pathAfterIdle("/meals/42/edit/", TODAY, false, CLEAN)).toBeNull();
   });
@@ -236,9 +234,9 @@ describe("pathToLoadAfterIdle", () => {
   });
 
   it("loads the login page after a crash when signed out", () => {
-    expect(
-      pathToLoadAfterIdle("/reset-password/abc123/", TODAY, false, CRASHED),
-    ).toBe("/");
+    expect(pathToLoadAfterIdle("/reset-password", TODAY, false, CRASHED)).toBe(
+      "/",
+    );
     expect(pathToLoadAfterIdle("/", TODAY, false, CRASHED)).toBe("/");
   });
 
@@ -355,7 +353,7 @@ describe("pathToLoadAfterIdle", () => {
   // may hold a new password someone is typing.
   it("loads nothing for a new version when signed out", () => {
     expect(
-      pathToLoadAfterIdle("/reset-password/abc123/", TODAY, false, NEW_VERSION),
+      pathToLoadAfterIdle("/reset-password", TODAY, false, NEW_VERSION),
     ).toBeNull();
     expect(pathToLoadAfterIdle("/", TODAY, false, NEW_VERSION)).toBeNull();
   });

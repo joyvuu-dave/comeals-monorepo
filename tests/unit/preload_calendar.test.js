@@ -77,7 +77,7 @@ describe("the calendar preload", () => {
     ]);
   });
 
-  it.each(["/", "/reset-password/abc/", "/meals/12/edit/", "/calendarx/"])(
+  it.each(["/", "/reset-password", "/meals/12/edit/", "/calendarx/"])(
     "preloads nothing on %s",
     (path) => {
       expect(preloadsAt(path, transform(TEMPLATE))).toEqual([]);

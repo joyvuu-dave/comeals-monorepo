@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { useLocation, useNavigate, useParams } from "react-router";
+import { useLocation, useNavigate } from "react-router";
 import axios from "axios";
 import handleAxiosError from "../../helpers/handle_axios_error";
 import useFormMessages from "../../helpers/use_form_messages";
@@ -10,11 +10,7 @@ import FormMessages from "../modal_form/form_messages";
 // (see useFormMessages below).
 function nobodyReads() {}
 
-// What the page says when it has no token it can use. The server's
-// answer for a link of the old kind says the same
-// (ResidentsController::RETIRED_RESET_LINK).
-export const RETIRED_LINK =
-  "This password reset link no longer works. Please request a new one.";
+// What the page says when it has no token it can use.
 export const NO_TOKEN =
   "Open the link in your password reset email again, or request a new one.";
 
@@ -27,9 +23,6 @@ export function tokenFromHash(hash) {
 }
 
 function ResidentsPasswordNew() {
-  // A token in the path is a link mailed before 2026-10-23. Those tokens
-  // were cleared when the link changed, so none of them can work.
-  const { token: oldToken } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   // Read once, when the page opens. The effect below then takes it out
@@ -63,11 +56,8 @@ function ResidentsPasswordNew() {
       mountedRef.current = true;
       // No request: the server could not use the link either. The
       // message stays up on the login page, like a refused link's.
-      if (typeof oldToken !== "undefined" || token === "") {
-        toastStore.show(
-          typeof oldToken !== "undefined" ? RETIRED_LINK : NO_TOKEN,
-          "error",
-        );
+      if (token === "") {
+        toastStore.show(NO_TOKEN, "error");
         navigate("/", { replace: true });
         return function () {
           mountedRef.current = false;
@@ -116,7 +106,7 @@ function ResidentsPasswordNew() {
     },
     // Taking the token out of the address changes only the part after
     // the #, so this does not run again.
-    [oldToken, token, navigate, location.pathname, location.search],
+    [token, navigate, location.pathname, location.search],
   );
 
   function handleSubmit(e) {

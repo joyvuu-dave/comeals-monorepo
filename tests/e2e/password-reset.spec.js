@@ -186,29 +186,4 @@ test.describe("Password Reset", () => {
 
     await expect(page).toHaveURL(/\/reset-password$/);
   });
-
-  // A link mailed before 2026-10-23 has the token in the path. Those
-  // tokens were all cleared, so the page sends nothing and says to ask
-  // for a new link.
-  test.describe("old link", () => {
-    test("a reset link of the old kind says to ask for a new one", async ({
-      page,
-    }) => {
-      const asked = [];
-      page.on("request", (request) => {
-        if (request.url().includes("/api/v1/residents/")) {
-          asked.push(request.url());
-        }
-      });
-      await page.goto("/reset-password/test-reset-token/");
-
-      const toast = page.locator(".toast--error");
-      await expect(toast.locator(".toast__message")).toHaveText(
-        "This password reset link no longer works. Please request a new one.",
-        { timeout: 10000 },
-      );
-      await expect(page).toHaveURL(/\/$/);
-      expect(asked).toEqual([]);
-    });
-  });
 });

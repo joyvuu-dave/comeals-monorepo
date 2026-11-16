@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { Navigate, useLocation, useNavigate, useParams } from "react-router";
+import { Navigate, useLocation, useNavigate } from "react-router";
 import axios from "axios";
 import Cookie from "js-cookie";
 import Modal from "react-modal";
@@ -10,7 +10,6 @@ import handleAxiosError from "../../helpers/handle_axios_error";
 import watchDialogFocus from "../../helpers/watch_dialog_focus";
 import toastStore from "../../stores/toast_store";
 import { communityNow } from "../../helpers/helpers";
-import { CONFIRM_EMAIL_PAGE, RESET_PASSWORD_MODAL } from "../../routes";
 import ResidentsPasswordNew from "./password_new";
 import ResidentsEmailConfirm from "./email_confirm";
 
@@ -32,9 +31,12 @@ const styles = {
 
 Modal.setAppElement("#root");
 
-const ResidentsLogin = observer(() => {
+// One page component for three pages of routes.json: the sign-in page
+// ("login"), the same page with the new-password form open over it
+// ("resetPassword", the link in a reset email), and the page an email
+// change link opens ("confirmEmail"). AppRoutes says which.
+const ResidentsLogin = observer(({ page = "login" }) => {
   const store = useStore();
-  const params = useParams();
   const location = useLocation();
   const navigate = useNavigate();
 
@@ -84,10 +86,8 @@ const ResidentsLogin = observer(() => {
     return null;
   }
 
-  // The reset link opens /reset-password#token=... . A link mailed
-  // before 2026-10-23 opens /reset-password/<token>, and the form then
-  // says that link no longer works.
-  const modalOpen = params.modal === RESET_PASSWORD_MODAL;
+  // The reset link opens /reset-password#token=... .
+  const modalOpen = page === "resetPassword";
 
   function handleCloseModal() {
     navigate("/");
@@ -180,7 +180,7 @@ const ResidentsLogin = observer(() => {
 
   // Before the signed-in check below: the person who opens the link is
   // most often signed in.
-  if (params.modal === CONFIRM_EMAIL_PAGE) {
+  if (page === "confirmEmail") {
     return <ResidentsEmailConfirm />;
   }
 

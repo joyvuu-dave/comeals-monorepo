@@ -10,11 +10,10 @@ vi.hoisted(() => {
 });
 
 import {
+  PAGES,
   CALENDAR_PATH,
-  LOGIN_PATH,
   MEAL_EDIT_PATH,
-  MEAL_HISTORY_PATH,
-  RESET_PASSWORD_MODAL,
+  NOT_FOUND_PATH,
 } from "../../app/frontend/src/routes.js";
 import { MODAL_FORMS } from "../../app/frontend/src/components/calendar/show.jsx";
 
@@ -31,7 +30,7 @@ const PLATFORMS = ["darwin", "linux"];
 // Screen id -> the golden's base name in the visual spec.
 const GOLDENS = {
   login: "login-page",
-  [`login/${RESET_PASSWORD_MODAL}`]: "password-reset",
+  "login/reset-password": "password-reset",
   calendar: "calendar-month",
   "calendar/guest-room-reservations/new": "guest-room-form",
   "calendar/guest-room-reservations/edit": "guest-room-edit",
@@ -43,27 +42,37 @@ const GOLDENS = {
   "calendar/profile/edit": "profile-edit",
   meal: "meal-edit",
   "meal/history": "meal-history",
+  "not-found": "not-found",
 };
 
 function screens() {
-  const list = ["login", `login/${RESET_PASSWORD_MODAL}`, "calendar"];
+  const list = ["login", "login/reset-password", "calendar"];
   for (const [modal, views] of Object.entries(MODAL_FORMS)) {
     for (const view of Object.keys(views)) {
       list.push(`calendar/${modal}/${view}`);
     }
   }
-  list.push("meal", `meal/${MEAL_HISTORY_PATH.replace("/*", "")}`);
+  list.push("meal", "meal/history", "not-found");
   return list;
 }
 
 describe("every screen has a golden image", () => {
   it("lists the screens from the routes, not by hand", () => {
-    // The routes these screens hang off. A changed pattern means the
-    // list above needs a look.
-    expect(LOGIN_PATH).toBe("/:modal?/:token?");
+    // The pages these screens hang off. A page added to routes.json, or a
+    // changed pattern, means the list above needs a look. The email
+    // confirm page shows only a message while it asks the server, and
+    // then goes on to "/", so it has no golden of its own.
+    expect(Object.keys(PAGES)).toEqual([
+      "login",
+      "resetPassword",
+      "confirmEmail",
+      "calendar",
+      "meal",
+    ]);
     expect(CALENDAR_PATH).toBe("/calendar/:type/:date/:modal?/:view?/:id?");
-    expect(MEAL_EDIT_PATH).toBe("/meals/:id/edit/*");
-    expect(screens()).toHaveLength(13);
+    expect(MEAL_EDIT_PATH).toBe("/meals/:id/edit/history?");
+    expect(NOT_FOUND_PATH).toBe("*");
+    expect(screens()).toHaveLength(14);
   });
 
   it("names a golden for every screen, and no golden for a screen that is gone", () => {

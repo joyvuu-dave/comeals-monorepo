@@ -1,12 +1,6 @@
 import React, { Suspense, useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
-import {
-  Routes,
-  Route,
-  useLocation,
-  useNavigate,
-  useParams,
-} from "react-router";
+import { matchPath, useLocation, useNavigate, useParams } from "react-router";
 import { useStore } from "../../helpers/store_context";
 import { mealDayLabel } from "../../helpers/helpers";
 import { lazyRetry } from "../../helpers/lazy_retry";
@@ -91,8 +85,14 @@ const DateBox = observer(() => {
     }
   });
 
+  // The history box is open at the meal page's address with /history at
+  // the end (MEAL_EDIT_PATH in routes.js ends in an optional history
+  // part). Closing it goes back to the address without that part. Both
+  // ignore case, as React Router does.
+  const historyOpen = matchPath(MEAL_HISTORY_PATH, location.pathname) !== null;
+
   function handleCloseModal() {
-    navigate(`${location.pathname.split("/history")[0]}`);
+    navigate(location.pathname.replace(/\/history\/*$/i, ""));
   }
 
   // True when there is no meal to go to on that side. At the first and
@@ -242,27 +242,22 @@ const DateBox = observer(() => {
       {statusHeading()}
       <CancelButton />
       <div>
-        <Routes>
-          <Route
-            path={MEAL_HISTORY_PATH}
-            element={
-              <Modal
-                isOpen={true}
-                contentLabel="History Modal"
-                onRequestClose={handleCloseModal}
-                style={{
-                  content: {
-                    backgroundColor: "var(--powder-blue)",
-                  },
-                }}
-              >
-                <Suspense fallback={<h3>Loading...</h3>}>
-                  <MealHistoryShow id={params.id} />
-                </Suspense>
-              </Modal>
-            }
-          />
-        </Routes>
+        {historyOpen && (
+          <Modal
+            isOpen={true}
+            contentLabel="History Modal"
+            onRequestClose={handleCloseModal}
+            style={{
+              content: {
+                backgroundColor: "var(--powder-blue)",
+              },
+            }}
+          >
+            <Suspense fallback={<h3>Loading...</h3>}>
+              <MealHistoryShow id={params.id} />
+            </Suspense>
+          </Modal>
+        )}
       </div>
     </div>
   );

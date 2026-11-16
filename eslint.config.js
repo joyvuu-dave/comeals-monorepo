@@ -64,6 +64,7 @@ module.exports = [
       "vite.config.mjs",
       "vitest.config.mjs",
       "playwright.integration.config.js",
+      "spec/support/*.mjs",
     ],
     languageOptions: {
       ecmaVersion: 2022,
@@ -257,6 +258,40 @@ module.exports = [
       "react-hooks/exhaustive-deps": "warn",
     },
   }),
+
+  // -----------------------------------------------------------
+  // The app's routes are drawn in one file, from routes.json, the list
+  // of pages the server reads too (ADR 0016). A <Route> anywhere else
+  // would be a page the server does not know, and the server would
+  // answer it with a 404. After the TypeScript block, so it covers .ts
+  // and .tsx files too.
+  // -----------------------------------------------------------
+  {
+    files: ["app/frontend/src/**/*.{js,jsx,ts,tsx}"],
+    ignores: ["app/frontend/src/components/app/app_routes.tsx"],
+    rules: {
+      "no-restricted-imports": [
+        "error",
+        {
+          paths: [
+            {
+              name: "react-router",
+              importNames: [
+                "Route",
+                "Routes",
+                "useRoutes",
+                "createBrowserRouter",
+                "createRoutesFromElements",
+                "RouterProvider",
+              ],
+              message:
+                "Add a page to app/frontend/src/routes.json instead. Only components/app/app_routes.tsx draws routes, so the server knows every page (ADR 0016).",
+            },
+          ],
+        },
+      ],
+    },
+  },
 
   // -----------------------------------------------------------
   // Unit tests in any language: Vitest's own waits go through

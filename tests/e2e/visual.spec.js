@@ -69,6 +69,27 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // What the app shows at an address that is not a page (AppRoutes).
+  // The real server answers such an address with its plain 404 page and
+  // never sends the app; vite preview sends the app for every address,
+  // so the app's own screen shows here.
+  test("page not found", async ({ page }) => {
+    await stubPusher(page);
+    await disableIdleTimer(page);
+    await mockApi(page);
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    await page.goto("/no-such-page");
+    await page.waitForLoadState("networkidle");
+    await expect(
+      page.getByRole("heading", { name: "Page not found" }),
+    ).toBeVisible({ timeout: 10000 });
+
+    await expect(page).toHaveScreenshot("not-found.png", {
+      fullPage: true,
+    });
+  });
+
   test("calendar month view", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
 

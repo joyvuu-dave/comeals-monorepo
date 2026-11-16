@@ -1,0 +1,33 @@
+{
+  "_note": [
+    "The pages of the resident app: the one list of them. The app makes one <Route> for each entry (components/app/app_routes.tsx), and the server answers 200 for an address that matches an entry and 404 for every other address (lib/app_pages.rb, ADR 0016).",
+    "To add a page, add an entry here with its pattern and at least one example address. Nothing else is needed: the tests open every example in a browser and check that the server and React Router agree on every path.",
+    "A pattern uses React Router's syntax: a static part (calendar), :name for a part that can be anything, and a ? after either one for a part that may be left out. A * (the rest of the path) is refused, because it would make every address under it a page."
+  ],
+  "pages": {
+    "login": {
+      "path": "/",
+      "examples": ["/"]
+    },
+    "resetPassword": {
+      "path": "/reset-password",
+      "examples": ["/reset-password"]
+    },
+    "confirmEmail": {
+      "path": "/confirm-email",
+      "examples": ["/confirm-email"]
+    },
+    "calendar": {
+      "path": "/calendar/:type/:date/:modal?/:view?/:id?",
+      "examples": [
+        "/calendar/all/2026-11-01",
+        "/calendar/all/2026-11-01/events/new",
+        "/calendar/all/2026-11-01/rotations/show/1"
+      ]
+    },
+    "meal": {
+      "path": "/meals/:id/edit/history?",
+      "examples": ["/meals/1/edit", "/meals/1/edit/history"]
+    }
+  }
+}

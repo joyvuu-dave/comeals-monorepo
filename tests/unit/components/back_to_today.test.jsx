@@ -269,10 +269,10 @@ describe("BackToToday", () => {
     // A reset link's page holds the new password someone may be typing.
     it("leaves a signed-out page alone", () => {
       Cookie.remove("token");
-      renderAt("/reset-password/abc123/");
+      renderAt("/reset-password");
 
       wait(IDLE_MS * 2);
-      expect(where()).toBe("/reset-password/abc123/");
+      expect(where()).toBe("/reset-password");
     });
 
     // tests/helpers/browser_setup.js sets this flag, so the browser
@@ -546,7 +546,7 @@ describe("BackToToday", () => {
     // Login loads the page again by itself.
     it("does not load a new version on a signed-out page", async () => {
       Cookie.remove("token");
-      const store = renderAt("/reset-password/abc123/", screenStore());
+      const store = renderAt("/reset-password", screenStore());
       note(store, "newVersionAvailable");
 
       await waitAndSettle(IDLE_MS * 2);

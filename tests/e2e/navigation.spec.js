@@ -241,9 +241,9 @@ test.describe("Navigation", () => {
   test("a history deep link opens the modal on a fresh page load", async ({
     page,
   }) => {
-    // Exercises the splat route plus the descendant history route from
-    // a cold load — not via in-app navigation like the test above.
-    await page.goto("/meals/42/edit/history/42/");
+    // The address the history button makes (button_bar.jsx), opened by
+    // a full page load, not by moving inside the app like the test above.
+    await page.goto("/meals/42/edit/history/");
     await page.waitForLoadState("networkidle");
 
     await expect(page.locator(".ReactModal__Content--after-open")).toBeVisible({

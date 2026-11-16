@@ -30,7 +30,11 @@ cookies.current = { timezone: "America/Los_Angeles" };
 import axios from "axios";
 import toastStore from "../../../app/frontend/src/stores/toast_store.js";
 import { StoreContext } from "../../../app/frontend/src/helpers/store_context.jsx";
-import { LOGIN_PATH } from "../../../app/frontend/src/routes.js";
+import {
+  LOGIN_PATH,
+  RESET_PASSWORD_PATH,
+  CONFIRM_EMAIL_PATH,
+} from "../../../app/frontend/src/routes.js";
 import ResidentsLogin from "../../../app/frontend/src/components/residents/login.jsx";
 import { fakeLocation } from "../helpers/fake_location.js";
 import Cookie from "js-cookie";
@@ -49,7 +53,16 @@ function renderLogin({ store = makeStore(), path = "/" } = {}) {
     <StoreContext.Provider value={store}>
       <MemoryRouter initialEntries={[path]}>
         <Routes>
-          <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
+          {/* The three pages the component serves, as AppRoutes draws them. */}
+          <Route path={LOGIN_PATH} element={<ResidentsLogin page="login" />} />
+          <Route
+            path={RESET_PASSWORD_PATH}
+            element={<ResidentsLogin page="resetPassword" />}
+          />
+          <Route
+            path={CONFIRM_EMAIL_PATH}
+            element={<ResidentsLogin page="confirmEmail" />}
+          />
           <Route path="/calendar/*" element={null} />
         </Routes>
         <LocationEcho />
@@ -562,19 +575,6 @@ describe("ResidentsLogin", () => {
     expect(
       await screen.findByText("Reset Password for Jane Smith"),
     ).toBeInTheDocument();
-  });
-
-  // A link mailed before 2026-10-23, with the token in the path, opens
-  // the form too, and the form says that link no longer works.
-  it("a reset link of the old kind says to ask for a new one", async () => {
-    renderLogin({ path: "/reset-password/tok-1" });
-
-    await vitestWaitFor(() => {
-      expect(toastStore.toasts.map((t) => t.message)).toEqual([
-        "This password reset link no longer works. Please request a new one.",
-      ]);
-    });
-    expect(screen.getByTestId("location")).toHaveTextContent(/^\/$/);
   });
 
   it("password reset shows the server's answer", async () => {

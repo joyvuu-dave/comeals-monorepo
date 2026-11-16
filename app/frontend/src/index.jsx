@@ -40,8 +40,6 @@ import BackToToday from "./components/app/back_to_today";
 
 import {
   BrowserRouter as Router,
-  Routes,
-  Route,
   Navigate,
   useLocation,
   matchPath,
@@ -56,13 +54,14 @@ import { clear } from "idb-keyval";
 
 import ResidentsLogin from "./components/residents/login";
 import PrivateRoute from "./components/app/private_route";
+import AppRoutes from "./components/app/app_routes";
 
 import ScrollToTop from "./components/app/scroll_to_top";
 import ErrorBoundary from "./components/app/error_boundary";
 import OuterErrorBoundary from "./components/app/outer_error_boundary";
 import { forgetCrashesAfterAnHourWithout } from "./helpers/crash_reload_wait";
 import { showBootCrash } from "./helpers/boot_crash";
-import { CALENDAR_PATH, MEAL_EDIT_PATH, LOGIN_PATH } from "./routes";
+import { CALENDAR_PATH } from "./routes";
 
 function TrailingSlash() {
   var location = useLocation();
@@ -277,25 +276,23 @@ function renderApp(store) {
             <main>
               <Suspense fallback={<h3>Loading...</h3>}>
                 <ErrorBoundary>
-                  <Routes>
-                    <Route
-                      path={CALENDAR_PATH}
-                      element={
+                  <AppRoutes
+                    elements={{
+                      login: <ResidentsLogin page="login" />,
+                      resetPassword: <ResidentsLogin page="resetPassword" />,
+                      confirmEmail: <ResidentsLogin page="confirmEmail" />,
+                      calendar: (
                         <PrivateRoute>
                           <Calendar />
                         </PrivateRoute>
-                      }
-                    />
-                    <Route
-                      path={MEAL_EDIT_PATH}
-                      element={
+                      ),
+                      meal: (
                         <PrivateRoute>
                           <MealsEdit />
                         </PrivateRoute>
-                      }
-                    />
-                    <Route path={LOGIN_PATH} element={<ResidentsLogin />} />
-                  </Routes>
+                      ),
+                    }}
+                  />
                 </ErrorBoundary>
               </Suspense>
             </main>
