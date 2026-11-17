@@ -216,8 +216,16 @@ button:focus {
 }
 
 .header {
-  height: 2rem;
+  /* min-height, not height: at a narrow width or with large text the
+     links wrap to a second line, and a fixed height drew that line
+     below the bar, on top of the page under it (#299). */
+  min-height: 2rem;
   background-color: var(--hasana-yellow);
+}
+
+/* A heading's bottom margin would make the bar taller than its text. */
+.header > * {
+  margin-bottom: 0;
 }
 
 /* react-big-calendar sizes itself from an explicit height. It sits on
@@ -283,10 +291,14 @@ button:focus {
 }
 
 /*
-Prevent ReactBigCalendar title text from being cut off
+Prevent ReactBigCalendar title text from being cut off. pre-line wraps
+between words; overflow-wrap breaks a word that is wider than the day
+by itself ("attending" at 200% zoom on an iPad), which the entry would
+otherwise cut off.
 */
 .rbc-event-content {
   white-space: pre-line !important;
+  overflow-wrap: anywhere;
 }
 
 /*

@@ -175,7 +175,68 @@ async function missedByTab(page, scope = "body") {
   }, scope);
 }
 
+// Layout faults that large text causes, inside `scope`: two controls
+// drawn on top of each other (a tap meant for one hits the other), and
+// text that a box with hidden overflow cuts off. A select is left out:
+// it shows one option and hides the rest on purpose. So is text hidden
+// for everyone but a screen reader (.visually-hidden).
+async function layoutProblems(page, scope = "body") {
+  return page.evaluate((scopeSelector) => {
+    const root = window.document.querySelector(scopeSelector);
+    const shown = (el) =>
+      el.checkVisibility({ visibilityProperty: true }) &&
+      !el.closest(".visually-hidden, [aria-hidden='true'], [inert]");
+    const name = (el) =>
+      (el.getAttribute("aria-label") || el.textContent || el.tagName)
+        .trim()
+        .replace(/\s+/g, " ")
+        .slice(0, 40);
+
+    const controls = [
+      ...root.querySelectorAll(
+        "button, a[href], input, select, textarea, [role='button']",
+      ),
+    ]
+      .filter(shown)
+      .map((el) => [el, el.getBoundingClientRect()])
+      .filter(([, r]) => r.width > 0 && r.height > 0);
+    const overlaps = [];
+    for (let i = 0; i < controls.length; i++) {
+      for (let j = i + 1; j < controls.length; j++) {
+        const [a, ra] = controls[i];
+        const [b, rb] = controls[j];
+        if (a.contains(b) || b.contains(a)) continue;
+        // A label's control sits inside or beside it; a switch draws
+        // its input under its own button.
+        if (a.closest("label") && a.closest("label") === b.closest("label"))
+          continue;
+        const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+        const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+        if (w > 1 && h > 1) {
+          overlaps.push(`"${name(a)}" overlaps "${name(b)}"`);
+        }
+      }
+    }
+
+    const cut = [];
+    for (const el of root.querySelectorAll("*")) {
+      if (el.tagName === "SELECT" || el.closest("select")) continue;
+      if (!shown(el) || !el.textContent.trim()) continue;
+      const style = window.getComputedStyle(el);
+      const hides = (v) => v === "hidden" || v === "clip";
+      if (
+        (hides(style.overflowX) && el.scrollWidth > el.clientWidth + 1) ||
+        (hides(style.overflowY) && el.scrollHeight > el.clientHeight + 1)
+      ) {
+        cut.push(`text cut off: "${name(el)}"`);
+      }
+    }
+    return [...overlaps, ...cut];
+  }, scope);
+}
+
 module.exports = {
+  layoutProblems,
   expectAccessible,
   nextKey,
   stopTransitions,
