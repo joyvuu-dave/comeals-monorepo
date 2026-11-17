@@ -81,7 +81,7 @@ test("every month of 2024-2028 renders the correct grid", async ({
       const title = `${monthName} ${year}`;
 
       // The header names the month we expect before the grid is read.
-      await expect(page.locator("h2", { hasText: title })).toBeVisible();
+      await expect(page.locator("h1", { hasText: title })).toBeVisible();
 
       // Poll: the header updates a frame before the grid repaints
       // (see MonthNavHeader in calendar/show.jsx), so the first read

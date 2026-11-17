@@ -6,6 +6,9 @@ const styles = {
   main: {
     backgroundColor: "var(--offwhite)",
   },
+  status: {
+    fontSize: "1.75rem",
+  },
 };
 
 // What the modal shows before an answer arrives.
@@ -97,8 +100,14 @@ function RotationsShow({ id }) {
         )}
       </div>
       <br />
-      {!loaded && !errored && <h3>Loading...</h3>}
-      {errored && <h3 className="text-warning">Failed to load rotation.</h3>}
+      {/* h2 in the size of an h3: right under the h1, a heading may
+          only step down one level. */}
+      {!loaded && !errored && <h2 style={styles.status}>Loading...</h2>}
+      {errored && (
+        <h2 className="text-warning" style={styles.status}>
+          Failed to load rotation.
+        </h2>
+      )}
       {loaded && (
         <ul>
           {residents.map((resident) =>

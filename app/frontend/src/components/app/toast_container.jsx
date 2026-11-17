@@ -116,7 +116,9 @@ var ToastContainer = observer(function ToastContainer() {
         {polite ? <span key={polite.id}>{polite.message}</span> : null}
       </div>
       {showing ? (
-        <div ref={boxRef} className="toast-container">
+        // A section with a name is a landmark, so a screen reader can
+        // find the messages in its list of the page's parts.
+        <section ref={boxRef} className="toast-container" aria-label="Messages">
           {shown.map(function (toast) {
             return (
               <div
@@ -148,7 +150,7 @@ var ToastContainer = observer(function ToastContainer() {
               {moreLabel(hidden)}
             </button>
           ) : null}
-        </div>
+        </section>
       ) : null}
     </>,
     document.body,

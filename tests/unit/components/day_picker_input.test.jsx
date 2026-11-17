@@ -105,7 +105,7 @@ describe("DayPickerInput", () => {
     renderPicker({ value: "2026-01-15" }, "2026-01-17");
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
 
-    expect(pickerButton(/^Today, Saturday, January 17th/)).toBeInTheDocument();
+    expect(pickerButton(/^Today, Saturday, January 17,/)).toBeInTheDocument();
     expect(screen.getAllByRole("button", { name: /^Today/ })).toHaveLength(1);
   });
 
@@ -128,8 +128,8 @@ describe("DayPickerInput", () => {
     renderPicker({ value: "2026-01-15", lastDay: "2026-01-20" });
     fireEvent.click(screen.getByDisplayValue("01/15/2026"));
 
-    expect(pickerButton(/January 20th/)).toBeEnabled();
-    expect(pickerButton(/January 21st/)).toBeDisabled();
+    expect(pickerButton(/January 20,/)).toBeEnabled();
+    expect(pickerButton(/January 21,/)).toBeDisabled();
   });
 
   // The calendar window (helpers/calendar_window.ts): no day more than
@@ -139,23 +139,23 @@ describe("DayPickerInput", () => {
     renderPicker({ value: "2036-01-15", lastDay: "2036-07-15" }, "2026-01-15");
     fireEvent.click(screen.getByDisplayValue("01/15/2036"));
 
-    expect(pickerButton(/January 15th, 2036/)).toBeEnabled();
-    expect(pickerButton(/January 16th, 2036/)).toBeDisabled();
+    expect(pickerButton(/January 15, 2036/)).toBeEnabled();
+    expect(pickerButton(/January 16, 2036/)).toBeDisabled();
   });
 
   it("offers no day more than 10 years before today", () => {
     renderPicker({ value: "2016-01-15" }, "2026-01-15");
     fireEvent.click(screen.getByDisplayValue("01/15/2016"));
 
-    expect(pickerButton(/January 14th, 2016/)).toBeDisabled();
-    expect(pickerButton(/January 15th, 2016/)).toBeEnabled();
+    expect(pickerButton(/January 14, 2016/)).toBeDisabled();
+    expect(pickerButton(/January 15, 2016/)).toBeEnabled();
   });
 
   it("offers no day after December 31, 9999", () => {
     renderPicker({ value: "9999-12-30", lastDay: "10000-06-30" }, "9999-12-20");
     fireEvent.click(screen.getByDisplayValue("12/30/9999"));
 
-    expect(pickerButton(/December 31st, 9999/)).toBeEnabled();
+    expect(pickerButton(/December 31, 9999/)).toBeEnabled();
   });
 
   // The device's zone cannot move a day (#129). Havana's clocks skip
@@ -176,14 +176,14 @@ describe("DayPickerInput", () => {
         // was half of this test's time (#247).
         const names = buttonNames();
         for (let day = 1; day <= 31; day++) {
-          const name = new RegExp(`March ${day}(st|nd|rd|th), 2026`);
+          const name = new RegExp(`March ${day}, 2026`);
           expect(names.filter((n) => name.test(n))).toHaveLength(1);
         }
         expect(
-          names.filter((n) => n === "Today, Sunday, March 8th, 2026, selected"),
+          names.filter((n) => n === "Today, Sunday, March 8, 2026, selected"),
         ).toHaveLength(1);
 
-        fireEvent.click(pickerButton(/March 9th/));
+        fireEvent.click(pickerButton(/March 9,/));
         expect(onDayChange.mock.calls).toEqual([["2026-03-09"]]);
       });
     },

@@ -181,7 +181,7 @@ describe("CommonHouseReservationsEdit", () => {
 
     fireEvent.click(screen.getByLabelText("Day"));
     fireEvent.click(pickerButton("Go to the Next Month"));
-    fireEvent.click(pickerButton(/February 3rd/));
+    fireEvent.click(pickerButton(/February 3,/));
     fireEvent.click(screen.getByRole("button", { name: "Update" }));
 
     expect(axios.patch).toHaveBeenCalledWith(

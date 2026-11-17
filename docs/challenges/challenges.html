@@ -2041,8 +2041,8 @@ UNIQUE (idempotency_key)</pre>
 </details>
 <details class="challenge" id="challenge-32" data-status="open" data-area="quality">
   <summary><span class="num">32</span> <span class="title">Everyone can use it</span> <span class="chip status-open">Not started</span> <span class="chip area-quality">quality</span><span class="badge">1 not checked</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-07 · <code>docs/challenges/0032-everyone-can-use-it.md</code></div>
-  
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-16 · <code>docs/challenges/0032-everyone-can-use-it.md</code></div>
+  <details class="watches"><summary>Watches 2 files</summary><ul><li><code>tests/helpers/accessibility.js</code></li><li><code>tests/e2e/keyboard.spec.js</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
 <h3>The challenge</h3>
@@ -2057,11 +2057,17 @@ UNIQUE (idempotency_key)</pre>
 <span id="label-Where+we+stand" class="legacy-anchor"></span>
 <h3>Where we stand</h3>
 <ul><li>
+<p>axe checks every screen the visual suite pictures (65 screens, in Chromium and WebKit) against WCAG 2.2 A and AA and axe’s best-practice rules, and fails on any finding (<code>expectAccessible</code> in <code>tests/helpers/accessibility.js</code>, called before each screenshot in <code>tests/e2e/visual.spec.js</code>). A test in <code>tests/e2e/keyboard.spec.js</code> fails when a screenshot has no axe check before it.</p>
+</li><li>
+<p>Keyboard: <code>tests/e2e/keyboard.spec.js</code> signs a resident up, adds a guest, opens a dinner from the calendar and closes a form with the keyboard alone. On 12 screens it presses Tab until the focus comes back to the start, and fails when a stop shows no focus ring or when something with a pointer cursor was never reached. In WebKit it presses Option+Tab, because Safari’s Tab stops only on text fields unless that setting is changed.</p>
+</li><li>
+<p>The focus ring is one 3px near-black outline, shown by <code>:focus-visible</code> (the end of <code>app/frontend/src/components.css</code>). A tap on a button shows no ring. A text field shows it whenever it has the focus, tapped or not.</p>
+</li><li>
 <p>Lighthouse gave the sign-in page 100 for accessibility on 2026-11-07 (phone and desktop). It could not test the signed-in pages (challenge 35).</p>
 </li><li>
 <p>Color contrast for calendar chips is pinned by a spec (<code>spec/serializers/calendar_chip_contrast_spec.rb</code>).</p>
 </li><li>
-<p>Not checked: a screen reader, keyboard-only use, or 200% text on the calendar and meal pages.</p>
+<p>Not checked: a screen reader, or 200% text on the calendar and meal pages. axe cannot tell whether what a screen reader says makes sense, or whether larger text makes controls overlap.</p>
 </li></ul>
 
 <span id="label-Options" class="legacy-anchor"></span>
@@ -2076,6 +2082,10 @@ UNIQUE (idempotency_key)</pre>
 <h3>History</h3>
 <ul><li>
 <p>2026-11-07: Opened.</p>
+</li><li>
+<p>2026-11-16: An axe scan of 10 screens found no color contrast failures, so the colors stay. A Tab walk found that a keyboard cannot sign someone up, add a guest, or open anything on the calendar, and that the focus ring is faint or missing. The owner chose: fix those, use one strong focus ring for the keyboard, make axe (option 1) and a Tab walk part of the browser suite. A VoiceOver pass (option 2) is left for the owner.</p>
+</li><li>
+<p>2026-11-16: Built option 1 and the keyboard checks. The sign-up name, the guest menu and the calendar entries became buttons and links, and every page got an h1. axe on all 65 screens also found the menu’s “Not saved” text too faint on yellow (now brand red), a link on the crash page shown by color alone (now underlined), day buttons whose names did not hold the number shown, and a rotation bar too small to tap (now 24px tall). Still to do: a VoiceOver pass and 200% text.</p>
 </li></ul>
 </div>
 </details>

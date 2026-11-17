@@ -245,7 +245,7 @@ test.describe("Idle timer (real backend)", () => {
     await page.clock.fastForward("00:06");
     await expect(page).toHaveURL(endsWith(calendarPath));
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
+    await expect(page.locator("h1", { hasText: "January 2026" })).toBeVisible();
   });
 
   // The form compares what it holds with what it opened with, not
@@ -272,13 +272,13 @@ test.describe("Idle timer (real backend)", () => {
   }) => {
     await page.goto("/calendar/all/2026-01-03/guest-room-reservations/new/");
     await expect(page.getByRole("dialog")).toBeVisible();
-    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
+    await expect(page.locator("h1", { hasText: "January 2026" })).toBeVisible();
     await page.mouse.move(10, 10);
 
     await page.clock.fastForward("05:01");
     await expect(page).toHaveURL(endsWith(calendarPath));
     await expect(page.getByRole("dialog")).toHaveCount(0);
-    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
+    await expect(page.locator("h1", { hasText: "January 2026" })).toBeVisible();
   });
 
   // A cook row saves 2 seconds after its last edit. A cost can still be
@@ -346,7 +346,7 @@ test.describe("Idle timer (real backend)", () => {
     const at = (wallClock) => zonedInstant(wallClock, COMMUNITY_TIMEZONE);
     await page.clock.setSystemTime(at("2026-01-31T23:57"));
     await page.goto("/calendar/all/2026-01-20/");
-    await expect(page.locator("h2", { hasText: "January 2026" })).toBeVisible();
+    await expect(page.locator("h1", { hasText: "January 2026" })).toBeVisible();
     await expect(page.locator(".rbc-date-cell").first()).toHaveText("28");
     await page.evaluate(() => {
       window.__samePage = true;
@@ -360,7 +360,7 @@ test.describe("Idle timer (real backend)", () => {
     await page.clock.runFor("00:03");
     await expect(page).toHaveURL(endsWith("/calendar/all/2026-02-01/"));
     await expect(
-      page.locator("h2", { hasText: "February 2026" }),
+      page.locator("h1", { hasText: "February 2026" }),
     ).toBeVisible();
     // The calendar draws the new month's grid two animation frames
     // after the address changes, and those run only while the clock

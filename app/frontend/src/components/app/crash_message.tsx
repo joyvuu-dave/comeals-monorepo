@@ -3,7 +3,9 @@ import {
   CRASH_BUTTON_STYLE,
   CRASH_CONTAINER_STYLE,
   CRASH_EMAIL,
+  CRASH_LINK_STYLE,
   CRASH_TITLE,
+  CRASH_TITLE_STYLE,
 } from "../../helpers/crash_page";
 
 // The page that takes the place of the app after a crash. ErrorBoundary
@@ -15,9 +17,13 @@ import {
 export default function CrashMessage({ onRefresh }: { onRefresh: () => void }) {
   return (
     <div style={CRASH_CONTAINER_STYLE}>
-      <h2>{CRASH_TITLE}</h2>
+      <h1 style={CRASH_TITLE_STYLE}>{CRASH_TITLE}</h1>
       <p>
-        {CRASH_ADVICE} <a href={`mailto:${CRASH_EMAIL}`}>{CRASH_EMAIL}</a>.
+        {CRASH_ADVICE}{" "}
+        <a href={`mailto:${CRASH_EMAIL}`} style={CRASH_LINK_STYLE}>
+          {CRASH_EMAIL}
+        </a>
+        .
       </p>
       <button style={CRASH_BUTTON_STYLE} onClick={onRefresh}>
         Refresh

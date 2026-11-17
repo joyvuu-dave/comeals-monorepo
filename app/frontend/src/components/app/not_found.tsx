@@ -12,7 +12,8 @@ export default function NotFound() {
       </header>
       {/* The same space under the header as the login page leaves. */}
       <div style={{ padding: "1rem 15px" }}>
-        <h3>Page not found</h3>
+        {/* The page's one top heading, in the size of an h3. */}
+        <h1 style={{ fontSize: "1.75rem" }}>Page not found</h1>
         <p>There is no page at this address.</p>
         <Link to="/">Go to Comeals</Link>
       </div>

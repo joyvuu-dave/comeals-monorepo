@@ -617,7 +617,16 @@ button.button-link:hover {
   user-select: none;
   z-index: 100;
 }
-.dropdown .dropdown-menu a {
+/* The guest menu's items are buttons (guest_dropdown.jsx). They drop
+   every button style and look like the menu's links. */
+.dropdown .dropdown-menu button {
+  all: unset;
+  box-sizing: border-box;
+  cursor: pointer;
+  width: 100%;
+}
+.dropdown .dropdown-menu a,
+.dropdown .dropdown-menu button {
   color: var(--gray-19);
   display: block;
   overflow-x: hidden;
@@ -632,7 +641,8 @@ button.button-link:hover {
   color: var(--gray-19);
   outline: none;
 }
-.dropdown .dropdown-menu a:hover {
+.dropdown .dropdown-menu a:hover,
+.dropdown .dropdown-menu button:hover {
   background-color: var(--brand-red);
   color: var(--white);
 }
@@ -1127,4 +1137,25 @@ table.table-striped tr:nth-child(odd) td {
 }
 .mar-r-sm {
   margin-right: var(--space-4) !important;
+}
+
+/* The keyboard focus ring (challenge 32). :focus-visible matches when
+   the browser decides the person is using the keyboard: Tab always,
+   a mouse click or a tap on a button never, a text field always. So a
+   tap on the Common House screen shows nothing new.
+
+   !important because many rules above set "outline: none" on :focus
+   with more specific selectors (button.button-success:focus), and
+   this ring must win over every one of them, including any added
+   later. The 2px offset keeps the ring off the control's own color,
+   so it is drawn against the page background, which is always light. */
+:focus-visible {
+  outline: 3px solid var(--focus-ring) !important;
+  outline-offset: 2px !important;
+}
+/* An element with tabindex="-1" is not a Tab stop. Script puts the
+   focus there (react-modal on the dialog box when it opens, so Escape
+   works), and a ring around a whole dialog would show nothing useful. */
+[tabindex="-1"]:focus-visible {
+  outline: none !important;
 }

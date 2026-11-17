@@ -129,7 +129,10 @@ describe("RotationsShow", () => {
       expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
         /^Rotation$/,
       );
-      expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+      // The only h2 is the status line: no description.
+      expect(
+        screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+      ).toEqual(["Loading..."]);
       expect(screen.getByText("Loading...")).toBeInTheDocument();
       expect(
         screen.queryByText("Failed to load rotation."),
@@ -204,7 +207,10 @@ describe("RotationsShow", () => {
       expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
         /^Rotation$/,
       );
-      expect(screen.queryByRole("heading", { level: 2 })).toBeNull();
+      // The only h2 is the status line: no description.
+      expect(
+        screen.getAllByRole("heading", { level: 2 }).map((h) => h.textContent),
+      ).toEqual(["Failed to load rotation."]);
       expect(screen.getByText("Failed to load rotation.")).toBeInTheDocument();
       expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
       expect(listed(container)).toEqual([]);

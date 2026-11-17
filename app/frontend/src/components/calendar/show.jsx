@@ -31,6 +31,7 @@ import ConfirmModal from "../app/confirm_modal";
 import watchDialogFocus from "../../helpers/watch_dialog_focus";
 
 import WebcalLinks from "./webcal_links";
+import CalendarChip, { CalendarChipCell } from "./calendar_chip";
 import { Calendar, DateLocalizer } from "react-big-calendar";
 import { wallClockLocalizer } from "./wall_clock_localizer";
 
@@ -90,6 +91,7 @@ export const MODAL_FORMS = {
 // across MainCalendar renders. An inline `views={["month"]}` literal would
 // be a new array on every render and defeat MemoCalendar's shallow compare.
 const VIEWS = ["month"];
+const COMPONENTS = { event: CalendarChip, eventWrapper: CalendarChipCell };
 
 // react-big-calendar's internal render is O(events) (~3.5ms/event). Wrapping
 // it in React.memo lets us skip that work when MainCalendar re-renders for
@@ -122,6 +124,7 @@ const styles = {
   },
   month: {
     paddingTop: "1rem",
+    fontSize: "2rem",
   },
 };
 
@@ -146,7 +149,8 @@ const MonthNavHeader = memo(function MonthNavHeader({
 }) {
   return (
     <div style={styles.main}>
-      <h2 style={styles.month}>{dayjs.utc(dateStr).format("MMMM YYYY")}</h2>
+      {/* The page's one top heading, in the size of an h2. */}
+      <h1 style={styles.month}>{dayjs.utc(dateStr).format("MMMM YYYY")}</h1>
       <span style={styles.main}>
         <button className="mar-sm press" onClick={onToday}>
           today
@@ -365,6 +369,12 @@ const MainCalendar = observer(() => {
       eventStyles.style["filter"] = "saturate(35%)";
     }
 
+    // An entry with no address (a birthday) opens nothing, so it must
+    // not show the pointer that says it takes a click.
+    if (typeof event.url === "undefined") {
+      eventStyles.className = "calendar-chip-static";
+    }
+
     eventStyles.style["backgroundColor"] = event.color;
     eventStyles.style["color"] = eventTextColor(event.color);
     return eventStyles;
@@ -535,6 +545,7 @@ const MainCalendar = observer(() => {
               onNavigate={handleNavigate}
               onSelectEvent={handleSelectEvent}
               views={VIEWS}
+              components={COMPONENTS}
               getNow={getCommunityNow}
               toolbar={false}
             />

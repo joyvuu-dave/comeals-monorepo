@@ -133,7 +133,7 @@ function BackButton() {
 //
 // The month name and its today, back and next buttons.
 function monthNav() {
-  return within(screen.getByRole("heading", { level: 2 }).parentElement);
+  return within(screen.getByRole("heading", { level: 1 }).parentElement);
 }
 
 // The open form (the calendar's modal, "Event Modal").
@@ -523,7 +523,7 @@ describe("MainCalendar", () => {
       idle(1);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
-      expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
         "January 2026",
       );
     });
@@ -539,7 +539,7 @@ describe("MainCalendar", () => {
       idle(IDLE_MS);
       expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
       expect(screen.getByTestId("location")).toHaveTextContent(TODAY);
-      expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
+      expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent(
         "January 2026",
       );
     });

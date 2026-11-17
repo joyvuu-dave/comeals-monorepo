@@ -149,4 +149,107 @@ describe("GuestDropdown", () => {
     fireEvent.mouseDown(screen.getByAltText("cow-icon"));
     expect(dropdown).toHaveClass("active");
   });
+
+  // Keyboard use (challenge 32; tests/e2e/keyboard.spec.js drives the
+  // same in a browser).
+  describe("with the keyboard", () => {
+    function openMenu() {
+      const { container } = renderDropdown();
+      const toggle = screen.getByRole("button", {
+        name: "Add Guest of Jane Smith",
+      });
+      fireEvent.click(toggle);
+      return { dropdown: container.firstChild, toggle };
+    }
+
+    it("says on + Guest whether the menu is open", () => {
+      const { toggle } = openMenu();
+      expect(toggle).toHaveAttribute("aria-expanded", "true");
+      fireEvent.click(toggle);
+      expect(toggle).toHaveAttribute("aria-expanded", "false");
+    });
+
+    it("names each menu item for a screen reader", () => {
+      renderDropdown();
+      expect(
+        screen.getByRole("button", {
+          name: "Add a guest of Jane Smith who eats meat",
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole("button", {
+          name: "Add a vegetarian guest of Jane Smith",
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it("Escape closes the menu and puts the focus on + Guest", () => {
+      const { dropdown, toggle } = openMenu();
+      const veg = screen.getByRole("button", {
+        name: "Add a vegetarian guest of Jane Smith",
+      });
+      veg.focus();
+      fireEvent.keyDown(veg, { key: "Escape" });
+      expect(dropdown).not.toHaveClass("active");
+      expect(toggle).toHaveFocus();
+    });
+
+    it("Escape with the menu closed does nothing", () => {
+      const { container } = renderDropdown();
+      const toggle = screen.getByRole("button", {
+        name: "Add Guest of Jane Smith",
+      });
+      const outside = document.createElement("button");
+      document.body.append(outside);
+      outside.focus();
+      fireEvent.keyDown(toggle, { key: "Escape" });
+      expect(container.firstChild).not.toHaveClass("active");
+      expect(outside).toHaveFocus();
+      outside.remove();
+    });
+
+    it("another key leaves the menu open", () => {
+      const { dropdown, toggle } = openMenu();
+      fireEvent.keyDown(toggle, { key: "a" });
+      expect(dropdown).toHaveClass("active");
+    });
+
+    it("adding a guest puts the focus back on + Guest", () => {
+      const { toggle } = openMenu();
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: "Add a guest of Jane Smith who eats meat",
+        }),
+      );
+      expect(toggle).toHaveFocus();
+    });
+
+    it("closes when the focus moves to an element outside it", () => {
+      const { dropdown, toggle } = openMenu();
+      const outside = document.createElement("button");
+      document.body.append(outside);
+      fireEvent.blur(toggle, { relatedTarget: outside });
+      expect(dropdown).not.toHaveClass("active");
+      outside.remove();
+    });
+
+    it("stays open when the focus moves to a menu item", () => {
+      const { dropdown, toggle } = openMenu();
+      fireEvent.blur(toggle, {
+        relatedTarget: screen.getByRole("button", {
+          name: "Add a vegetarian guest of Jane Smith",
+        }),
+      });
+      expect(dropdown).toHaveClass("active");
+    });
+
+    // Safari does not focus a clicked button, so a click on a menu item
+    // can blur + Guest with no element to go to. Closing then would
+    // hide the item before the click reached it.
+    it("stays open when the focus goes to no element", () => {
+      const { dropdown, toggle } = openMenu();
+      fireEvent.blur(toggle, { relatedTarget: null });
+      expect(dropdown).toHaveClass("active");
+    });
+  });
 });

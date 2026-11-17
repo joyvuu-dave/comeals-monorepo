@@ -86,7 +86,7 @@
   --bright-yellow: #ffdc00; /* <mark> highlight */
 
   /* Red one-offs. */
-  --vivid-red: #d40d00; /* <del> text, the menu box's "Not saved" text */
+  --vivid-red: #d40d00; /* <del> text */
 
   /* Blues. */
   --pale-blue: #dcedfb; /* calendar today tint */
@@ -124,6 +124,10 @@
   --gray-18: #212121; /* dark button pressed border */
   --gray-19: #111; /* body text */
   --gray-19-faint: rgba(17, 17, 17, 0.2); /* spinner track on bright buttons */
+
+  /* The keyboard focus ring (components.css, the end). Every background
+     in the app is light, so a near-black ring shows on all of them. */
+  --focus-ring: var(--gray-19);
 
   /* Spacing, on the 0.25rem grid the app already uses. The number is
      the multiple of 0.25rem. Applies to margin, padding, gap, and

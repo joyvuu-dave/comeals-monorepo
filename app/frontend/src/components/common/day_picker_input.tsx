@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
-import { DayPicker } from "react-day-picker";
+import { DayPicker, type Modifiers } from "react-day-picker";
 import dayjs from "dayjs";
 import utc from "dayjs/plugin/utc";
 import { useStore } from "../../helpers/store_context";
@@ -9,6 +9,20 @@ import {
   firstDay,
   lastDay as windowLastDay,
 } from "../../helpers/calendar_window";
+
+// What a screen reader says for a day. React Day Picker's own label is
+// "Wednesday, January 7th, 2026", and the button shows "7": "7th" is
+// not "7", so a person who says "click 7" to voice control is not
+// understood (WCAG 2.5.3, Label in Name). This label holds "7" as a
+// word, and keeps the "Today" and "selected" of the default.
+const LABELS = {
+  labelDayButton(date: Date, modifiers: Modifiers): string {
+    let label = dayjs(date).format("dddd, MMMM D, YYYY");
+    if (modifiers.today) label = `Today, ${label}`;
+    if (modifiers.selected) label = `${label}, selected`;
+    return label;
+  },
+};
 
 dayjs.extend(utc);
 
@@ -155,6 +169,7 @@ function DayPickerInputWrapper({
             onSelect={handleDaySelect}
             defaultMonth={noonOn(openOn)}
             disabled={outside}
+            labels={LABELS}
           />
         </div>
       )}

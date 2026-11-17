@@ -244,7 +244,7 @@ describe("AttendeesBox", () => {
       const store = loadedStore(mealForm());
       renderBox(store);
 
-      fireEvent.click(screen.getByRole("cell", { name: "Rita Retired" }));
+      fireEvent.click(screen.getByRole("button", { name: "Rita Retired" }));
       await act(async () => {});
 
       expect(store.residents.get("4").attending).toBe(false);
@@ -260,7 +260,7 @@ describe("AttendeesBox", () => {
       ).toBeEnabled();
 
       axios.mockResolvedValueOnce(mealResidentAnswer(4));
-      fireEvent.click(rita);
+      fireEvent.click(within(rita).getByRole("button"));
       await act(async () => {});
 
       expect(rita).toHaveClass("background-green");
@@ -284,7 +284,7 @@ describe("AttendeesBox", () => {
       const store = loadedStore(mealForm());
       renderBox(store);
 
-      fireEvent.click(screen.getByRole("cell", { name: "Rita Retired" }));
+      fireEvent.click(screen.getByRole("button", { name: "Rita Retired" }));
       await act(async () => {});
       expect(
         screen.getByRole("cell", { name: "Rita Retired" }),
@@ -386,7 +386,7 @@ describe("AttendeesBox", () => {
         screen.getByRole("cell", { name: "Jane Smith" }).getAttribute("style"),
       ).toBeNull();
 
-      fireEvent.click(rita);
+      fireEvent.click(within(rita).getByRole("button"));
       await act(async () => {});
 
       expect(axios).not.toHaveBeenCalled();
@@ -493,7 +493,7 @@ describe("AttendeesBox", () => {
     renderBox(store);
 
     const bob = screen.getByRole("cell", { name: "Bob Johnson" });
-    fireEvent.click(bob);
+    fireEvent.click(within(bob).getByRole("button"));
     expect(bob).toHaveClass("background-green");
 
     // The server's yes keeps it, with the server's sign-up time.
@@ -619,8 +619,8 @@ describe("AttendeesBox", () => {
     const jane = screen.getByRole("cell", { name: "Jane Smith" });
     const bob = screen.getByRole("cell", { name: "Bob Johnson" });
 
-    fireEvent.click(jane);
-    fireEvent.click(bob);
+    fireEvent.click(within(jane).getByRole("button"));
+    fireEvent.click(within(bob).getByRole("button"));
 
     expect(axios).not.toHaveBeenCalled();
     expect(jane).toHaveClass("background-green");
@@ -789,7 +789,7 @@ describe("AttendeesBox", () => {
       fireEvent.click(janeAdd);
       expect(janeMenu).toHaveClass("active");
 
-      fireEvent.click(screen.getByRole("cell", { name: "Bob Johnson" }));
+      fireEvent.click(screen.getByRole("button", { name: "Bob Johnson" }));
       expect(store.meal.extras).toBe(0);
       expect(janeMenu).not.toHaveClass("active");
       expect(janeAdd.closest("button")).toBeDisabled();
@@ -992,7 +992,7 @@ describe("AttendeesBox", () => {
       renderBox(store);
       const bob = screen.getByRole("cell", { name: "Bob Johnson" });
       expect(bob.getAttribute("style")).toBeNull();
-      fireEvent.click(bob);
+      fireEvent.click(within(bob).getByRole("button"));
       await act(async () => {});
       expect(bob).toHaveClass("background-green");
       expect(store.residents.get("2").attending).toBe(true);

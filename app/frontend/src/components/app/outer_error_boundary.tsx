@@ -65,14 +65,18 @@ export default class OuterErrorBoundary extends Component<Props, State> {
 
   render() {
     if (this.state.crashed) {
+      // The crash page takes the place of the whole app, and with it
+      // the app's <main> (index.jsx), so it brings its own.
       return (
-        <CrashMessage
-          onRefresh={() => {
-            this.loadAfterSaves(function () {
-              window.location.reload();
-            });
-          }}
-        />
+        <main>
+          <CrashMessage
+            onRefresh={() => {
+              this.loadAfterSaves(function () {
+                window.location.reload();
+              });
+            }}
+          />
+        </main>
       );
     }
     return this.props.children;

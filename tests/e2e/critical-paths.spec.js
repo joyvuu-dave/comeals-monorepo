@@ -172,9 +172,7 @@ test.describe("Critical Paths", () => {
       await expect(page.locator(`#late_switch_${resident.id}`)).toBeDisabled();
       await expect(page.locator(`#veg_switch_${resident.id}`)).toBeDisabled();
       await expect(
-        page.locator(
-          `button:has([aria-label="Add Guest of ${resident.name}"])`,
-        ),
+        page.locator(`button[aria-label="Add Guest of ${resident.name}"]`),
       ).toBeDisabled();
       await expect(
         page.locator(`[aria-label="Remove Guest of ${resident.name}"]`),

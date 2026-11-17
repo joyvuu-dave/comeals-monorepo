@@ -20,7 +20,9 @@ const styles = {
     whiteSpace: "pre-wrap",
   },
   notSaved: {
-    color: "var(--vivid-red)",
+    // Brand red, not vivid red: on the yellow title bar vivid red is
+    // 3.25:1, under the 4.5:1 that WCAG AA asks of text this size.
+    color: "var(--brand-red)",
     fontWeight: "bold",
     alignSelf: "center",
   },

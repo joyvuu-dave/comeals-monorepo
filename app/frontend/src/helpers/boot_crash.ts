@@ -5,7 +5,9 @@ import {
   CRASH_BUTTON_STYLE,
   CRASH_CONTAINER_STYLE,
   CRASH_EMAIL,
+  CRASH_LINK_STYLE,
   CRASH_TITLE,
+  CRASH_TITLE_STYLE,
 } from "./crash_page";
 
 // A crash while the page starts, before React draws anything (index.jsx).
@@ -22,15 +24,17 @@ export function showBootCrash(root: HTMLElement, error: unknown): void {
   // A caught error never reaches Bugsnag's own handlers.
   notifyError(error);
 
-  const page = document.createElement("div");
+  const page = document.createElement("main");
   Object.assign(page.style, CRASH_CONTAINER_STYLE);
 
-  const title = document.createElement("h2");
+  const title = document.createElement("h1");
+  Object.assign(title.style, CRASH_TITLE_STYLE);
   title.textContent = CRASH_TITLE;
 
   const advice = document.createElement("p");
   const email = document.createElement("a");
   email.href = `mailto:${CRASH_EMAIL}`;
+  Object.assign(email.style, CRASH_LINK_STYLE);
   email.textContent = CRASH_EMAIL;
   advice.append(`${CRASH_ADVICE} `, email, ".");
 

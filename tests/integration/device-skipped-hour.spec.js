@@ -220,9 +220,7 @@ test.describe("A phone in Havana on Sunday, Mar 8, 2026", () => {
 
     await modal.locator("#event-new-title").fill(title);
     await modal.locator("#event-new-day").click();
-    await modal
-      .getByRole("button", { name: "Sunday, March 8th, 2026" })
-      .click();
+    await modal.getByRole("button", { name: "Sunday, March 8, 2026" }).click();
     await expect(modal.locator("#event-new-day")).toHaveValue("03/08/2026");
     await modal.locator("#event-new-start-time").selectOption("19:00");
     await modal.locator("#event-new-end-time").selectOption("21:00");

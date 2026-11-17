@@ -93,11 +93,10 @@ export const AttendeeComponent = observer(({ resident }) => {
   return (
     <tr>
       <td
-        onClick={() => resident.toggleAttending()}
         className={
           resident.attending
-            ? "background-green pointer background-transition"
-            : "pointer background-transition"
+            ? "name-cell background-green pointer background-transition"
+            : "name-cell pointer background-transition"
         }
         style={Object.assign(
           {},
@@ -109,7 +108,24 @@ export const AttendeeComponent = observer(({ resident }) => {
               : styles.disabledPlain),
         )}
       >
-        {resident.name}
+        {/* A real button, so Tab reaches it and Enter or Space signs
+            the resident up. Its ::after covers the whole cell
+            (styles.css, .name-cell), so a tap anywhere in the cell
+            still works. aria-pressed tells a screen reader whether
+            the resident is signed up. */}
+        <button
+          type="button"
+          className="name-cell-button"
+          aria-pressed={resident.attending}
+          disabled={
+            (resident.attending && !resident.canRemove) ||
+            meal.frozen ||
+            cannotJoin
+          }
+          onClick={() => resident.toggleAttending()}
+        >
+          {resident.name}
+        </button>
       </td>
       <td>
         {vegGuestsCount > 0 && (

@@ -76,7 +76,7 @@ test.describe("Calendar (real backend)", () => {
   test("month navigation works", async ({ page }) => {
     const thisMonth = dayjs(FAKE_TODAY);
     const nextMonth = thisMonth.add(1, "month");
-    const heading = page.locator("h2");
+    const heading = page.locator("h1");
     await openCalendar(page);
     await expect(heading).toHaveText(thisMonth.format("MMMM YYYY"));
 

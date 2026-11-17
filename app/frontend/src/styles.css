@@ -426,6 +426,25 @@ table td {
   padding: var(--space-2) var(--space-1) !important;
 }
 
+/* The sign-up name cell (attendees_box.jsx). The button inside looks
+   like plain text, and its ::after covers the whole cell, so a tap
+   anywhere in the cell presses the button, as when the cell itself
+   took the tap. */
+.name-cell {
+  position: relative;
+}
+/* td.name-cell > button: more specific than every button rule in
+   components.css (button:disabled, button:focus), so none of them
+   applies. */
+td.name-cell > button.name-cell-button {
+  all: unset;
+}
+.name-cell-button::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+}
+
 #info_circles {
   display: flex;
   flex-wrap: wrap;
@@ -544,4 +563,36 @@ under the control, and Yes stays at the far right, away from it.
      two lines), so the middle of the box is half its own height down. */
   top: calc(var(--control-height) / 2 - 0.5em - 0.15em);
   width: 1em;
+}
+
+/* The link inside a calendar entry (calendar/calendar_chip.jsx). It
+   looks like the entry's plain title: the entry sets the color. */
+.calendar-chip-link,
+.calendar-chip-link:hover {
+  color: inherit;
+  text-decoration: none;
+}
+/* The entry's text box hides what overflows, which would cut off a
+   ring drawn around the link. So the ring goes around the whole entry. */
+.calendar-chip-link:focus-visible {
+  outline: none !important;
+}
+.rbc-event:has(.calendar-chip-link:focus-visible) {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* An entry that opens nothing (calendar/show.jsx, formatEvent). */
+.rbc-event.calendar-chip-static {
+  cursor: default;
+}
+
+/* The link fills the entry, so the whole entry is the place to tap, and
+   is at least 24px tall, the smallest touch target WCAG 2.2 AA allows
+   (2.5.8). Only a one-line entry, a rotation bar, is shorter than that
+   without it. */
+.calendar-chip-link {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
 }

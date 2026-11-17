@@ -75,7 +75,9 @@ function VersionBanner() {
   }
 
   return (
-    <div className="app-banner app-banner--info">
+    // A section with a name is a landmark, so a screen reader can find
+    // the banner in its list of the page's parts.
+    <section className="app-banner app-banner--info" aria-label="New version">
       <span>A new version is available.</span>
       <button
         className="app-banner__button"
@@ -92,7 +94,7 @@ function VersionBanner() {
       >
         Refresh
       </button>
-    </div>
+    </section>
   );
 }
 

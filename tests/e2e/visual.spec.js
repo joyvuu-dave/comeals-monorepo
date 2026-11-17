@@ -16,6 +16,7 @@ const {
   disableIdleTimer,
   mockApi,
 } = require("../helpers/setup");
+const { expectAccessible } = require("../helpers/accessibility");
 const mealFixture = require("../fixtures/meal.json");
 const calendarFixture = require("../fixtures/calendar.json");
 const rotationFixture = require("../fixtures/rotation.json");
@@ -46,6 +47,11 @@ const profileFixture = require("../fixtures/profile.json");
  *
  * Time is frozen to noon on 2026-01-15 in Los Angeles (FROZEN_NOW in
  * tests/helpers/setup.js) for deterministic screenshots.
+ *
+ * Every screenshot comes after expectAccessible(page), which runs axe
+ * on the screen as pictured and fails on any WCAG 2.2 AA or
+ * best-practice violation (challenge 32). A new screenshot needs it
+ * too; tests/e2e/keyboard.spec.js counts them.
  */
 test.describe("Visual Baselines", () => {
   test("login page", async ({ page }) => {
@@ -64,6 +70,7 @@ test.describe("Visual Baselines", () => {
       timeout: 10000,
     });
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("login-page.png", {
       fullPage: true,
     });
@@ -85,6 +92,7 @@ test.describe("Visual Baselines", () => {
       page.getByRole("heading", { name: "Page not found" }),
     ).toBeVisible({ timeout: 10000 });
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("not-found.png", {
       fullPage: true,
     });
@@ -103,6 +111,7 @@ test.describe("Visual Baselines", () => {
     // Wait a moment for all events to render
     await page.waitForTimeout(1000);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("calendar-month.png", {
       fullPage: true,
     });
@@ -306,6 +315,7 @@ test.describe("Visual Baselines", () => {
         );
         await page.waitForTimeout(1000);
 
+        await expectAccessible(page);
         await expect(page).toHaveScreenshot(`${edge.name}.png`, {
           fullPage: true,
         });
@@ -328,6 +338,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-edit.png", {
       fullPage: true,
     });
@@ -353,6 +364,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("event-form.png", {
       fullPage: true,
     });
@@ -391,6 +403,7 @@ test.describe("Visual Baselines", () => {
     await expect(overlay.getByText("January 2026")).toBeVisible();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(overlay).toHaveScreenshot("day-picker.png");
   });
 
@@ -410,6 +423,7 @@ test.describe("Visual Baselines", () => {
     );
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("event-edit.png", { fullPage: true });
   });
 
@@ -429,6 +443,7 @@ test.describe("Visual Baselines", () => {
     );
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("profile-edit.png", {
       fullPage: true,
     });
@@ -455,6 +470,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("confirm-delete.png", {
       fullPage: true,
     });
@@ -474,6 +490,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("common-house-form.png", {
       fullPage: true,
     });
@@ -496,6 +513,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("common-house-edit.png", {
       fullPage: true,
     });
@@ -515,6 +533,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("guest-room-form.png", {
       fullPage: true,
     });
@@ -537,6 +556,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("guest-room-edit.png", {
       fullPage: true,
     });
@@ -557,6 +577,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("rotation-modal.png", {
       fullPage: true,
     });
@@ -596,6 +617,7 @@ test.describe("Visual Baselines", () => {
     ).toHaveClass("text-muted");
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("rotation-modal-not-signed-up.png", {
       fullPage: true,
     });
@@ -616,6 +638,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 10000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("rotation-modal-loading.png", {
       fullPage: true,
     });
@@ -639,6 +662,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-history.png", {
       fullPage: true,
     });
@@ -665,6 +689,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-history-loading.png", {
       fullPage: true,
     });
@@ -686,6 +711,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("password-reset.png", {
       fullPage: true,
     });
@@ -746,6 +772,7 @@ test.describe("Visual Baselines", () => {
     await expect(bobCell).not.toHaveAttribute("style", /grayscale/);
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-closed.png", {
       fullPage: true,
     });
@@ -782,6 +809,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("close-confirm-bar.png", {
       fullPage: true,
     });
@@ -807,6 +835,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("guest-dropdown.png", {
       fullPage: true,
     });
@@ -828,6 +857,7 @@ test.describe("Visual Baselines", () => {
     await expect(toast).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(toast).toHaveScreenshot("toast-error.png");
   });
 
@@ -855,6 +885,7 @@ test.describe("Visual Baselines", () => {
         page.getByText("Something went wrong with Comeals."),
       ).toBeVisible();
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("crash-page.png", {
         fullPage: true,
       });
@@ -986,6 +1017,7 @@ test.describe("Visual Baselines", () => {
         BOB_CONFLICT,
       ]);
       await scrollToTop(page);
+      await expectAccessible(page);
       await expect(page.locator(".toast-container")).toHaveScreenshot(
         "message-stack-two.png",
       );
@@ -1005,6 +1037,7 @@ test.describe("Visual Baselines", () => {
         BOB_CONFLICT,
       ]);
       await expect(page.getByRole("button", { name: /more/ })).toHaveCount(0);
+      await expectAccessible(page);
       await expect(page.locator(".toast-container")).toHaveScreenshot(
         "message-stack-three.png",
       );
@@ -1031,6 +1064,7 @@ test.describe("Visual Baselines", () => {
       await expect(
         page.getByRole("button", { name: "Show 2 more messages" }),
       ).toBeVisible();
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("message-stack-more.png");
 
       // Tapped, the line shows every message.
@@ -1043,6 +1077,7 @@ test.describe("Visual Baselines", () => {
         BOB_CONFLICT,
       ]);
       await page.waitForTimeout(500);
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("message-stack-all.png");
     });
 
@@ -1059,6 +1094,7 @@ test.describe("Visual Baselines", () => {
       await page.waitForTimeout(500);
 
       await expect(messages(page)).toHaveText([BOB_CONFLICT]);
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("message-stack-phone.png");
     });
 
@@ -1102,6 +1138,7 @@ test.describe("Visual Baselines", () => {
       ]);
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page.locator(".toast-container")).toHaveScreenshot(
         "message-maybe-not-saved.png",
       );
@@ -1142,6 +1179,7 @@ test.describe("Visual Baselines", () => {
       await expect(page.locator(".toast")).toHaveCount(0);
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("event-form-error.png", {
         fullPage: true,
       });
@@ -1172,6 +1210,7 @@ test.describe("Visual Baselines", () => {
       ).toBeVisible({ timeout: 10000 });
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("session-expired.png", {
         fullPage: true,
       });
@@ -1211,6 +1250,7 @@ test.describe("Visual Baselines", () => {
     const banner = page.locator("text=A new version is available.");
     await expect(banner).toBeVisible({ timeout: 10000 });
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("version-banner.png", {
       fullPage: true,
     });
@@ -1245,6 +1285,7 @@ test.describe("Visual Baselines", () => {
     await expect(page.locator(".offline")).toHaveText("OFFLINE");
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("calendar-offline.png", {
       fullPage: true,
     });
@@ -1264,6 +1305,7 @@ test.describe("Visual Baselines", () => {
     await expect(page.locator(".offline")).toHaveText("OFFLINE");
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-offline.png", { fullPage: true });
   });
 
@@ -1283,6 +1325,7 @@ test.describe("Visual Baselines", () => {
     await expect(page.locator(".offline")).toHaveText("OFFLINE");
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("login-offline.png", {
       fullPage: true,
     });
@@ -1307,6 +1350,7 @@ test.describe("Visual Baselines", () => {
     await expect(overlay.locator(".rdp-selected")).toHaveCount(1);
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(overlay).toHaveScreenshot("day-picker-selected.png");
   });
 
@@ -1327,6 +1371,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("event-form-submitting.png", {
       fullPage: true,
     });
@@ -1349,6 +1394,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("common-house-form-submitting.png", {
       fullPage: true,
     });
@@ -1371,6 +1417,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("guest-room-form-submitting.png", {
       fullPage: true,
     });
@@ -1393,6 +1440,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("profile-edit-saving.png", {
       fullPage: true,
     });
@@ -1426,6 +1474,7 @@ test.describe("Visual Baselines", () => {
     );
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("profile-edit-pending.png", {
       fullPage: true,
     });
@@ -1449,6 +1498,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("event-edit-updating.png", {
       fullPage: true,
     });
@@ -1479,6 +1529,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("event-edit-deleting.png", {
       fullPage: true,
     });
@@ -1514,6 +1565,7 @@ test.describe("Visual Baselines", () => {
     await expect(page.locator('img[alt="carrot-icon"]').first()).toBeVisible();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-reconciled.png", {
       fullPage: true,
     });
@@ -1557,6 +1609,7 @@ test.describe("Visual Baselines", () => {
     ).toBeDisabled();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-cancelled.png", {
       fullPage: true,
     });
@@ -1567,6 +1620,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("restore-confirm-bar.png", {
       fullPage: true,
     });
@@ -1588,6 +1642,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("cancel-confirm-bar.png", {
       fullPage: true,
     });
@@ -1631,6 +1686,7 @@ test.describe("Visual Baselines", () => {
     await expect(page.getByPlaceholder("pending")).toBeVisible();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-closed-full.png", {
       fullPage: true,
     });
@@ -1684,8 +1740,8 @@ test.describe("Visual Baselines", () => {
     const janeRow = page
       .getByRole("cell", { name: "A - Jane Smith", exact: true })
       .locator("xpath=ancestor::tr");
-    const janeAdd = janeRow.locator("button", {
-      has: page.getByLabel("Add Guest of A - Jane Smith"),
+    const janeAdd = janeRow.getByRole("button", {
+      name: "Add Guest of A - Jane Smith",
     });
     const janeMenu = janeRow.locator(".dropdown");
     await janeAdd.click();
@@ -1714,15 +1770,14 @@ test.describe("Visual Baselines", () => {
     await expect(page.getByLabel("Set Extras to 2")).toBeChecked();
     // One seat is still open to other taps.
     await expect(
-      page.locator("button", {
-        has: page.getByLabel("Add Guest of B - Bob Johnson"),
-      }),
+      page.getByRole("button", { name: "Add Guest of B - Bob Johnson" }),
     ).toBeEnabled();
     // The taps left the focus on the button, and Chromium draws a ring
     // for it. The golden shows the button's own look.
     await janeAdd.blur();
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("meal-closed-requests-waiting.png", {
       fullPage: true,
     });
@@ -1755,6 +1810,7 @@ test.describe("Visual Baselines", () => {
     ).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("close-confirm-bar-two-cooks.png", {
       fullPage: true,
     });
@@ -1779,6 +1835,7 @@ test.describe("Visual Baselines", () => {
     const cooksBox = page
       .getByRole("heading", { name: "Cooks" })
       .locator("xpath=ancestor::div[contains(@class, 'offwhite')][1]");
+    await expectAccessible(page);
     await expect(cooksBox).toHaveScreenshot("cooks-no-cook.png");
   });
 
@@ -1805,6 +1862,7 @@ test.describe("Visual Baselines", () => {
     const cooksBox = page
       .getByRole("heading", { name: "Cooks" })
       .locator("xpath=ancestor::div[contains(@class, 'offwhite')][1]");
+    await expectAccessible(page);
     await expect(cooksBox).toHaveScreenshot("cooks-saving.png");
   });
 
@@ -1828,6 +1886,7 @@ test.describe("Visual Baselines", () => {
     );
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("no-cost-confirm-bar.png", {
       fullPage: true,
     });
@@ -1878,6 +1937,7 @@ test.describe("Visual Baselines", () => {
     await expect(carolsMenu).toHaveValue("4");
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("remove-cook-confirm-bar.png", {
       fullPage: true,
     });
@@ -1898,6 +1958,7 @@ test.describe("Visual Baselines", () => {
     await expect(page.locator(".button-loader")).toBeVisible({ timeout: 5000 });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("login-submitting.png", {
       fullPage: true,
     });
@@ -1920,6 +1981,7 @@ test.describe("Visual Baselines", () => {
     });
     await page.waitForTimeout(500);
 
+    await expectAccessible(page);
     await expect(page).toHaveScreenshot("password-reset-submitting.png", {
       fullPage: true,
     });
@@ -1951,6 +2013,7 @@ test.describe("Visual Baselines", () => {
       });
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("meal-load-failed.png", {
         fullPage: true,
       });
@@ -1973,6 +2036,7 @@ test.describe("Visual Baselines", () => {
       );
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("meal-not-found.png", {
         fullPage: true,
       });
@@ -2001,6 +2065,7 @@ test.describe("Visual Baselines", () => {
       ).toBeVisible();
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("meal-load-broken.png", {
         fullPage: true,
       });
@@ -2027,6 +2092,7 @@ test.describe("Visual Baselines", () => {
       );
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("menu-not-saved.png", {
         fullPage: true,
       });
@@ -2043,6 +2109,7 @@ test.describe("Visual Baselines", () => {
       });
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("rotation-failed.png", {
         fullPage: true,
       });
@@ -2066,6 +2133,7 @@ test.describe("Visual Baselines", () => {
       await expect(modal.getByText("Loading...")).toHaveCount(0);
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("meal-history-failed.png", {
         fullPage: true,
       });
@@ -2092,6 +2160,7 @@ test.describe("Visual Baselines", () => {
       await expect(page).toHaveURL(/\/reset-password$/);
       await page.waitForTimeout(500);
 
+      await expectAccessible(page);
       await expect(page).toHaveScreenshot("password-reset-failed.png", {
         fullPage: true,
       });

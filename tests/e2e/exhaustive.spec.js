@@ -73,7 +73,7 @@ test.describe("Exhaustive Coverage", () => {
       await expect(page.locator(".rbc-calendar")).toBeVisible({
         timeout: 10000,
       });
-      await expect(page.locator("h2", { hasText: "June 2025" })).toBeVisible();
+      await expect(page.locator("h1", { hasText: "June 2025" })).toBeVisible();
 
       const todayButton = page.locator("button", { hasText: "today" });
       await expect(todayButton).toBeVisible();
@@ -83,7 +83,7 @@ test.describe("Exhaustive Coverage", () => {
         timeout: 5000,
       });
       await expect(
-        page.locator("h2", { hasText: "January 2026" }),
+        page.locator("h1", { hasText: "January 2026" }),
       ).toBeVisible();
     });
   });

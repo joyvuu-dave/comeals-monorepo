@@ -27,6 +27,9 @@ const styles = {
     paddingLeft: "15px",
     width: "100%",
   },
+  title: {
+    fontSize: "2rem",
+  },
 };
 
 Modal.setAppElement("#root");
@@ -195,7 +198,10 @@ const ResidentsLogin = observer(({ page = "login" }) => {
   return (
     <div>
       <header className="flex space-between header">
-        <h2 className="pad-l-sm">Comeals</h2>
+        {/* An h1 in the size of an h2: the page's one top heading. */}
+        <h1 className="pad-l-sm" style={styles.title}>
+          Comeals
+        </h1>
         {store.isOnline ? (
           <span className="online">ONLINE</span>
         ) : (

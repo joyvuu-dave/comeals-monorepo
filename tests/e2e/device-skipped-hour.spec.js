@@ -177,7 +177,7 @@ test.describe("A phone in Greenland on the night its clocks skip", () => {
     // Saturday is the chosen day, and it is today in Los Angeles.
     await expect(
       modal.getByRole("button", {
-        name: "Today, Saturday, March 28th, 2026, selected",
+        name: "Today, Saturday, March 28, 2026, selected",
       }),
     ).toBeVisible();
     // Close the picker without choosing.
@@ -222,7 +222,7 @@ test.describe("A phone in Greenland on the night its clocks skip", () => {
     await modal.locator("#ch-edit-day").click();
     await expect(
       modal.getByRole("button", {
-        name: "Today, Saturday, March 28th, 2026, selected",
+        name: "Today, Saturday, March 28, 2026, selected",
       }),
     ).toBeVisible();
     await modal.locator("#ch-edit-title").click();
@@ -342,7 +342,7 @@ test.describe("A phone in Havana on the day both zones skip an hour", () => {
     await modal.locator("#event-edit-day").click();
     await expect(
       modal.getByRole("button", {
-        name: "Today, Sunday, March 8th, 2026, selected",
+        name: "Today, Sunday, March 8, 2026, selected",
       }),
     ).toBeVisible();
     await modal.locator("#event-edit-title").click();
@@ -387,7 +387,7 @@ test.describe("A phone in Havana on the day both zones skip an hour", () => {
     await modal.locator("#ch-edit-day").click();
     await expect(
       modal.getByRole("button", {
-        name: "Today, Sunday, March 8th, 2026, selected",
+        name: "Today, Sunday, March 8, 2026, selected",
       }),
     ).toBeVisible();
     await modal.locator("#ch-edit-title").click();
@@ -430,7 +430,7 @@ test.describe("A phone in Havana on the day both zones skip an hour", () => {
     await modal.locator("#event-new-title").fill("Seed swap");
     await modal.locator("#event-new-day").click();
     await modal
-      .getByRole("button", { name: "Today, Sunday, March 8th, 2026" })
+      .getByRole("button", { name: "Today, Sunday, March 8, 2026" })
       .click();
     await expect(modal.locator("#event-new-day")).toHaveValue("03/08/2026");
     await modal

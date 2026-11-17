@@ -22,6 +22,13 @@ export const CRASH_CONTAINER_STYLE = {
   textAlign: "center",
 } as const;
 
+// The page's one top heading, in the size of an h2.
+export const CRASH_TITLE_STYLE = { fontSize: "2rem" } as const;
+
+// The link sits in a sentence, and its red is only 1.9:1 against the
+// black text around it, so the underline is what shows it is a link.
+export const CRASH_LINK_STYLE = { textDecoration: "underline" } as const;
+
 export const CRASH_BUTTON_STYLE = {
   marginTop: "1rem",
   padding: "0.75rem 2rem",
