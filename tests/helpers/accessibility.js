@@ -177,65 +177,95 @@ async function missedByTab(page, scope = "body") {
 
 // Layout faults that large text causes, inside `scope`: two controls
 // drawn on top of each other (a tap meant for one hits the other), and
-// text that a box with hidden overflow cuts off. A select is left out:
+// text that a box with hidden overflow cuts off, or that spills out of
+// a button, link, label, heading or header bar. A select is left out:
 // it shows one option and hides the rest on purpose. So is text hidden
 // for everyone but a screen reader (.visually-hidden).
+// Runs in the page, so it uses nothing from this file. The iOS
+// Safari check (tests/ios/check.mjs) sends its source to the simulator.
+function findLayoutProblems(scopeSelector) {
+  const root = window.document.querySelector(scopeSelector);
+  const shown = (el) =>
+    el.checkVisibility({ visibilityProperty: true }) &&
+    !el.closest(".visually-hidden, [aria-hidden='true'], [inert]");
+  const name = (el) =>
+    (el.getAttribute("aria-label") || el.textContent || el.tagName)
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, 40);
+
+  const controls = [
+    ...root.querySelectorAll(
+      "button, a[href], input, select, textarea, [role='button']",
+    ),
+  ]
+    .filter(shown)
+    .map((el) => [el, el.getBoundingClientRect()])
+    .filter(([, r]) => r.width > 0 && r.height > 0);
+  // The nearest box that stays put while the page scrolls (the
+  // sticky row of form buttons). Fields scroll under it by design, so
+  // a control inside one and a control outside it may overlap.
+  const pinnedBox = (el) => {
+    for (let p = el; p; p = p.parentElement) {
+      const position = window.getComputedStyle(p).position;
+      if (position === "sticky" || position === "fixed") return p;
+    }
+    return null;
+  };
+  const overlaps = [];
+  for (let i = 0; i < controls.length; i++) {
+    for (let j = i + 1; j < controls.length; j++) {
+      const [a, ra] = controls[i];
+      const [b, rb] = controls[j];
+      if (a.contains(b) || b.contains(a)) continue;
+      if (pinnedBox(a) !== pinnedBox(b)) continue;
+      // A label's control sits inside or beside it; a switch draws
+      // its input under its own button.
+      if (a.closest("label") && a.closest("label") === b.closest("label"))
+        continue;
+      const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
+      const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
+      if (w > 1 && h > 1) {
+        overlaps.push(`"${name(a)}" overlaps "${name(b)}"`);
+      }
+    }
+  }
+
+  const cut = [];
+  for (const el of root.querySelectorAll("*")) {
+    if (el.tagName === "SELECT" || el.closest("select")) continue;
+    if (!shown(el) || !el.textContent.trim()) continue;
+    const style = window.getComputedStyle(el);
+    const hides = (v) => v === "hidden" || v === "clip";
+    if (
+      (hides(style.overflowX) && el.scrollWidth > el.clientWidth + 1) ||
+      (hides(style.overflowY) && el.scrollHeight > el.clientHeight + 1)
+    ) {
+      cut.push(`text cut off: "${name(el)}"`);
+    } else if (
+      !hides(style.overflowY) &&
+      (el.matches(
+        "button, a[href], [role='button'], label, h1, h2, h3, h4, h5, h6",
+      ) ||
+        el.classList.contains("header")) &&
+      el.scrollHeight > el.clientHeight + 2 &&
+      el.clientHeight > 0
+    ) {
+      // A box whose text is taller than the box itself: the text is
+      // drawn over whatever comes next (a fixed height or a line
+      // height in pixels that did not grow with the text).
+      cut.push(`text spills out of its box: "${name(el)}"`);
+    }
+  }
+  return [...overlaps, ...cut];
+}
+
 async function layoutProblems(page, scope = "body") {
-  return page.evaluate((scopeSelector) => {
-    const root = window.document.querySelector(scopeSelector);
-    const shown = (el) =>
-      el.checkVisibility({ visibilityProperty: true }) &&
-      !el.closest(".visually-hidden, [aria-hidden='true'], [inert]");
-    const name = (el) =>
-      (el.getAttribute("aria-label") || el.textContent || el.tagName)
-        .trim()
-        .replace(/\s+/g, " ")
-        .slice(0, 40);
-
-    const controls = [
-      ...root.querySelectorAll(
-        "button, a[href], input, select, textarea, [role='button']",
-      ),
-    ]
-      .filter(shown)
-      .map((el) => [el, el.getBoundingClientRect()])
-      .filter(([, r]) => r.width > 0 && r.height > 0);
-    const overlaps = [];
-    for (let i = 0; i < controls.length; i++) {
-      for (let j = i + 1; j < controls.length; j++) {
-        const [a, ra] = controls[i];
-        const [b, rb] = controls[j];
-        if (a.contains(b) || b.contains(a)) continue;
-        // A label's control sits inside or beside it; a switch draws
-        // its input under its own button.
-        if (a.closest("label") && a.closest("label") === b.closest("label"))
-          continue;
-        const w = Math.min(ra.right, rb.right) - Math.max(ra.left, rb.left);
-        const h = Math.min(ra.bottom, rb.bottom) - Math.max(ra.top, rb.top);
-        if (w > 1 && h > 1) {
-          overlaps.push(`"${name(a)}" overlaps "${name(b)}"`);
-        }
-      }
-    }
-
-    const cut = [];
-    for (const el of root.querySelectorAll("*")) {
-      if (el.tagName === "SELECT" || el.closest("select")) continue;
-      if (!shown(el) || !el.textContent.trim()) continue;
-      const style = window.getComputedStyle(el);
-      const hides = (v) => v === "hidden" || v === "clip";
-      if (
-        (hides(style.overflowX) && el.scrollWidth > el.clientWidth + 1) ||
-        (hides(style.overflowY) && el.scrollHeight > el.clientHeight + 1)
-      ) {
-        cut.push(`text cut off: "${name(el)}"`);
-      }
-    }
-    return [...overlaps, ...cut];
-  }, scope);
+  return page.evaluate(findLayoutProblems, scope);
 }
 
 module.exports = {
+  findLayoutProblems,
   layoutProblems,
   expectAccessible,
   nextKey,

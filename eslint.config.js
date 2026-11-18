@@ -65,6 +65,7 @@ module.exports = [
       "vitest.config.mjs",
       "playwright.integration.config.js",
       "spec/support/*.mjs",
+      "tests/ios/**/*.mjs",
     ],
     languageOptions: {
       ecmaVersion: 2022,

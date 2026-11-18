@@ -1,0 +1,19 @@
+# Screens bin/test-ios knows fail today, one per line, each with the
+# issue that will fix it. A screen here may fail. When one passes, the
+# run fails until its line is removed, so this list only gets shorter.
+# Any screen not listed must pass.
+
+# #300: long calendar entries are drawn over the next week.
+iPhone 17, text 100%, calendar
+iPad mini (A17 Pro), text 200%, calendar
+
+# #301: pixel line heights and box heights; the meal page is too wide.
+iPhone 17, text 200%, login
+iPhone 17, text 200%, calendar
+iPhone 17, text 200%, meal
+iPhone 17, text 200%, closed meal
+iPhone 17, text 200%, new event
+iPhone 17, text 200%, new Common House booking
+iPhone 17, text 200%, new guest room booking
+iPhone 17, text 200%, profile
+iPhone 17, text 200%, rotation

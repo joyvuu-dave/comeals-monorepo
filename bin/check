@@ -890,6 +890,37 @@ check_integration() {
   fi
 }
 
+# Large text in real iOS Safari, in the iPhone and iPad simulators
+# (challenge 32). Only macOS has the simulators: elsewhere (the nightly
+# job on Linux) the step says it did not run. On a Mac without Xcode it
+# fails, so a laptop run never skips it unnoticed.
+check_ios() {
+  step "iOS Safari"
+
+  if [ "$(uname)" != "Darwin" ]; then
+    info "Not run: the iOS simulators need macOS"
+    record "iOS Safari" "INFO" "not run: needs macOS"
+    return
+  fi
+
+  local output exit_code=0
+  output=$(SKIP_BUILD=1 bin/test-ios 2>&1) || exit_code=$?
+
+  local summary
+  summary=$(echo "$output" | grep -oE '^[0-9]+ screens: [^(]*known' || echo "unknown")
+
+  if [ "$exit_code" -eq 0 ]; then
+    pass "$summary"
+    record "iOS Safari" "PASS" "$summary"
+  else
+    fail "bin/test-ios failed"
+    # What the check printed once the server was up, less the screens
+    # that passed and its own heading.
+    echo "$output" | sed -n '/Running integration tests/,$p' | grep -v -e '✓' -e '^==> '
+    record "iOS Safari" "FAIL" "see the list above"
+  fi
+}
+
 # --- Section 5: Dependency freshness ------------------------------------------
 
 check_bundle_outdated() {
@@ -1040,6 +1071,7 @@ main() {
   check_playwright
   check_visual_coverage
   check_integration
+  check_ios
 
   # Dependency freshness
   check_bundle_outdated

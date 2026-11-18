@@ -115,6 +115,13 @@ const styles = {
     justifyContent: "space-between",
     flexWrap: "nowrap",
   },
+  // The month's name and its buttons share a line when they fit, and
+  // the buttons move to a second line when they do not (320 pixels).
+  nav: {
+    display: "flex",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+  },
   chevron: {
     backgroundColor: "var(--gray-13)",
     border: "1px solid black",
@@ -148,7 +155,7 @@ const MonthNavHeader = memo(function MonthNavHeader({
   onToday,
 }) {
   return (
-    <div style={styles.main}>
+    <div style={styles.nav}>
       {/* The page's one top heading, in the size of an h2. */}
       <h1 style={styles.month}>{dayjs.utc(dateStr).format("MMMM YYYY")}</h1>
       <span style={styles.main}>
@@ -534,21 +541,23 @@ const MainCalendar = observer(() => {
                 eventPropGetter re-run with the new day. Without
                 it the header would show the new date while the
                 grid still highlighted yesterday. */}
-            <MemoCalendar
-              communityToday={communityToday}
-              localizer={localizer}
-              date={getCalendarDate()}
-              defaultView="month"
-              eventPropGetter={formatEvent}
-              events={filterEvents()}
-              className="calendar"
-              onNavigate={handleNavigate}
-              onSelectEvent={handleSelectEvent}
-              views={VIEWS}
-              components={COMPONENTS}
-              getNow={getCommunityNow}
-              toolbar={false}
-            />
+            <div className="calendar-scroll">
+              <MemoCalendar
+                communityToday={communityToday}
+                localizer={localizer}
+                date={getCalendarDate()}
+                defaultView="month"
+                eventPropGetter={formatEvent}
+                events={filterEvents()}
+                className="calendar"
+                onNavigate={handleNavigate}
+                onSelectEvent={handleSelectEvent}
+                views={VIEWS}
+                components={COMPONENTS}
+                getNow={getCommunityNow}
+                toolbar={false}
+              />
+            </div>
           </Profiler>
           <WebcalLinks />
         </div>

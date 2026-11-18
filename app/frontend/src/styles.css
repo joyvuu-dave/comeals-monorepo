@@ -97,10 +97,10 @@
 }
 
 @media all and (max-width: 825px) {
-  body {
-    min-width: 400px;
-  }
-
+  /* No minimum width on the page itself: at 320 pixels wide (a laptop
+     zoomed to 400%, WCAG 1.4.10) every page must fit the width. Only
+     the month grid keeps 400, inside .calendar-scroll, which scrolls
+     sideways by itself. */
   .calendar {
     width: 95vw;
     min-width: 400px;
@@ -288,6 +288,13 @@ button:focus {
    history if a layout needs another width. */
 .cell.nine {
   width: calc(100% * 9 / 12);
+}
+
+/* The month grid is never narrower than 400 pixels (seven days must
+   stay readable). When the screen is narrower, this box scrolls
+   sideways and the rest of the page keeps to the screen's width. */
+.calendar-scroll {
+  overflow-x: auto;
 }
 
 /*
@@ -607,4 +614,75 @@ under the control, and Yes stays at the far right, away from it.
   display: flex;
   align-items: center;
   min-height: 24px;
+}
+
+/* At 320 pixels wide (a laptop at 400%, WCAG 1.4.10) the sign-up
+   table's column headings, with 12px on each side, made the table
+   wider than the screen. Below 360 the headings keep 4px a side and
+   the cells 2px. */
+@media all and (max-width: 360px) {
+  table th {
+    padding-left: var(--space-1);
+    padding-right: var(--space-1);
+  }
+
+  /* !important: the rule above for every cell has it too. */
+  table td {
+    padding-left: 2px !important;
+    padding-right: 2px !important;
+  }
+}
+
+/* A grid item's minimum width is, by default, the width of its widest
+   word or control, and the meal page's columns grew to it: at 320
+   pixels the page was 4 pixels wider than the screen. With no minimum,
+   each box keeps to its column, and its text wraps inside it. Only on
+   narrow screens, where the boxes are stacked in one column. */
+@media all and (max-width: 825px) {
+  .wrapper > * {
+    min-width: 0;
+  }
+}
+
+/* The button row at the end of every calendar form. It stays at the
+   bottom of the form while the fields scroll above it, so in a short
+   window (a laptop at 200% is 360 pixels tall) Create, Update and
+   Delete are on screen without scrolling. The background hides the
+   fields that scroll under it. No z-index: the day picker's popup
+   (z-index 1) must open on top of this row, and a field with no
+   z-index still scrolls under it. */
+.form-actions {
+  position: sticky;
+  bottom: 0;
+  background-color: var(--powder-blue);
+  padding-block: var(--space-2);
+}
+
+/* react-modal sets a 40px gap around the form box and 20px inside it.
+   In a window 180 pixels tall (a laptop at 400%) that left about 60
+   pixels for the form, less than its title and buttons. In a short
+   window the gaps shrink. !important: react-modal sets them inline. */
+@media all and (max-height: 480px) {
+  .ReactModal__Content {
+    inset: 8px !important;
+    padding: var(--space-2) !important;
+  }
+}
+
+/* The meal page's date, between its two arrows (date_box.jsx): 200
+   pixels on one line. On a narrow screen (320 pixels, a laptop at
+   400%) it gives up width and wraps, so the row with both arrows still
+   fits. */
+.meal-date {
+  width: 200px;
+  white-space: nowrap;
+}
+
+@media all and (max-width: 825px) {
+  .meal-date {
+    width: auto;
+    flex: 0 1 200px;
+    min-width: 0;
+    white-space: normal;
+  }
 }

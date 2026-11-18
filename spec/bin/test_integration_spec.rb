@@ -148,4 +148,26 @@ RSpec.describe 'bin/test-integration', bash_coverage: BashCoverage.new('spec/bin
     expect(result.exitstatus).to eq(1)
     expect(sandbox.calls_to('psql').size).to eq(1)
   end
+
+  # bin/test-ios: the same seed and server, its own check instead of
+  # Playwright, with the arguments it was given.
+  it 'runs the command in INTEGRATION_RUNNER instead of Playwright, with its exit code' do
+    sandbox.fake('node', 'exit 3')
+
+    result = sandbox.run(script, '--only-iphone', env: { 'INTEGRATION_RUNNER' => 'node tests/ios/check.mjs' })
+
+    expect(result.exitstatus).to eq(3)
+    expect(sandbox.call_lines).to include('node tests/ios/check.mjs --only-iphone')
+    expect(sandbox.calls_to('npx')).to be_empty
+    expect(sandbox.calls_to('psql').size).to eq(1)
+  end
+
+  it 'succeeds when the INTEGRATION_RUNNER command passes' do
+    sandbox.fake('node')
+
+    result = sandbox.run(script, env: { 'INTEGRATION_RUNNER' => 'node tests/ios/check.mjs' })
+
+    expect(result).to be_success, result.output
+    expect(sandbox.calls_to('npx')).to be_empty
+  end
 end

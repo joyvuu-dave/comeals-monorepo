@@ -28,10 +28,6 @@ const styles = {
     justifyContent: "center",
     alignItems: "center",
   },
-  topDate: {
-    width: "200px",
-    whiteSpace: "nowrap",
-  },
 };
 
 Modal.setAppElement("#root");
@@ -214,9 +210,9 @@ const DateBox = observer(() => {
             fails the empty-heading accessibility rule, so render a
             same-size plain box instead. */}
         {displayTopDate() === "" ? (
-          <div style={styles.topDate} />
+          <div className="meal-date" />
         ) : (
-          <h2 style={styles.topDate}>{displayTopDate()}</h2>
+          <h2 className="meal-date">{displayTopDate()}</h2>
         )}
         <div
           className="arrow"

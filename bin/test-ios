@@ -1,0 +1,21 @@
+#!/usr/bin/env bash
+# Large text in real iOS Safari, in the iPhone and iPad simulators
+# (challenge 32). Seeds the test database and starts the Rails test
+# server the way bin/test-integration does, then runs
+# tests/ios/check.mjs against it instead of Playwright.
+#
+# Needs Xcode with an iOS simulator runtime (macOS only). Pictures of
+# every screen are saved in tmp/ios/.
+#
+# Usage:
+#   bin/test-ios
+#   SKIP_BUILD=1 bin/test-ios   # reuse the last frontend build
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if ! xcrun simctl help >/dev/null 2>&1; then
+  echo "ERROR: bin/test-ios needs Xcode and its iOS simulators (xcrun simctl)."
+  exit 1
+fi
+
+INTEGRATION_RUNNER="node tests/ios/check.mjs" exec bin/test-integration "$@"

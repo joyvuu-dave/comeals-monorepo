@@ -6,7 +6,7 @@
 // button). Delete still confirms through useDeleteFlow.
 function ModalFormFooter({ submitting, deleting, onDelete, disabled }) {
   return (
-    <div className="flex space-between">
+    <div className="flex space-between form-actions">
       <button
         type="submit"
         className={submitting ? "button-dark button-loader" : "button-dark"}

@@ -140,6 +140,16 @@ echo ""
 echo "==> Running integration tests..."
 echo ""
 
+# bin/test-ios runs its own check against this server instead of
+# Playwright: INTEGRATION_RUNNER holds that command.
+if [ -n "${INTEGRATION_RUNNER:-}" ]; then
+  # shellcheck disable=SC2086 # the command and its arguments, split on spaces
+  $INTEGRATION_RUNNER "$@"
+  # Reached only when it passed: set -e ends the script with the
+  # command's own exit code when it fails. The cleanup trap runs either way.
+  exit 0
+fi
+
 PLAYWRIGHT_ARGS=(--config playwright.integration.config.js)
 
 # Pass through any extra arguments (e.g., specific test file)

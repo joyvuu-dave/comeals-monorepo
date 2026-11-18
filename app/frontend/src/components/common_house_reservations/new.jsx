@@ -167,13 +167,17 @@ const CommonHouseReservationsNew = observer(
             />
             <br />
 
-            <button
-              type="submit"
-              className={loading ? "button-dark button-loader" : "button-dark"}
-              disabled={loading || !store.hostsLoaded}
-            >
-              Create
-            </button>
+            <div className="form-actions">
+              <button
+                type="submit"
+                className={
+                  loading ? "button-dark button-loader" : "button-dark"
+                }
+                disabled={loading || !store.hostsLoaded}
+              >
+                Create
+              </button>
+            </div>
           </form>
         </fieldset>
       </div>

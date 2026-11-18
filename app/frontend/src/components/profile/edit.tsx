@@ -269,13 +269,15 @@ function ProfileEdit({ handleCloseModal, setDirty, setErrorShown }: Props) {
             ))}
             <br />
             <br />
-            <button
-              type="submit"
-              className={saving ? "button-dark button-loader" : "button-dark"}
-              disabled={saving}
-            >
-              Save
-            </button>
+            <div className="form-actions">
+              <button
+                type="submit"
+                className={saving ? "button-dark button-loader" : "button-dark"}
+                disabled={saving}
+              >
+                Save
+              </button>
+            </div>
           </form>
         </fieldset>
       )}

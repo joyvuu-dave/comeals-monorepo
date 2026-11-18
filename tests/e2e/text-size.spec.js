@@ -21,6 +21,8 @@ const WIDTHS = [
   { device: "an iPad on its side", width: 590, height: 410 },
   { device: "an upright iPad", width: 410, height: 590 },
   { device: "a laptop", width: 640, height: 360 },
+  // WCAG 1.4.10: a page must fit 320 pixels wide (a laptop at 400%).
+  { device: "a laptop at 400%", width: 320, height: 180 },
 ];
 
 // `scope` limits the check to a dialog: the page behind it is hidden
@@ -71,6 +73,12 @@ const SCREENS = [
     scope: "[role='dialog']",
   },
   {
+    name: "event edit",
+    url: `${CALENDAR}events/edit/70/`,
+    ready: "form",
+    scope: "[role='dialog']",
+  },
+  {
     name: "rotation",
     url: `${CALENDAR}rotations/show/10/`,
     ready: "[data-populated='true']",
@@ -79,7 +87,7 @@ const SCREENS = [
 ];
 
 for (const { device, width, height } of WIDTHS) {
-  test.describe(`At 200% zoom on ${device} (${width}px)`, () => {
+  test.describe(`On ${device} (${width}px)`, () => {
     test.use({ viewport: { width, height } });
 
     for (const screen of SCREENS) {
@@ -104,6 +112,14 @@ for (const { device, width, height } of WIDTHS) {
           "the page is wider than the screen",
         ).toBeLessThanOrEqual(width);
         expect(await layoutProblems(page, screen.scope)).toEqual([]);
+        // A form's main button must be on screen without scrolling,
+        // however short the window.
+        if (screen.scope) {
+          const submit = page.locator(`${screen.scope} button[type=submit]`);
+          if (await submit.count()) {
+            await expect(submit).toBeInViewport({ ratio: 1 });
+          }
+        }
       });
     }
 

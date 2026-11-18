@@ -32,6 +32,7 @@ class BashCoverage
     'bin/prod' => 'spec/bin/prod_spec.rb',
     'bin/storm' => 'spec/bin/storm_spec.rb',
     'bin/test-integration' => 'spec/bin/test_integration_spec.rb',
+    'bin/test-ios' => 'spec/bin/test_ios_spec.rb',
     'bin/update-linux-snapshots' => 'spec/bin/update_linux_snapshots_spec.rb',
     'bin/update-snapshots' => 'spec/bin/update_snapshots_spec.rb',
     'bin/visual-coverage' => 'spec/bin/visual_coverage_spec.rb',

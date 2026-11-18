@@ -81,6 +81,11 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
     sandbox.fake_script('bin/npm-audit', "echo 'no vulnerabilities'")
     sandbox.fake_script('bin/visual-coverage', "echo 'Markup branches : 100%'")
     sandbox.fake_script('bin/test-integration', "echo '  95 passed (1.5m)'")
+    sandbox.fake('uname', 'echo Darwin')
+    sandbox.fake_script('bin/test-ios', "echo '==> Running integration tests...'; " \
+                                        "echo '  ✓ iPhone 17, text 100%, login'; " \
+                                        "echo '36 screens: 2 failed, 2 of them known (tests/ios/known_failures.txt). " \
+                                        "Pictures: tmp/ios'")
   end
 
   # bundle, npm, git: answers that take the place of the passing ones.
@@ -148,6 +153,7 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
                               '    ✓  Playwright           300 passed',
                               '    ✓  Screen states        100%',
                               '    ✓  Integration          95 passed',
+                              '    ✓  iOS Safari           36 screens: 2 failed, 2 of them known',
                               '    ✓  Gem freshness        all current',
                               '    ✓  npm freshness        all current'
                             ])
@@ -162,7 +168,8 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
         'curl -sf https://endoflife.date/api/nodejs/24.json',
         'bundle exec rubycritic app lib --no-browser --format console --minimum-score 80',
         'bin/tapioca gem --verify', 'bin/tapioca dsl --verify', 'bin/dafny-verify', 'bin/tla-check',
-        'bin/bundle-budget', 'gitleaks git . --no-banner --redact', 'bin/visual-coverage', 'bin/test-integration'
+        'bin/bundle-budget', 'gitleaks git . --no-banner --redact', 'bin/visual-coverage', 'bin/test-integration',
+        'bin/test-ios'
       )
       debride = sandbox.calls_to('bundle').find { |call| call.args[1] == 'debride' }
       expect(debride.args[2..4]).to eq(['--rails', '--whitelist', debride.args[4]])
@@ -826,6 +833,41 @@ RSpec.describe 'bin/check', bash_coverage: BashCoverage.new('spec/bin/check_spec
 
       expect(summary_line(result.output, 'Playwright')).to eq('✓  Playwright           unknown')
       expect(summary_line(result.output, 'Integration')).to eq('✓  Integration          unknown')
+    end
+
+    it 'says the iOS check did not run on a machine that is not a Mac' do
+      sandbox.fake('uname', 'echo Linux')
+
+      result = run_check
+
+      expect(result).to be_success, result.output
+      expect(step_output(result.output, 'iOS Safari')).to include('Not run: the iOS simulators need macOS')
+      expect(summary_line(result.output, 'iOS Safari')).to eq('ℹ  iOS Safari           not run: needs macOS')
+      expect(sandbox.call_lines).not_to include('bin/test-ios')
+    end
+
+    it 'fails the iOS check and lists its failed screens, not the passing ones' do
+      sandbox.fake_script('bin/test-ios', "echo 'Seeding...'; echo '==> Running integration tests...'; " \
+                                          "echo '  ✓ iPad mini, text 100%, login'; " \
+                                          "echo '  ✗ iPhone 17, text 200%, meal'; " \
+                                          "echo '      the page is 711 wide on a 402 screen'; exit 1")
+
+      result = run_check
+
+      expect(result).not_to be_success
+      output = step_output(result.output, 'iOS Safari')
+      expect(output).to include('✗ bin/test-ios failed', '✗ iPhone 17, text 200%, meal',
+                                'the page is 711 wide on a 402 screen')
+      expect(output).not_to include('iPad mini, text 100%, login', 'Seeding')
+      expect(summary_line(result.output, 'iOS Safari')).to eq('✗  iOS Safari           see the list above')
+    end
+
+    it 'says unknown for an iOS check that passed and printed no count' do
+      sandbox.fake_script('bin/test-ios')
+
+      result = run_check
+
+      expect(summary_line(result.output, 'iOS Safari')).to eq('✓  iOS Safari           unknown')
     end
 
     it 'fails the screen states below the threshold and shows the unseen branches' do

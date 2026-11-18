@@ -972,10 +972,18 @@ test.describe("Error Handling & Edge Cases", () => {
             }).toPass({ timeout: 5000 });
             const tapped = await part.evaluate((element) => {
               const box = element.getBoundingClientRect();
-              const right = Math.min(
+              // The right edge of the part that shows: on a phone the
+              // month grid is wider than the screen and scrolls sideways
+              // in its own box (.calendar-scroll), which hides the rest.
+              let right = Math.min(
                 box.right,
                 window.document.documentElement.clientWidth,
               );
+              for (let p = element.parentElement; p; p = p.parentElement) {
+                if (window.getComputedStyle(p).overflowX !== "visible") {
+                  right = Math.min(right, p.getBoundingClientRect().right);
+                }
+              }
               const hit = window.document.elementFromPoint(
                 right - 10,
                 box.bottom - 10,
