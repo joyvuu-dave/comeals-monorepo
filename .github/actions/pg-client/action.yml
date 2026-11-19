@@ -26,8 +26,11 @@ runs:
           exit 0
         fi
         echo "pg_dump is ${client:-not installed}; installing ${server} to match the server"
-        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql-common > /dev/null
-        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+        # The runner's package lists can be missing or old, and then apt
+        # cannot find postgresql-common (exit code 100). Update them first.
+        sudo apt-get update -qq
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql-common
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
         package=$(apt-cache madison "postgresql-client-${major}" \
           | awk -v want="${server}-" '$3 ~ /pgdg/ && index($3, want) == 1 { print $3; exit }')
         if [ -z "$package" ]; then
@@ -37,5 +40,5 @@ runs:
           exit 1
         fi
         sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-downgrades \
-          "postgresql-client-${major}=${package}" > /dev/null
+          "postgresql-client-${major}=${package}"
         pg_dump --version
