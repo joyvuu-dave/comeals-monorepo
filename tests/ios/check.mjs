@@ -161,10 +161,11 @@ function simulators() {
   });
 }
 
+// bootstatus -b boots the device only when it is not booted yet, and
+// waits until it is ready. A separate `simctl boot` chosen from the
+// state read at the start failed when the device was booted after that
+// read: "Unable to boot device in current state: Booted".
 function boot(device) {
-  if (device.state !== "Booted") {
-    execFileSync("xcrun", ["simctl", "boot", device.udid]);
-  }
   execFileSync("xcrun", ["simctl", "bootstatus", device.udid, "-b"], {
     stdio: "ignore",
   });
