@@ -5,6 +5,7 @@ const {
   setupAuthenticatedPage,
   FAKE_TODAY,
 } = require("../helpers/integration_setup");
+const { findLayoutProblems } = require("../helpers/accessibility");
 
 const auth = loadAuthInfo();
 
@@ -46,6 +47,23 @@ test.describe("Calendar (real backend)", () => {
     });
     await expect(mealTile(page, "4 signed up")).toBeVisible();
     await expect(mealTile(page, "3 attended")).toBeVisible();
+  });
+
+  // #300: on a phone a long entry wraps onto many lines. A week with
+  // more entries than fit used to scroll by itself, and a phone shows no
+  // scroll bar, so its last entries were hidden. Now the week grows.
+  test("on a phone, every entry of every week shows", async ({ page }) => {
+    await page.setViewportSize({ width: 402, height: 874 });
+    await openCalendar(page);
+    await expect(page.locator(".rbc-event").first()).toBeVisible();
+
+    expect(await page.evaluate(findLayoutProblems, "body")).toEqual([]);
+    const rows = await page
+      .locator(".rbc-month-row")
+      .evaluateAll((all) =>
+        all.map((row) => row.scrollHeight - row.clientHeight),
+      );
+    expect(rows.every((hidden) => hidden <= 1)).toBe(true);
   });
 
   test("community event appears on calendar", async ({ page }) => {

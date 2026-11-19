@@ -228,12 +228,14 @@ button:focus {
   margin-bottom: 0;
 }
 
-/* react-big-calendar sizes itself from an explicit height. It sits on
-   the calendar itself, not its wrapper div, so the wrapper (and every
-   ancestor, including the offwhite background and the sidebar's flex
-   row) grows to hold the nav header plus the full grid. */
+/* react-big-calendar sizes its month from the calendar's height. It
+   sits on the calendar itself, not its wrapper div, so the wrapper (and
+   every ancestor, including the offwhite background and the sidebar's
+   flex row) grows to hold the nav header plus the full grid. A minimum,
+   not a fixed height: a week with more entries than fit makes its row,
+   and so the month, taller (#300). */
 .calendar {
-  height: 2000px;
+  min-height: 2000px;
 }
 
 .offwhite {
@@ -422,11 +424,22 @@ an #e6e6e6 cell — 2.3:1 contrast. WCAG AA (the Lighthouse check) needs
   color: var(--gray-11);
 }
 
-/*
-Allow for all content to be seen
-*/
+/* Every entry in a week shows. A week row is at least its share of
+   the month's height and grows to hold its entries; react-big-calendar
+   draws them all (showAllEvents in calendar/show.jsx) inside a box of
+   its own that would scroll, and here does not. A row that scrolled by
+   itself hid entries on a phone, which shows no scroll bar (#300). */
 .rbc-month-row {
-  overflow: scroll !important;
+  /* With its overflow visible, a row's smallest height is its content,
+     so react-big-calendar's equal shares (flex: 1 0 0) give way only to
+     a week that needs more. */
+  overflow: visible !important;
+  height: auto !important;
+}
+
+.rbc-row-content-scrollable .rbc-row-content-scroll-container {
+  overflow-y: visible !important;
+  height: auto !important;
 }
 
 /*

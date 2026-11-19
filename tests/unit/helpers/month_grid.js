@@ -45,8 +45,11 @@ export function chipDay(container, title) {
 // The chip's line in its week: 0 for the top line of chips.
 export function chipLine(container, title) {
   const box = chipBox(container, title);
+  // The calendar shows every chip (showAllEvents), so the lines of chips
+  // sit one box deeper than the date cells' line, in
+  // .rbc-row-content-scroll-container.
   const lines = [
-    ...box.closest(".rbc-row-content").querySelectorAll(":scope > .rbc-row"),
+    ...box.closest(".rbc-row-content").querySelectorAll(".rbc-row"),
   ].slice(1);
   return lines.indexOf(box.parentElement);
 }

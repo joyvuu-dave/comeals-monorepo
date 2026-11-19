@@ -556,6 +556,7 @@ const MainCalendar = observer(() => {
                 components={COMPONENTS}
                 getNow={getCommunityNow}
                 toolbar={false}
+                showAllEvents
               />
             </div>
           </Profiler>

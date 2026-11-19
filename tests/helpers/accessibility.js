@@ -177,8 +177,10 @@ async function missedByTab(page, scope = "body") {
 
 // Layout faults that large text causes, inside `scope`: two controls
 // drawn on top of each other (a tap meant for one hits the other), and
-// text that a box with hidden overflow cuts off, or that spills out of
-// a button, link, label, heading or header bar. A select is left out:
+// text that a box with hidden overflow cuts off, hides in a box that
+// scrolls up and down by itself, or spills out of a button, link,
+// label, heading or header bar. Two controls overlap only where both
+// can be seen: a box that clips or scrolls hides what is outside it. A select is left out:
 // it shows one option and hides the rest on purpose. So is text hidden
 // for everyone but a screen reader (.visually-hidden).
 // Runs in the page, so it uses nothing from this file. The iOS
@@ -194,14 +196,32 @@ function findLayoutProblems(scopeSelector) {
       .replace(/\s+/g, " ")
       .slice(0, 40);
 
+  // The part of an element that can be seen: its box, less what a box
+  // around it that clips or scrolls its content hides.
+  const visibleRect = (el) => {
+    const r = el.getBoundingClientRect();
+    let { left, top, right, bottom } = r;
+    for (let p = el.parentElement; p; p = p.parentElement) {
+      const style = window.getComputedStyle(p);
+      if (style.overflowX !== "visible" || style.overflowY !== "visible") {
+        const c = p.getBoundingClientRect();
+        left = Math.max(left, c.left);
+        top = Math.max(top, c.top);
+        right = Math.min(right, c.right);
+        bottom = Math.min(bottom, c.bottom);
+      }
+    }
+    return { left, top, right, bottom };
+  };
+
   const controls = [
     ...root.querySelectorAll(
       "button, a[href], input, select, textarea, [role='button']",
     ),
   ]
     .filter(shown)
-    .map((el) => [el, el.getBoundingClientRect()])
-    .filter(([, r]) => r.width > 0 && r.height > 0);
+    .map((el) => [el, visibleRect(el)])
+    .filter(([, r]) => r.right - r.left > 0 && r.bottom - r.top > 0);
   // The nearest box that stays put while the page scrolls (the
   // sticky row of form buttons). Fields scroll under it by design, so
   // a control inside one and a control outside it may overlap.
@@ -237,11 +257,23 @@ function findLayoutProblems(scopeSelector) {
     if (!shown(el) || !el.textContent.trim()) continue;
     const style = window.getComputedStyle(el);
     const hides = (v) => v === "hidden" || v === "clip";
+    const scrolls = (v) => v === "auto" || v === "scroll";
     if (
       (hides(style.overflowX) && el.scrollWidth > el.clientWidth + 1) ||
       (hides(style.overflowY) && el.scrollHeight > el.clientHeight + 1)
     ) {
       cut.push(`text cut off: "${name(el)}"`);
+    } else if (
+      scrolls(style.overflowY) &&
+      el.scrollHeight > el.clientHeight + 1 &&
+      el !== window.document.scrollingElement &&
+      !el.closest("[role='dialog']")
+    ) {
+      // A part of the page that scrolls up and down by itself. A phone
+      // shows no scroll bar, so nothing tells a person that more is
+      // hidden in it (a calendar week with more entries than fit). A
+      // form in a dialog may scroll: its own title and buttons stay.
+      cut.push(`text hidden in a box that scrolls by itself: "${name(el)}"`);
     } else if (
       !hides(style.overflowY) &&
       (el.matches(
