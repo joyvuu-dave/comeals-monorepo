@@ -115,6 +115,13 @@ const styles = {
     justifyContent: "space-between",
     flexWrap: "nowrap",
   },
+  // "today" and the two arrows. They wrap when they do not fit on one
+  // line, as on an iPhone with large text (#301).
+  monthButtons: {
+    display: "flex",
+    justifyContent: "space-between",
+    flexWrap: "wrap",
+  },
   // The month's name and its buttons share a line when they fit, and
   // the buttons move to a second line when they do not (320 pixels).
   nav: {
@@ -161,7 +168,7 @@ const MonthNavHeader = memo(function MonthNavHeader({
     <div style={styles.nav}>
       {/* The page's one top heading, in the size of an h2. */}
       <h1 style={styles.month}>{dayjs.utc(dateStr).format("MMMM YYYY")}</h1>
-      <span style={styles.main}>
+      <span style={styles.monthButtons}>
         <button className="mar-sm press" onClick={onToday}>
           today
         </button>

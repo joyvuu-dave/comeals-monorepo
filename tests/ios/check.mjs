@@ -249,7 +249,35 @@ async function check(session, screen, textSize) {
     "return { pageWidth: document.documentElement.scrollWidth, screenWidth: window.innerWidth };",
   );
   if (pageWidth > screenWidth) {
-    problems.push(`the page is ${pageWidth} wide on a ${screenWidth} screen`);
+    // The elements that reach past the right edge with none of their
+    // own children doing so: the ones whose width is the cause. A box
+    // that scrolls sideways or clips holds its content, so what is
+    // inside one does not widen the page.
+    const wide = await session.run(`
+      const width = window.innerWidth;
+      const holds = (el) => {
+        for (let p = el.parentElement; p; p = p.parentElement) {
+          if (getComputedStyle(p).overflowX !== "visible") return true;
+        }
+        return false;
+      };
+      const past = (el) => el.getBoundingClientRect().right > width + 1 && !holds(el);
+      return [...document.body.querySelectorAll("*")]
+        .filter((el) => past(el) && ![...el.children].some(past))
+        .slice(0, 3)
+        .map((el) => {
+          const r = el.getBoundingClientRect();
+          const name = (el.getAttribute("aria-label") || el.textContent || "")
+            .trim().replace(/\\s+/g, " ").slice(0, 30);
+          return el.tagName.toLowerCase() +
+            (el.className && typeof el.className === "string" ? "." + el.className.trim().split(/\\s+/).join(".") : "") +
+            ' "' + name + '" ' + Math.round(r.left) + " to " + Math.round(r.right);
+        });
+    `);
+    problems.push(
+      `the page is ${pageWidth} wide on a ${screenWidth} screen` +
+        (wide.length ? `; past the edge: ${wide.join("; ")}` : ""),
+    );
   }
   problems.push(
     ...(await session.run(

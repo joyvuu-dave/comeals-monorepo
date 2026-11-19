@@ -2077,7 +2077,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>A button’s height comes from a unitless line height, with 36px as its smallest height. With larger text, iOS Safari makes the font bigger but not a height set in rem or em, so a fixed height left the text taller than the button.</p>
 </li><li>
-<p>Known failures in iOS Safari: on an iPhone at 200% text, every screen except login is wider than the screen (449 pixels on a 402 screen, and the meal page 711), and the calendar cuts off two day names (#301).</p>
+<p>Known failures in iOS Safari: on an iPhone at 200% text, the meal page is 711 pixels wide on a 402 screen, because each of the sign-up table’s five columns grows with the text, and the calendar cuts off the day names “Mon” and “Wed” (#301).</p>
 </li><li>
 <p>The iPad’s and iPhone’s Larger Text setting does not change the app’s text, because the app does not use the system’s text styles (<code>-apple-system-body</code>).</p>
 </li></ul>
@@ -2106,6 +2106,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-18: Fixed #300. A week row had a fixed share of the month’s height and scrolled by itself, so on a phone the entries past its end were hidden with no scroll bar. Rows now keep their equal share and grow when their entries need more room.</p>
 </li><li>
 <p>2026-11-18: Fixed the text that spilled out of buttons on an iPhone with large text (#301, first part). Buttons now take their height from a unitless line height. Every screenshot at normal text is the same as before.</p>
+</li><li>
+<p>2026-11-18: The calendar’s “today” button and month arrows wrap to a second line when they do not fit, so the calendar and the forms over it fit an iPhone at 200% text. When a page is too wide, bin/test-ios now names the elements that reach past the edge.</p>
 </li></ul>
 </div>
 </details>

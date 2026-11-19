@@ -3,13 +3,8 @@
 # run fails until its line is removed, so this list only gets shorter.
 # Any screen not listed must pass.
 
-# #301: with large text the pages are wider than an iPhone, and the
+# #301: with large text the meal page is wider than an iPhone, and the
 # calendar cuts off two day names.
 iPhone 17, text 200%, calendar
 iPhone 17, text 200%, meal
 iPhone 17, text 200%, closed meal
-iPhone 17, text 200%, new event
-iPhone 17, text 200%, new Common House booking
-iPhone 17, text 200%, new guest room booking
-iPhone 17, text 200%, profile
-iPhone 17, text 200%, rotation
