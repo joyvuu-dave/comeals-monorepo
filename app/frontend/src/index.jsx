@@ -61,6 +61,7 @@ import ErrorBoundary from "./components/app/error_boundary";
 import OuterErrorBoundary from "./components/app/outer_error_boundary";
 import { forgetCrashesAfterAnHourWithout } from "./helpers/crash_reload_wait";
 import { showBootCrash } from "./helpers/boot_crash";
+import { followSystemTextSize } from "./helpers/system_text_size";
 import { CALENDAR_PATH } from "./routes";
 
 function TrailingSlash() {
@@ -171,6 +172,9 @@ document.addEventListener("DOMContentLoaded", () => {
 
 function startApp() {
   clearCachesForNewBuild();
+  // Before the first render, so the first screen already has the text
+  // size the iPhone's setting asks for (helpers/system_text_size.ts).
+  followSystemTextSize();
 
   const store = DataStore.create();
   appStore = store;

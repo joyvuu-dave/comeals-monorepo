@@ -5,19 +5,28 @@
 // its width. This script drives Safari itself, in the iPhone and iPad
 // simulators that come with Xcode, through safaridriver (Apple's
 // WebDriver server, part of macOS). For each device it opens every
-// screen at normal text and at 200% text, and fails when:
+// screen at normal text, at 200% text, and with the device's own Larger
+// Text setting at its largest, and fails when:
 //
 //   - the page is wider than the screen,
 //   - two controls are drawn on top of each other, or a box cuts off
 //     text (findLayoutProblems in tests/helpers/accessibility.js, the
 //     same check the Playwright text-size spec runs), or
-//   - a form's main button is not on screen without scrolling.
+//   - a form's main button is not on screen without scrolling, or
+//   - the root's font size is not the one the text setting asks for
+//     (helpers/system_text_size.ts).
 //
 // 200% text is set with -webkit-text-size-adjust on the page's root.
 // In iOS Safari that draws every font twice as large while the page
 // keeps its width in CSS pixels, which is what a larger setting of the
 // iPhone's aA button does. (Desktop WebKit and Chromium ignore the
 // property, so this check can only run in the simulator.)
+//
+// The Larger Text setting is set with `xcrun simctl ui <device>
+// content_size`, as Settings → Accessibility → Display & Text Size does.
+// Its largest size makes the system's text 312% of the default; the app
+// follows it up to 200%. The setting goes back to the default when the
+// run ends, even when it fails.
 //
 // It runs against the real Rails test server and the seeded data, so
 // run it through bin/test-ios, which seeds, starts the server and stops
@@ -46,7 +55,30 @@ const auth = JSON.parse(
 // The newest iOS runtime installed, and on it one phone and one iPad.
 // The iPhone 17 is 402 CSS pixels wide, the iPad mini 744 upright.
 const DEVICES = ["iPhone 17", "iPad mini (A17 Pro)"];
-const TEXT_SIZES = [100, 200];
+// Each text setting: its name in the results, the -webkit-text-size-adjust
+// it sets, the Larger Text setting, and the root font size the app must
+// then have.
+const DEFAULT_CONTENT_SIZE = "large";
+const TEXT_SETTINGS = [
+  {
+    name: "text 100%",
+    adjust: 100,
+    contentSize: DEFAULT_CONTENT_SIZE,
+    rootPx: 16,
+  },
+  {
+    name: "text 200%",
+    adjust: 200,
+    contentSize: DEFAULT_CONTENT_SIZE,
+    rootPx: 16,
+  },
+  {
+    name: "Larger Text at its largest",
+    adjust: 100,
+    contentSize: "accessibility-extra-extra-extra-large",
+    rootPx: 32,
+  },
+];
 
 const CALENDAR = "/calendar/all/2026-01-15/";
 const SCREENS = [
@@ -136,6 +168,12 @@ function boot(device) {
   execFileSync("xcrun", ["simctl", "bootstatus", device.udid, "-b"], {
     stdio: "ignore",
   });
+}
+
+// The device's Larger Text setting. Safari uses the new size from the
+// next page it opens.
+function contentSize(device, size) {
+  execFileSync("xcrun", ["simctl", "ui", device.udid, "content_size", size]);
 }
 
 function freePort() {
@@ -233,18 +271,33 @@ async function waitFor(session, selector) {
   throw new Error(`"${selector}" did not appear`);
 }
 
-async function check(session, screen, textSize) {
+async function check(session, screen, setting) {
   await signIn(session, screen.signedIn !== false);
   await session.go(`${BASE}${screen.url}`);
   await waitFor(session, screen.ready);
   await session.run(
     "document.documentElement.style.webkitTextSizeAdjust = arguments[0];",
-    [`${textSize}%`],
+    [`${setting.adjust}%`],
   );
   // Let the page lay itself out again with the new text size.
   await new Promise((r) => setTimeout(r, 500));
 
   const problems = [];
+  const rootPx = await session.run(
+    // The size the app set (helpers/system_text_size.ts), not the
+    // computed size, which -webkit-text-size-adjust also changes.
+    "return parseFloat(document.documentElement.style.fontSize);",
+  );
+  // NaN, when the app set no size, comes back from WebDriver as null.
+  if (rootPx === null) {
+    problems.push(
+      `the app set no root font size; this text setting needs ${setting.rootPx}px`,
+    );
+  } else if (Math.abs(rootPx - setting.rootPx) > 0.01) {
+    problems.push(
+      `the root's font size is ${rootPx}px; this text setting needs ${setting.rootPx}px`,
+    );
+  }
   const { pageWidth, screenWidth } = await session.run(
     "return { pageWidth: document.documentElement.scrollWidth, screenWidth: window.innerWidth };",
   );
@@ -306,16 +359,17 @@ async function checkDevice(device, failures) {
   try {
     const session = await webdriver(driver.port).open(device.udid);
     try {
-      for (const textSize of TEXT_SIZES) {
+      for (const setting of TEXT_SETTINGS) {
+        contentSize(device, setting.contentSize);
         for (const screen of SCREENS) {
-          const label = `${device.name}, text ${textSize}%, ${screen.name}`;
+          const label = `${device.name}, ${setting.name}, ${screen.name}`;
           let problems;
           try {
-            problems = await check(session, screen, textSize);
+            problems = await check(session, screen, setting);
           } catch (error) {
             problems = [error.message];
           }
-          const file = `${device.name}-${textSize}-${screen.name}`.replace(
+          const file = `${device.name}-${setting.name}-${screen.name}`.replace(
             /[^\w-]+/g,
             "-",
           );
@@ -337,6 +391,7 @@ async function checkDevice(device, failures) {
     }
   } finally {
     driver.child.kill();
+    contentSize(device, DEFAULT_CONTENT_SIZE);
     execFileSync("xcrun", ["simctl", "shutdown", device.udid]);
   }
   return checked;
