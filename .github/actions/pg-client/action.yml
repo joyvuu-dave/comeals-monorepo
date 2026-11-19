@@ -1,0 +1,41 @@
+# Installs the PostgreSQL client (pg_dump) at the exact version of the
+# job's postgres service, from apt.postgresql.org. A job that dumps the
+# schema needs this: pg_dump refuses a server newer than its own major
+# version, and an older minor version can print lines a newer one leaves
+# out (on 2026-11-12 every column gained an "ALTER COLUMN ... SET
+# (pg_attver=...)" line). The runner image's own pg_dump cannot be used:
+# while GitHub rolls out a new image, some runners have one version and
+# some the other (#303). Needs DATABASE_URL.
+name: PostgreSQL client at the server's version
+description: Install pg_dump at the same version as the job's postgres service.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        set -euo pipefail
+        server=$(psql "$DATABASE_URL" -tAc 'SHOW server_version' | awk '{ print $1 }')
+        if [ -z "$server" ]; then
+          echo "Could not read the server's version." >&2
+          exit 1
+        fi
+        major="${server%%.*}"
+        client=$(pg_dump --version 2>/dev/null | awk '{ print $3 }' || true)
+        if [ "$client" = "$server" ]; then
+          echo "pg_dump is already ${server}"
+          exit 0
+        fi
+        echo "pg_dump is ${client:-not installed}; installing ${server} to match the server"
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq postgresql-common > /dev/null
+        sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y > /dev/null
+        package=$(apt-cache madison "postgresql-client-${major}" \
+          | awk -v want="${server}-" '$3 ~ /pgdg/ && index($3, want) == 1 { print $3; exit }')
+        if [ -z "$package" ]; then
+          echo "apt.postgresql.org has no postgresql-client-${major} ${server} for this Ubuntu." \
+               "Move every postgres image in .github/workflows to a version it has:" >&2
+          apt-cache madison "postgresql-client-${major}" >&2
+          exit 1
+        fi
+        sudo DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --allow-downgrades \
+          "postgresql-client-${major}=${package}" > /dev/null
+        pg_dump --version

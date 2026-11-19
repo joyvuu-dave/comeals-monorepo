@@ -72,24 +72,18 @@ jobs:
     steps:
       - uses: actions/checkout@v6
       # pg_dump must be the same version as the server, minor version
-      # included. spec/config/procfile_spec.rb runs db:migrate, which dumps
-      # the schema, and spec/db/structure_sql_spec.rb compares a dump with
-      # db/structure.sql. pg_dump refuses a server newer than its own
-      # major version, and an older minor version can print lines a newer
-      # one leaves out: on 2026-11-12 the postgres:18 image moved to 18.7
-      # while the runner's pg_dump was 18.6, and the dump gained an
-      # "ALTER COLUMN ... SET (pg_attver=...)" line for every column. So
-      # every postgres image is pinned to the runner's pg_dump version,
-      # and this step fails, naming the version to pin, when the runner's
-      # pg_dump changes.
+      # included: spec/config/procfile_spec.rb runs db:migrate, which
+      # dumps the schema, and spec/db/structure_sql_spec.rb compares a
+      # dump with db/structure.sql. The action installs that version; the
+      # step after it checks.
+      - uses: ./.github/actions/pg-client
       - name: Check that pg_dump is the server's version
         run: |
           client=$(pg_dump --version | awk '{ print $3 }')
           server=$(psql postgres://postgres:postgres@localhost:5432/comeals_test -tAc 'SHOW server_version' | awk '{ print $1 }')
           echo "pg_dump ${client}, server ${server}"
           if [ "$client" != "$server" ]; then
-            echo "pg_dump is ${client} and the server is ${server}. They must be the same version." \
-                 "Set every postgres image in .github/workflows to postgres:${client}." >&2
+            echo "pg_dump is ${client} and the server is ${server}. They must be the same version." >&2
             exit 1
           fi
       - uses: ruby/setup-ruby@v1
