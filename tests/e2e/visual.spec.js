@@ -344,6 +344,40 @@ test.describe("Visual Baselines", () => {
     });
   });
 
+  // With large text on a phone, the sign-up table's columns grow wider
+  // than the screen. Then the table scrolls sideways in its own box and
+  // the page keeps the screen's width (#301, attendees_box.jsx). The
+  // root font size stands in for iOS Safari's text size, which only iOS
+  // has; bin/test-ios checks the real one.
+  test("meal page with large text on a phone", async ({ page, context }) => {
+    await page.setViewportSize({ width: 402, height: 874 });
+    await setupAuthenticatedPage(page, context);
+    await page.clock.setFixedTime(FROZEN_NOW);
+
+    await page.goto("/meals/42/edit/");
+    await page.waitForLoadState("networkidle");
+    const table = page.getByRole("table");
+    await expect(
+      table.getByRole("cell", { name: "A - Jane Smith", exact: true }),
+    ).toBeVisible({ timeout: 10000 });
+    await page.evaluate(() => {
+      window.document.documentElement.style.fontSize = "200%";
+    });
+
+    const box = table.locator("xpath=..");
+    await expect(box).toHaveClass("attendees-scroll");
+    expect(
+      await page.evaluate(
+        () => window.document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
+    await box.scrollIntoViewIfNeeded();
+    await page.waitForTimeout(500);
+
+    await expectAccessible(page);
+    await expect(box).toHaveScreenshot("meal-large-text-phone.png");
+  });
+
   test("event creation form", async ({ page, context }) => {
     await setupAuthenticatedPage(page, context);
 

@@ -206,18 +206,21 @@ export const AttendeeComponent = observer(({ resident }) => {
 // keep the headings from staying at the top of the screen.
 function useTooWide(boxRef, tableRef) {
   const [tooWide, setTooWide] = useState(false);
-  useEffect(function () {
-    const box = boxRef.current;
-    const table = tableRef.current;
-    const observer = new ResizeObserver(function () {
-      setTooWide(table.offsetWidth > box.clientWidth);
-    });
-    observer.observe(box);
-    observer.observe(table);
-    return function () {
-      observer.disconnect();
-    };
-  }, [boxRef, tableRef]);
+  useEffect(
+    function () {
+      const box = boxRef.current;
+      const table = tableRef.current;
+      const observer = new ResizeObserver(function () {
+        setTooWide(table.offsetWidth > box.clientWidth);
+      });
+      observer.observe(box);
+      observer.observe(table);
+      return function () {
+        observer.disconnect();
+      };
+    },
+    [boxRef, tableRef],
+  );
   return tooWide;
 }
 
