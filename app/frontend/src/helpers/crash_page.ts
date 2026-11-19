@@ -31,7 +31,9 @@ export const CRASH_LINK_STYLE = { textDecoration: "underline" } as const;
 
 export const CRASH_BUTTON_STYLE = {
   marginTop: "1rem",
-  padding: "0.75rem 2rem",
+  // No padding above and below: the button is the 36px of every button
+  // (components.css), with its text in the middle.
+  padding: "0 2rem",
   fontSize: "1rem",
   lineHeight: "1",
   backgroundColor: "var(--gray-13)",

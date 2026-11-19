@@ -128,6 +128,9 @@ const styles = {
     opacity: "0.75",
     width: "4rem",
     marginTop: "1rem",
+    // Its own height, not the row's: a button's height comes from its
+    // line (components.css), so in a flex row it would stretch.
+    alignSelf: "flex-start",
   },
   month: {
     paddingTop: "1rem",

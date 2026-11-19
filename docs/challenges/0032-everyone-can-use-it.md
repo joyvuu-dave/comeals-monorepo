@@ -34,7 +34,8 @@ An older resident with low vision uses the Common House screen with the text mad
 - Color contrast for calendar chips is pinned by a spec (`spec/serializers/calendar_chip_contrast_spec.rb`).
 - Not checked: a screen reader. axe cannot tell whether what a screen reader says makes sense.
 - A week on the calendar grows to hold all its entries, so a long entry wrapped onto many lines on a phone is never hidden (#300). `findLayoutProblems` fails on any part of a page, other than a form in a dialog, that scrolls up and down by itself, since a phone shows no scroll bar.
-- Known failures in iOS Safari: on an iPhone at 200% text, text spills out of buttons and bars on every screen, because line heights and box heights are set in pixels, and the meal page is 711 pixels wide on a 402 screen (#301).
+- A button's height comes from a unitless line height, with 36px as its smallest height. With larger text, iOS Safari makes the font bigger but not a height set in rem or em, so a fixed height left the text taller than the button.
+- Known failures in iOS Safari: on an iPhone at 200% text, every screen except login is wider than the screen (449 pixels on a 402 screen, and the meal page 711), and the calendar cuts off two day names (#301).
 - The iPad's and iPhone's Larger Text setting does not change the app's text, because the app does not use the system's text styles (`-apple-system-body`).
 
 ## Options
@@ -50,3 +51,4 @@ An older resident with low vision uses the Common House screen with the text mad
 - 2026-11-17: Checked 200% text. Two faults found and fixed: the calendar's header was a fixed height, so at narrow widths its links wrapped below the yellow bar and were drawn on top of the Reserve heading (#299); and a calendar entry cut off a word wider than its day ("attending" at 410 pixels). The header now grows with its text, and a long word breaks onto the next line. `tests/e2e/text-size.spec.js` checks nine screens at three widths. Still to do: the VoiceOver pass.
 - 2026-11-18: The owner chose to check large text with automated tests only, including in the iPhone and iPad simulators. Fixed: every page now fits 320 pixels wide (only the month grid scrolls sideways), and the calendar forms keep their buttons on screen in short windows. Added `bin/test-ios`, which found #300 and #301; the owner chose to list those screens as known failures, run the check in `bin/check`, and fix #300 (let a week row grow), then #301.
 - 2026-11-18: Fixed #300. A week row had a fixed share of the month's height and scrolled by itself, so on a phone the entries past its end were hidden with no scroll bar. Rows now keep their equal share and grow when their entries need more room.
+- 2026-11-18: Fixed the text that spilled out of buttons on an iPhone with large text (#301, first part). Buttons now take their height from a unitless line height. Every screenshot at normal text is the same as before.

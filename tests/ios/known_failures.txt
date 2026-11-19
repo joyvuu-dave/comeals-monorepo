@@ -3,8 +3,8 @@
 # run fails until its line is removed, so this list only gets shorter.
 # Any screen not listed must pass.
 
-# #301: pixel line heights and box heights; the meal page is too wide.
-iPhone 17, text 200%, login
+# #301: with large text the pages are wider than an iPhone, and the
+# calendar cuts off two day names.
 iPhone 17, text 200%, calendar
 iPhone 17, text 200%, meal
 iPhone 17, text 200%, closed meal

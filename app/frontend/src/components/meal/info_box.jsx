@@ -16,7 +16,7 @@ const InfoBox = observer(() => {
     <div className="offwhite button-border-radius" style={styles.main}>
       {/* the anchor lets the close button's confirm bar float under
           the title row without moving anything */}
-      <div className="title flex space-between confirm-bar-anchor">
+      <div className="title flex space-between align-start confirm-bar-anchor">
         <h2>Signed Up</h2>
         <CloseButton />
       </div>

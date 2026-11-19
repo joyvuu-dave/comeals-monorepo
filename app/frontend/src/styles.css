@@ -282,6 +282,13 @@ button:focus {
   justify-content: space-between;
 }
 
+/* Each item keeps its own height. A button's height comes from its line
+   (components.css), so in a row with the default stretch it would grow
+   to the height of the tallest item. */
+.flex.align-start {
+  align-items: flex-start;
+}
+
 .cell {
   box-sizing: border-box;
   flex-shrink: 0;

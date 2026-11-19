@@ -242,8 +242,15 @@ button {
   font-family: inherit;
   font-size: 1rem;
   font-weight: inherit;
-  height: var(--control-height);
-  line-height: calc(var(--control-height) - 2px);
+  /* The height comes from the line height, not a fixed height. A
+     fixed height did not grow with larger text in iOS Safari
+     (Settings > Accessibility > Larger Text), which doubles the font
+     but not a length in rem or em, so the text was taller than its box
+     (#301). A unitless line height grows with the font: 2.125 is the
+     old 34px line at 1rem, so with the 2px border a one-line button is
+     still 36px at normal text. */
+  min-height: var(--control-height);
+  line-height: 2.125;
   padding: 0 0.75em;
   text-align: center;
   text-decoration: none;
@@ -1052,7 +1059,9 @@ table.table-striped tr:nth-child(odd) td {
 .app-banner__button {
   border: none;
   border-radius: var(--radius);
-  padding: 0.4rem var(--space-4);
+  /* No padding above and below: the button is the 36px of every button
+     (components.css), with its text in the middle. */
+  padding: 0 var(--space-4);
   cursor: pointer;
   font-weight: bold;
   font-size: 0.95rem;
