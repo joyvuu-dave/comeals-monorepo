@@ -99,11 +99,13 @@
 @media all and (max-width: 825px) {
   /* No minimum width on the page itself: at 320 pixels wide (a laptop
      zoomed to 400%, WCAG 1.4.10) every page must fit the width. Only
-     the month grid keeps 400, inside .calendar-scroll, which scrolls
-     sideways by itself. */
+     the month grid keeps a minimum, inside .calendar-scroll, which
+     scrolls sideways by itself. The minimum is 25rem, which is 400
+     pixels at normal text. With larger text (iOS Safari's text size)
+     it grows, so each day's name still fits its column. */
   .calendar {
     width: 95vw;
-    min-width: 400px;
+    min-width: 25rem;
     margin-left: auto;
     margin-right: auto;
     margin-top: var(--space-4);
@@ -303,6 +305,16 @@ button:focus {
    stay readable). When the screen is narrower, this box scrolls
    sideways and the rest of the page keeps to the screen's width. */
 .calendar-scroll {
+  overflow-x: auto;
+}
+
+/* The meal page's sign-up table, only when it is wider than its box
+   (attendees_box.jsx adds the class). With large text its five columns
+   grow past a phone's width; then the table scrolls sideways inside
+   its box and the page keeps the screen's width. When the table fits,
+   the box does not scroll, so the column headings stay at the top of
+   the screen while the page scrolls (.sticky-header). */
+.attendees-scroll {
   overflow-x: auto;
 }
 

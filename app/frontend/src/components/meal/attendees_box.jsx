@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { isAlive } from "mobx-state-tree";
 import { useStore } from "../../helpers/store_context";
@@ -199,11 +200,39 @@ export const AttendeeComponent = observer(({ resident }) => {
   );
 });
 
+// True when the table is wider than its box. Only then does the box
+// scroll sideways (.attendees-scroll in styles.css). A box that scrolls
+// is where a sticky heading sticks, so a box that always scrolled would
+// keep the headings from staying at the top of the screen.
+function useTooWide(boxRef, tableRef) {
+  const [tooWide, setTooWide] = useState(false);
+  useEffect(function () {
+    const box = boxRef.current;
+    const table = tableRef.current;
+    const observer = new ResizeObserver(function () {
+      setTooWide(table.offsetWidth > box.clientWidth);
+    });
+    observer.observe(box);
+    observer.observe(table);
+    return function () {
+      observer.disconnect();
+    };
+  }, [boxRef, tableRef]);
+  return tooWide;
+}
+
 const AttendeesBox = observer(() => {
   const store = useStore();
+  const boxRef = useRef(null);
+  const tableRef = useRef(null);
+  const tooWide = useTooWide(boxRef, tableRef);
   return (
-    <div style={styles.main}>
-      <table className="background-white">
+    <div
+      ref={boxRef}
+      style={styles.main}
+      className={tooWide ? "attendees-scroll" : undefined}
+    >
+      <table ref={tableRef} className="background-white">
         <thead>
           <tr>
             <th className="background-white sticky-header">

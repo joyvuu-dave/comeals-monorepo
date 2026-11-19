@@ -2041,7 +2041,7 @@ UNIQUE (idempotency_key)</pre>
 </details>
 <details class="challenge" id="challenge-32" data-status="open" data-area="quality">
   <summary><span class="num">32</span> <span class="title">Everyone can use it</span> <span class="chip status-open">Not started</span> <span class="chip area-quality">quality</span><span class="badge">1 not checked</span></summary>
-  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-18 · <code>docs/challenges/0032-everyone-can-use-it.md</code></div>
+  <div class="meta">Opened 2026-11-07 · reviewed 2026-11-19 · <code>docs/challenges/0032-everyone-can-use-it.md</code></div>
   <details class="watches"><summary>Watches 5 files</summary><ul><li><code>tests/helpers/accessibility.js</code></li><li><code>tests/e2e/keyboard.spec.js</code></li><li><code>tests/e2e/text-size.spec.js</code></li><li><code>tests/ios/check.mjs</code></li><li><code>tests/ios/known_failures.txt</code></li></ul></details>
   <div class="body">
 <span id="label-The+challenge" class="legacy-anchor"></span>
@@ -2063,7 +2063,7 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>The focus ring is one 3px near-black outline, shown by <code>:focus-visible</code> (the end of <code>app/frontend/src/components.css</code>). A tap on a button shows no ring. A text field shows it whenever it has the focus, tapped or not.</p>
 </li><li>
-<p>Large text, by zoom: zooming a page to 200% halves its width in CSS pixels. <code>tests/e2e/text-size.spec.js</code> lays out ten screens (login, calendar, meal, closed meal, the four new forms, event edit, rotation) at half the width of an iPad on its side (590), an upright iPad (410) and a laptop (640), and at 320 by 180 (a laptop at 400%, WCAG 1.4.10). It fails when the page is wider than the screen, when two controls are drawn on top of each other, when a box cuts off text or text spills out of a button, link, heading or header bar (<code>findLayoutProblems</code> in <code>tests/helpers/accessibility.js</code>), or when a form’s main button is not on screen without scrolling. The month grid is never narrower than 400 pixels; on a narrower screen it scrolls sideways in its own box and the rest of the page fits the width.</p>
+<p>Large text, by zoom: zooming a page to 200% halves its width in CSS pixels. <code>tests/e2e/text-size.spec.js</code> lays out ten screens (login, calendar, meal, closed meal, the four new forms, event edit, rotation) at half the width of an iPad on its side (590), an upright iPad (410) and a laptop (640), and at 320 by 180 (a laptop at 400%, WCAG 1.4.10). It fails when the page is wider than the screen, when two controls are drawn on top of each other, when a box cuts off text or text spills out of a button, link, heading or header bar (<code>findLayoutProblems</code> in <code>tests/helpers/accessibility.js</code>), or when a form’s main button is not on screen without scrolling. The month grid is never narrower than 25rem (400 pixels at normal text); on a narrower screen it scrolls sideways in its own box and the rest of the page fits the width.</p>
 </li><li>
 <p>Large text, in iOS Safari: <code>bin/test-ios</code> drives real Safari in the iPhone 17 and iPad mini simulators (Xcode, through Apple’s safaridriver) against the seeded Rails test server. It opens nine screens at normal text and at 200% text, set with <code>-webkit-text-size-adjust</code>, which in iOS Safari makes the text twice as large while the page keeps its width, as the iPhone’s aA button does. It runs the same layout checks. Screens that fail today are listed in <code>tests/ios/known_failures.txt</code> with the issue that will fix them; a new failure, or a listed screen that now passes, fails the run. <code>bin/check</code> runs it on macOS.</p>
 </li><li>
@@ -2077,7 +2077,9 @@ UNIQUE (idempotency_key)</pre>
 </li><li>
 <p>A button’s height comes from a unitless line height, with 36px as its smallest height. With larger text, iOS Safari makes the font bigger but not a height set in rem or em, so a fixed height left the text taller than the button.</p>
 </li><li>
-<p>Known failures in iOS Safari: on an iPhone at 200% text, the meal page is 711 pixels wide on a 402 screen, because each of the sign-up table’s five columns grows with the text, and the calendar cuts off the day names “Mon” and “Wed” (#301).</p>
+<p>When the meal page’s sign-up table is wider than its box (on an iPhone at 200% text it is about 711 pixels on a 402 screen), the table scrolls sideways in its own box and the page keeps the screen’s width. When it fits, the box does not scroll, so the column headings stay at the top of the screen. <code>attendees_box.jsx</code> watches both widths to decide.</p>
+</li><li>
+<p><code>tests/ios/known_failures.txt</code> is empty: all 36 screens pass in both simulators.</p>
 </li><li>
 <p>The iPad’s and iPhone’s Larger Text setting does not change the app’s text, because the app does not use the system’s text styles (<code>-apple-system-body</code>).</p>
 </li></ul>
@@ -2108,6 +2110,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-18: Fixed the text that spilled out of buttons on an iPhone with large text (#301, first part). Buttons now take their height from a unitless line height. Every screenshot at normal text is the same as before.</p>
 </li><li>
 <p>2026-11-18: The calendar’s “today” button and month arrows wrap to a second line when they do not fit, so the calendar and the forms over it fit an iPhone at 200% text. When a page is too wide, bin/test-ios now names the elements that reach past the edge.</p>
+</li><li>
+<p>2026-11-19: Fixed the rest of #301. The owner chose: the sign-up table scrolls sideways in its own box only when it does not fit, and the month grid’s smallest width is 25rem, which grows with iOS Safari’s text size, so every day name shows in full. The known failures list is now empty. Still to do: a VoiceOver pass, and the iPhone’s Larger Text setting.</p>
 </li></ul>
 </div>
 </details>

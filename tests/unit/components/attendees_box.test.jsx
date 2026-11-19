@@ -1,7 +1,8 @@
-import { describe, it, expect, beforeEach, vi } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { vitestWaitFor } from "../helpers/wait_for.js";
 import { render, screen, fireEvent, act, within } from "@testing-library/react";
 import { stage } from "../helpers/create_data_store.js";
+import FakeResizeObserver from "../helpers/fake_resize_observer.js";
 
 // Mock external modules before importing stores (same set as the
 // data_store tests — the real DataStore pulls all of these in).
@@ -163,6 +164,71 @@ function loadedStore(form) {
   store.loadData(form, "server");
   return store;
 }
+
+// The box watches whether the table is wider than it, and jsdom has no
+// ResizeObserver. Every test in this file renders the box.
+beforeEach(() => {
+  FakeResizeObserver.made = [];
+  vi.stubGlobal("ResizeObserver", FakeResizeObserver);
+});
+
+afterEach(() => {
+  vi.unstubAllGlobals();
+});
+
+// jsdom lays out nothing, so every width is 0 there. Make the elements
+// say the widths a browser would give them.
+function setWidths(box, table, boxWidth, tableWidth) {
+  Object.defineProperty(box, "clientWidth", {
+    configurable: true,
+    value: boxWidth,
+  });
+  Object.defineProperty(table, "offsetWidth", {
+    configurable: true,
+    value: tableWidth,
+  });
+}
+
+// With large text the table's five columns grow past a phone's width.
+// Then, and only then, its box scrolls sideways, so the page keeps the
+// screen's width (#301). A box that always scrolled would keep the
+// column headings from staying at the top of the screen.
+describe("AttendeesBox's width", () => {
+  function boxAndTable() {
+    const table = screen.getByRole("table");
+    return { box: table.parentElement, table };
+  }
+
+  it("does not scroll sideways when the table fits", () => {
+    renderBox(defaultStore());
+    const { box, table } = boxAndTable();
+
+    setWidths(box, table, 370, 370);
+    act(() => FakeResizeObserver.made[0].resized());
+
+    expect(box).not.toHaveClass("attendees-scroll");
+  });
+
+  it("scrolls sideways when the table is wider than its box, and stops when it fits again", () => {
+    renderBox(defaultStore());
+    const { box, table } = boxAndTable();
+    expect(FakeResizeObserver.made[0].watching).toEqual([box, table]);
+
+    setWidths(box, table, 370, 711);
+    act(() => FakeResizeObserver.made[0].resized());
+    expect(box).toHaveClass("attendees-scroll");
+
+    setWidths(box, table, 370, 360);
+    act(() => FakeResizeObserver.made[0].resized());
+    expect(box).not.toHaveClass("attendees-scroll");
+  });
+
+  it("stops watching when the box goes away", () => {
+    const { unmount } = renderBox(defaultStore());
+    unmount();
+    expect(FakeResizeObserver.made[0].watching).toEqual([]);
+  });
+});
 
 describe("AttendeesBox", () => {
   beforeEach(() => {
