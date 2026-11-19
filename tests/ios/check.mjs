@@ -272,7 +272,7 @@ async function waitFor(session, selector) {
   throw new Error(`"${selector}" did not appear`);
 }
 
-async function check(session, screen, setting) {
+async function check(session, screen, setting, fieldWidths) {
   await signIn(session, screen.signedIn !== false);
   await session.go(`${BASE}${screen.url}`);
   await waitFor(session, screen.ready);
@@ -348,6 +348,27 @@ async function check(session, screen, setting) {
       [screen.scope],
     );
     if (offScreen) problems.push("the form's main button is not on screen");
+    // Larger text must not make a field narrower than it is at normal
+    // text: the form's own padding once grew with the text until a
+    // field held only a few large letters (components.css, fieldset).
+    const widths = await session.run(
+      `return Object.fromEntries([...document.querySelectorAll(arguments[0] + " input:not([type=checkbox]):not([type=radio]):not([type=hidden]), " + arguments[0] + " textarea, " + arguments[0] + " select")]
+         .filter((f) => f.checkVisibility())
+         .map((f) => [f.getAttribute("aria-label") || f.name || f.id || f.tagName.toLowerCase(), Math.round(f.getBoundingClientRect().width)]));`,
+      [screen.scope],
+    );
+    if (setting === TEXT_SETTINGS[0]) {
+      fieldWidths.set(screen.name, widths);
+    } else {
+      const normal = fieldWidths.get(screen.name) || {};
+      for (const [name, width] of Object.entries(widths)) {
+        if (normal[name] !== undefined && width < normal[name] - 1) {
+          problems.push(
+            `the field "${name}" is ${width} wide; at normal text it is ${normal[name]}`,
+          );
+        }
+      }
+    }
   }
   return problems;
 }
@@ -357,6 +378,9 @@ async function checkDevice(device, failures) {
   // One safaridriver for each device: it drives one simulator at a time.
   const driver = await startSafariDriver();
   let checked = 0;
+  // Each form field's width at normal text, by screen, for this device.
+  // TEXT_SETTINGS lists normal text first, so it is measured first.
+  const fieldWidths = new Map();
   try {
     const session = await webdriver(driver.port).open(device.udid);
     try {
@@ -366,7 +390,7 @@ async function checkDevice(device, failures) {
           const label = `${device.name}, ${setting.name}, ${screen.name}`;
           let problems;
           try {
-            problems = await check(session, screen, setting);
+            problems = await check(session, screen, setting, fieldWidths);
           } catch (error) {
             problems = [error.message];
           }

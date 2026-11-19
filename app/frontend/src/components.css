@@ -681,11 +681,15 @@ button.button-link:hover {
 }
 
 /*! Forms */
+/* The padding grows with the text only up to its size at normal text
+   (24px and 32px). With the iPhone's Larger Text setting at 200%, 2rem
+   on each side took 128 of a phone's 402 pixels, and the fields inside
+   were about half the screen wide. */
 fieldset {
   border: 1px solid var(--gray-4);
   border-radius: var(--radius);
   margin-bottom: var(--space-6);
-  padding: var(--space-6) var(--space-8);
+  padding: min(var(--space-6), 24px) min(var(--space-8), 32px);
 }
 fieldset legend {
   font-weight: 700;
