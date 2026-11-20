@@ -15,9 +15,13 @@ const auth = loadAuthInfo();
 // with its own today: "attending" for today's meal, "signed up" for a
 // later one, "attended" for an earlier one. So an exact tile also
 // checks that the server and the seed agree on which day is today.
+// The title as drawn: the link also holds the date in text only a
+// screen reader reads (calendar_chip.tsx), which this leaves out.
 function mealTile(page, countAndWord) {
   return page.locator(".rbc-event", {
-    hasText: new RegExp(`^Dinner\\s*${countAndWord}$`),
+    has: page.locator(".calendar-chip-link > span:first-child", {
+      hasText: new RegExp(`^Dinner\\s*${countAndWord}$`),
+    }),
   });
 }
 

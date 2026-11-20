@@ -20,7 +20,12 @@ import { CALENDAR_PATH } from "../../../app/frontend/src/routes.js";
 import MainCalendar from "../../../app/frontend/src/components/calendar/show.jsx";
 import { createDataStore } from "../helpers/create_data_store.js";
 import { useDeviceZone } from "../helpers/device_zone.js";
-import { chipDay, chipLine, todayCell } from "../helpers/month_grid.js";
+import {
+  chipDay,
+  chipLine,
+  shownTitle,
+  todayCell,
+} from "../helpers/month_grid.js";
 import { setPageSetting } from "../helpers/page_settings_for_tests.js";
 
 // The calendar shows every time in the community's zone, on every
@@ -214,7 +219,7 @@ function daysInMonthShown(container) {
 
 function dimmed(container, title) {
   const chip = [...container.querySelectorAll(".rbc-event")].find(
-    (c) => c.textContent === title,
+    (c) => shownTitle(c) === title,
   );
   return chip.style.filter === "saturate(35%)";
 }

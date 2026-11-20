@@ -156,7 +156,7 @@ test.describe("Critical Paths", () => {
         page.locator('[aria-label="Set meal cost"]').nth(i),
       ).toBeDisabled();
       await expect(
-        page.locator('input[aria-label^="No cost button for"]').nth(i),
+        page.locator('input[aria-label^="No cost"]').nth(i),
       ).toBeDisabled();
     }
 

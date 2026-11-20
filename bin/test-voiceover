@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+# The real macOS VoiceOver reading the app in Safari's engine (challenge
+# 32). Seeds the test database and starts the Rails test server the way
+# bin/test-integration does, then runs the Playwright tests in
+# tests/voiceover/ through Guidepup.
+#
+# VoiceOver reads whatever window has focus, so the browser comes to the
+# front and VoiceOver speaks out loud. Do not use the Mac until it ends.
+# Not part of bin/check yet: the tests go in once they pass 10 runs in a
+# row (challenge 32, History, 2026-11-20).
+#
+# Needs, once per Mac (each is a setting only the Mac's owner can turn on):
+#   - npx @guidepup/setup setup  ("Allow VoiceOver to be controlled with
+#     AppleScript")
+#   - npx @guidepup/setup install voiceover  (Guidepup's VoiceOver
+#     preferences, mounted only while a test runs)
+#   - System Settings → Privacy & Security, for the terminal app:
+#     Full Disk Access, Accessibility, and Automation of VoiceOver,
+#     System Events and Playwright
+#
+# Usage:
+#   bin/test-voiceover
+#   SKIP_BUILD=1 bin/test-voiceover   # reuse the last frontend build
+#   bin/test-voiceover -g cook        # one test, by name
+set -euo pipefail
+cd "$(dirname "$0")/.."
+
+if [ "$(uname)" != "Darwin" ]; then
+  echo "ERROR: bin/test-voiceover needs macOS, where VoiceOver is."
+  exit 1
+fi
+
+if [ "$(defaults read com.apple.VoiceOver4/default SCREnableAppleScript 2>/dev/null)" != "1" ]; then
+  echo "ERROR: VoiceOver does not allow AppleScript control."
+  echo "Run: npx @guidepup/setup setup"
+  exit 1
+fi
+
+INTEGRATION_RUNNER="npx playwright test --config playwright.voiceover.config.js" \
+  exec bin/test-integration "$@"

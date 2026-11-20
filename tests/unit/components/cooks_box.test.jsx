@@ -155,6 +155,27 @@ describe("CooksBox", () => {
     expect(offered(blankRow)).not.toContain("Bob");
   });
 
+  // What a screen reader hears (tests/voiceover/meal.spec.js reads
+  // the same row with VoiceOver).
+  it("names the no-cost switch after the row's cook", () => {
+    renderBox(makeEditStore([makeBill()]));
+    expect(
+      screen.getByRole("checkbox", { name: "No cost for Alice" }),
+    ).toBeInTheDocument();
+  });
+
+  it("calls the no-cost switch of a row with no cook just No cost", () => {
+    renderBox(makeEditStore([makeBill({ resident: null, resident_id: "" })]));
+    expect(screen.getByRole("checkbox", { name: "No cost" })).toBeDisabled();
+  });
+
+  it("reads the empty choice as No cook, not the shrug's characters", () => {
+    renderBox(makeEditStore([makeBill({ resident: null, resident_id: "" })]));
+    expect(screen.getByRole("option", { name: "No cook" })).toHaveTextContent(
+      "¯\\_(ツ)_/¯",
+    );
+  });
+
   // Meal#frozen: the meal is settled or cancelled.
   it("freezes every control when the meal is frozen", () => {
     renderBox(makeEditStore([makeBill()], { meal: { frozen: true } }));

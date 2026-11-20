@@ -10,9 +10,17 @@
 
 const DAYS_IN_WEEK = 7;
 
+// A chip's title as drawn. A chip that is a link also holds its date
+// in text only a screen reader reads (calendar_chip.tsx), which the
+// title leaves out.
+export function shownTitle(chip) {
+  const shown = chip.querySelector(".calendar-chip-link > span:first-child");
+  return (shown ?? chip).textContent;
+}
+
 function chipBox(container, title) {
   const matches = [...container.querySelectorAll(".rbc-event")].filter(
-    (chip) => chip.textContent === title,
+    (chip) => shownTitle(chip) === title,
   );
   if (matches.length !== 1) {
     throw new Error(`${matches.length} chips say "${title}", not 1`);

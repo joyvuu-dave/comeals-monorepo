@@ -4,13 +4,15 @@ title: Everyone can use it
 area: quality
 status: open
 opened: 2026-11-07
-reviewed: 2026-11-19
+reviewed: 2026-11-20
 watches:
   - tests/helpers/accessibility.js
   - tests/e2e/keyboard.spec.js
   - tests/e2e/text-size.spec.js
   - tests/ios/check.mjs
   - tests/ios/known_failures.txt
+  - tests/voiceover/meal.spec.js
+  - bin/test-voiceover
 ---
 
 # Everyone can use it
@@ -32,7 +34,7 @@ An older resident with low vision uses the Common House screen with the text mad
 - Large text, in iOS Safari: `bin/test-ios` drives real Safari in the iPhone 17 and iPad mini simulators (Xcode, through Apple's safaridriver) against the seeded Rails test server. It opens nine screens at normal text, at 200% text set with `-webkit-text-size-adjust` (in iOS Safari that makes the text twice as large while the page keeps its width, as the aA button in Safari does), and with the device's own Larger Text setting at its largest, set with `xcrun simctl ui <device> content_size`. It runs the same layout checks, checks the root font size the app set for each setting, and fails when larger text makes a form's field narrower than it is at normal text. Screens that fail today are listed in `tests/ios/known_failures.txt` with the issue that will fix them; a new failure, or a listed screen that now passes, fails the run. `bin/check` runs it on macOS.
 - Lighthouse gave the sign-in page 100 for accessibility on 2026-11-07 (phone and desktop). It could not test the signed-in pages (challenge 35).
 - Color contrast for calendar chips is pinned by a spec (`spec/serializers/calendar_chip_contrast_spec.rb`).
-- Not checked: a screen reader. axe cannot tell whether what a screen reader says makes sense.
+- A screen reader: `bin/test-voiceover` runs the real macOS VoiceOver in Safari's engine (Playwright's WebKit), against the seeded Rails test server, through Guidepup. It moves with VoiceOver's own keys and checks what VoiceOver says out loud, which axe cannot. Two tests so far (`tests/voiceover/meal.spec.js`): sign someone up for today's dinner starting from the calendar, and read every control in a meal's cook box. It is not in `bin/check` yet: VoiceOver reads whichever window has focus, so a run needs the Mac to itself, and the tests join `bin/check` once they pass 10 runs in a row. It needs four macOS settings that only the Mac's owner can turn on (the top of `bin/test-voiceover` lists them). Not covered yet: the calendar's forms, the guest menu, error messages and other live announcements, and iOS VoiceOver.
 - A week on the calendar grows to hold all its entries, so a long entry wrapped onto many lines on a phone is never hidden (#300). `findLayoutProblems` fails on any part of a page, other than a form in a dialog, that scrolls up and down by itself, since a phone shows no scroll bar.
 - A button's height comes from a unitless line height, with 36px as its smallest height. With larger text, iOS Safari makes the font bigger but not a height set in rem or em, so a fixed height left the text taller than the button.
 - When the meal page's sign-up table is wider than its box (on an iPhone at 200% text it is about 711 pixels on a 402 screen), the table scrolls sideways in its own box and the page keeps the screen's width. When it fits, the box does not scroll, so the column headings stay at the top of the screen. `attendees_box.jsx` watches both widths to decide.
@@ -43,6 +45,7 @@ An older resident with low vision uses the Common House screen with the text mad
 
 1. An automated accessibility check (axe) on every page in the browser suite, failing on any violation.
 2. A by-hand pass with VoiceOver and the keyboard on the calendar and meal pages, with what was found written here.
+3. Automated VoiceOver tests: the real VoiceOver, moved by its own keys, with what it says checked by a test.
 
 ## History
 
@@ -57,3 +60,4 @@ An older resident with low vision uses the Common House screen with the text mad
 - 2026-11-19: Fixed the rest of #301. The owner chose: the sign-up table scrolls sideways in its own box only when it does not fit, and the month grid's smallest width is 25rem, which grows with iOS Safari's text size, so every day name shows in full. The known failures list is now empty. Still to do: a VoiceOver pass, and the iPhone's Larger Text setting.
 - 2026-11-19: The owner chose to make the app follow the iPhone's Larger Text setting, and to check it in `bin/test-ios`. Built with the root font size scaled from `-apple-system-body`, so the default setting keeps today's 16px, and capped at 200%. A VoiceOver pass is still to do; it needs a macOS setting that only the owner can turn on.
 - 2026-11-19: At large text a form's padding grew with the text and took a third of an iPhone's width, so the fields were about half as wide as at normal text. The padding now stops at its normal-text size, and `bin/test-ios` compares each field's width with its width at normal text.
+- 2026-11-20: The owner chose automated VoiceOver tests (option 3) over a by-hand pass, so no person has to judge what VoiceOver says: `bin/test-voiceover`, its own command for now, in Safari's engine, starting with the sign-up flow. The first runs found three faults, now fixed: a dinner link on the calendar did not say its day ("Dinner 2 attending link"); each cook row's No cost switch was named with an internal id ("No cost button for 43849446-546a-…") instead of the cook's name; and an empty cook menu read the shrug's characters out loud. They also found an unnamed "0 stepper" after each cost field, WebKit's arrows on a number field (#306). The tests join `bin/check` once they pass 10 runs in a row.

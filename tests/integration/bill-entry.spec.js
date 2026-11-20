@@ -131,7 +131,7 @@ test.describe("Bill entry (real backend)", () => {
     await expect(costInput).toHaveValue("50.00", { timeout: 10000 });
 
     const switchLabel = page.locator('label[for^="no_cost_switch-"]').first();
-    const noCostBox = page.locator('[aria-label^="No cost button"]').first();
+    const noCostBox = page.locator('[aria-label^="No cost"]').first();
     const confirm = page.locator(".confirm-bar");
 
     // The click alone changes nothing: the bar opens and asks.

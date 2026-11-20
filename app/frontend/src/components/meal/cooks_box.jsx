@@ -152,7 +152,9 @@ const BillEdit = observer(({ bill }) => {
           aria-disabled={locked || undefined}
           aria-label="Select meal cook"
         >
-          <option value={""} key={-1}>
+          {/* The shrug is for the eye. A screen reader reads the
+              shrug's characters one by one, so it hears "No cook". */}
+          <option value={""} key={-1} aria-label="No cook">
             ¯\_(ツ)_/¯
           </option>
           {cookChoices(store, bill).map((resident) => (
@@ -237,7 +239,13 @@ const BillEdit = observer(({ bill }) => {
             }}
             disabled={frozen || !bill.resident_id}
             aria-disabled={locked || undefined}
-            aria-label={`No cost button for ${bill.id}`}
+            // The cook's name, so a screen reader can tell the rows
+            // apart. bill.id is an internal key, never for people.
+            aria-label={
+              bill.resident
+                ? `No cost for ${bill.resident.plainName}`
+                : "No cost"
+            }
           />
           <label htmlFor={`no_cost_switch-${bill.id}`} />
         </span>

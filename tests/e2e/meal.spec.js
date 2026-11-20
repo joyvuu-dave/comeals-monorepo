@@ -852,7 +852,7 @@ test.describe("a cook row whose save is on its way", () => {
       menus: page.getByRole("combobox", { name: "Select meal cook" }),
       costs,
       switches: page.locator('label[for^="no_cost_switch-"]'),
-      boxes: page.locator('[aria-label^="No cost button"]'),
+      boxes: page.locator('[aria-label^="No cost"]'),
     };
   }
 
