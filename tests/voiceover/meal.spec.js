@@ -32,21 +32,17 @@ async function moveTo(voiceOver, command, words, tries = 40) {
   );
 }
 
-// Leave a control and come back, so VoiceOver reads it whole again.
-// Fails with each thing VoiceOver said on the way, so a failure shows
-// whether a key did nothing or VoiceOver's place moved.
-async function readAgain(voiceOver, expected) {
-  const { findNextControl, findPreviousControl } = voiceOver.keyboardCommands;
-  await voiceOver.perform(findPreviousControl);
-  const before = await voiceOver.lastSpokenPhrase();
-  await voiceOver.perform(findNextControl);
-  const after = await voiceOver.lastSpokenPhrase();
-  if (after !== expected) {
-    const log = (await voiceOver.spokenPhraseLog()).slice(-8);
+// What VoiceOver says about the item it is on, read without moving.
+// Leaving the button and coming back failed about 1 time in 8: after
+// the button's state changed, VoiceOver sometimes said "First form
+// element" and stayed put, so "next" went past it (#307). itemText
+// reads the item where it is.
+async function readNow(voiceOver, expected) {
+  const text = await voiceOver.itemText();
+  if (text !== expected) {
+    const log = (await voiceOver.spokenPhraseLog()).slice(-6);
     throw new Error(
-      `Expected "${expected}" on coming back.\n` +
-        `Previous control said: "${before}"\n` +
-        `Next control said: "${after}"\n` +
+      `Expected VoiceOver's item to be "${expected}", it is "${text}".\n` +
         `Last things VoiceOver said:\n  ${log.join("\n  ")}`,
     );
   }
@@ -85,13 +81,13 @@ test("sign someone up for today's dinner from the calendar", async ({
   await voiceOver.act();
   await saved;
   expect(await voiceOver.lastSpokenPhrase()).toBe("selected");
-  await readAgain(voiceOver, "B - Bob Johnson selected toggle button");
+  await readNow(voiceOver, "B - Bob Johnson selected toggle button");
 
   // Take him off again, so the next run finds the seed as it was.
   saved = mealWritten(page, mealId, "DELETE", "residents/");
   await voiceOver.act();
   await saved;
-  await readAgain(voiceOver, "B - Bob Johnson toggle button");
+  await readNow(voiceOver, "B - Bob Johnson toggle button");
 });
 
 test("the cook box says who each control is for", async ({
