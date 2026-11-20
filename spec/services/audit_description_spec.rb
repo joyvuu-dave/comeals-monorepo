@@ -653,13 +653,17 @@ RSpec.describe AuditDescription do
 
     # The rows #155 found the history could not read. A date move is the
     # one an admin can still write today (the admin meal form).
+    # Both days are given. A meal with no date gets one counted back from
+    # today (spec/factories/meals.rb), and on 2026-11-20 that was Nov 6,
+    # so the move changed nothing and wrote no audit.
     it 'says a meal moved to another day' do
+      meal = create(:meal, community: community, date: Date.new(2026, 11, 5))
       meal.update!(date: Date.new(2026, 11, 6))
       moved = meal.audits.where(action: 'update').last
       expect(moved.audited_changes.keys).to eq(['date'])
 
       expect(described_class.describe(moved))
-        .to eq("Meal moved from #{meal.date_previously_was.strftime('%a %b %-d, %Y')} to Fri Nov 6, 2026")
+        .to eq('Meal moved from Thu Nov 5, 2026 to Fri Nov 6, 2026')
     end
 
     # A settlement writes the first kind for each meal it claims
