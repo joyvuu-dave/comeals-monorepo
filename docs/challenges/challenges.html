@@ -2124,6 +2124,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-20: For #306 the owner chose to make the cost field a text field with a decimal keyboard (<code>inputmode=&quot;decimal&quot;</code>), so WebKit adds no arrows to it. The cook box test now checks that VoiceOver reads no “stepper”. The change also fixed a money bug the number field had: the browser reports “.” and “.7” as empty, so typing “.75” one key at a time saved $5.00 (<code>tests/integration/cost-typing.spec.js</code>).</p>
 </li><li>
 <p>2026-11-20: The first 10-run attempt failed 2 times, both on leaving Bob’s button and coming back to it: VoiceOver said “First form element” and stayed on the button. The page replaced no element during 20 sign-ups and removals, so this happens inside WebKit or VoiceOver (#307). The owner chose to read the button with Guidepup’s <code>itemText()</code> instead of moving away and back, and to measure whether turning off the cell’s CSS transition stops it. The failure message now lists what VoiceOver said at each step.</p>
+</li><li>
+<p>2026-11-20: Turning off the cell’s transition did not stop VoiceOver losing its place (1 in 33 moves with it, 1 in 60 without; numbers on #307). The sign-up test now reads Bob’s button with <code>itemText()</code>, without moving, and passed 10 runs in a row.</p>
 </li></ul>
 </div>
 </details>
