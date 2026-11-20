@@ -110,4 +110,8 @@ test("the cook box says who each control is for", async ({
   // Never an internal id, and never the shrug drawn in an empty menu.
   expect(cookBox).not.toMatch(/[0-9a-f]{8}-[0-9a-f]{4}-/);
   expect(cookBox).not.toContain("¯");
+  // A number field brought a second control with no name, WebKit's up
+  // and down arrows, read as "0 stepper" (#306).
+  expect(cookBox).toContain("Set meal cost");
+  expect(cookBox).not.toContain("stepper");
 });

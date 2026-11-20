@@ -2,7 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { observer } from "mobx-react-lite";
 import { useStore } from "../../helpers/store_context";
 import ConfirmBar from "../confirm_bar";
-import { isZeroAmountString, toDisplayAmountString } from "../../helpers/money";
+import {
+  amountMeantBy,
+  isZeroAmountString,
+  toDisplayAmountString,
+} from "../../helpers/money";
 
 const styles = {
   main: {
@@ -81,6 +85,8 @@ const BillEdit = observer(({ bill }) => {
   // A pick in the cook menu that waits for a Yes: the menu's value, or
   // null when no pick is waiting.
   const [pickToConfirm, setPickToConfirm] = useState(null);
+  // The cost as typed so far, while the person is in the cost field.
+  const [typing, setTyping] = useState(null);
   const confirmKeyRef = useRef(0);
 
   // Bills freeze at reconciliation, not at close — the server has
@@ -123,6 +129,13 @@ const BillEdit = observer(({ bill }) => {
   const askingNoCost =
     confirmingNoCost && !frozen && !locked && !isZeroAmountString(bill.amount);
   const askingToRemoveCook = pickToConfirm !== null && !frozen && !locked;
+
+  // The cost as typed so far. "7." and ".7" are on the way to a cost,
+  // and the field must keep them on screen while the bill holds what
+  // they mean ("7", "0.7"). It is shown only while it still means what
+  // the bill holds, so a save's answer or a live update shows through.
+  const meantByTyping = typing === null ? null : amountMeantBy(typing);
+  const costShown = meantByTyping === bill.amount ? typing : bill.amount;
 
   return (
     <div className="confirm-bar-anchor">
@@ -169,23 +182,34 @@ const BillEdit = observer(({ bill }) => {
           {bill.slowToSave && (
             <span className="cost-spinner" aria-hidden="true" />
           )}
+          {/* A text field, not type="number": WebKit gives a number
+              field up and down arrows that VoiceOver reads as a second
+              control with no name, and a number field reports "." and
+              ".7" as empty, so typing ".75" saved $5.00 (#306).
+              inputmode still brings up a keyboard with a decimal point
+              on a phone. */}
           <input
-            type="number"
-            min="0"
-            max="9999.99"
-            step="0.01"
-            value={bill.amount}
+            type="text"
+            inputMode="decimal"
+            autoComplete="off"
+            value={costShown}
             onChange={(e) => {
               // Typing a cost closes the no-cost question, for the same
               // reason a pick in the menu does: the question names the
               // row's cost.
               setConfirmingNoCost(false);
-              // setAmount refuses input that breaks the whole-cents grammar.
-              // On refusal the store is unchanged, so React skips the
-              // re-render — put the stored amount back in the DOM by hand.
-              const landed = bill.setAmount(e.target.value);
-              if (landed !== e.target.value) {
-                e.target.value = landed;
+              // A key that no more typing could turn into a cost does
+              // not land. setAmount refuses too, while the row saves.
+              // Either way the store is unchanged, so React skips the
+              // re-render — put the shown cost back in the DOM by hand.
+              const typed = e.target.value;
+              const meant = amountMeantBy(typed);
+              const landed = meant === null ? null : bill.setAmount(meant);
+              if (landed !== null && landed === meant) {
+                setTyping(typed);
+              } else {
+                setTyping(null);
+                e.target.value = landed ?? costShown;
               }
             }}
             // Coming to the cost box starts the row's wait again, if it
@@ -197,6 +221,7 @@ const BillEdit = observer(({ bill }) => {
             // row at once. Otherwise the row saves 2 seconds after its
             // last edit (data_store_bills.ts).
             onBlur={() => {
+              setTyping(null);
               bill.normalizeAmountDisplay();
               store.saveBillRowNow(bill);
             }}

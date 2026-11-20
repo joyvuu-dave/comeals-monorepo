@@ -565,7 +565,7 @@ test.describe("Meal Editing", () => {
     const cookSelects = page.getByRole("combobox", {
       name: "Select meal cook",
     });
-    const costInputs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    const costInputs = page.getByRole("textbox", { name: "Set meal cost" });
     await expect(cookSelects.nth(1)).toHaveValue("4", { timeout: 10000 });
     await expect(cookSelects.nth(1).locator("option:checked")).toHaveText(
       "D - Carol Davis",
@@ -846,7 +846,7 @@ test.describe("a cook row whose save is on its way", () => {
 
   async function openMeal(page) {
     await page.goto("/meals/42/edit/");
-    const costs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    const costs = page.getByRole("textbox", { name: "Set meal cost" });
     await expect(costs.first()).toHaveValue("25.50", { timeout: 10000 });
     return {
       menus: page.getByRole("combobox", { name: "Select meal cook" }),

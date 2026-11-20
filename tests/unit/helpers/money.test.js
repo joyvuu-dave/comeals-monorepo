@@ -1,5 +1,6 @@
 import { describe, it, expect } from "vitest";
 import {
+  amountMeantBy,
   isValidAmountString,
   isZeroAmountString,
   sameAmount,
@@ -99,5 +100,46 @@ describe("sameAmount", () => {
     expect(sameAmount("10", "1")).toBe(false);
     expect(sameAmount("5.01", "5.1")).toBe(false);
     expect(sameAmount("", "0.01")).toBe(false);
+  });
+});
+
+// What a cost half-way through typing means. A person types one key at
+// a time, so "7." and ".7" are on the way to "7.50" and "0.75". The
+// field shows what was typed, and the store holds what it means.
+describe("amountMeantBy", () => {
+  it.each([
+    ["", ""],
+    [".", ""],
+    ["7", "7"],
+    ["7.", "7"],
+    [".7", "0.7"],
+    [".75", "0.75"],
+    ["12.5", "12.5"],
+    ["9999.99", "9999.99"],
+    ["0000.5", "0000.5"],
+  ])("%j means %j", (typed, meant) => {
+    expect(amountMeantBy(typed)).toBe(meant);
+  });
+
+  it.each([
+    "12345",
+    "1.234",
+    "..",
+    "1.2.3",
+    "-1",
+    "$5",
+    " 5",
+    "5 ",
+    "1e3",
+    "1,50",
+    "abc",
+  ])("%j means nothing", (typed) => {
+    expect(amountMeantBy(typed)).toBeNull();
+  });
+
+  it("means only amounts the whole-cents rule accepts", () => {
+    for (const typed of ["", ".", "7.", ".7", "1234.5", "0."]) {
+      expect(isValidAmountString(amountMeantBy(typed))).toBe(true);
+    }
   });
 });

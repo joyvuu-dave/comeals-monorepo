@@ -643,7 +643,7 @@ test.describe("Error Handling & Edge Cases", () => {
 
         await page.goto("/meals/42/edit/");
         const cost = page
-          .getByRole("spinbutton", { name: "Set meal cost" })
+          .getByRole("textbox", { name: "Set meal cost" })
           .first();
         await expect(cost).toHaveValue("25.50", { timeout: 10000 });
         const sent = page.waitForRequest(
@@ -1305,9 +1305,7 @@ test.describe("Error Handling & Edge Cases", () => {
       const server = await setupAuthenticatedPage(page, context);
 
       await page.goto("/meals/42/edit/");
-      const cost = page
-        .getByRole("spinbutton", { name: "Set meal cost" })
-        .first();
+      const cost = page.getByRole("textbox", { name: "Set meal cost" }).first();
       await expect(cost).toHaveValue("25.50", { timeout: 10000 });
 
       // The other page's save.

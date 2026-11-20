@@ -126,7 +126,13 @@ class MealFormSerializer
              :next_id,
              :prev_id
 
-  many :bills, resource: BillSerializer
+  # By id, so a cook's row stays where it is after a reload. Without
+  # ORDER BY, PostgreSQL returns the rows in the order they sit on disk,
+  # and an UPDATE writes a new copy of the row that can land after the
+  # others: editing the first cook's cost moved that cook to the second
+  # row. Sorted here, on the rows the controller already loaded, so it
+  # adds no query.
+  many :bills, proc { |bills| bills.sort_by(&:id) }, resource: BillSerializer
 
   attribute :residents do |meal|
     T.bind(self, MealFormSerializer)
@@ -134,7 +140,8 @@ class MealFormSerializer
     ResidentSerializer.new(residents(meal), params: { meal: meal, attendance_versions: versions }).to_h
   end
 
-  many :guests, resource: GuestSerializer
+  # By id, for the same reason as the bills.
+  many :guests, proc { |guests| guests.sort_by(&:id) }, resource: GuestSerializer
 
   def reconciled(meal)
     meal.reconciliation_id.present?

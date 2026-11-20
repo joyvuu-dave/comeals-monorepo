@@ -182,6 +182,32 @@ RSpec.describe MealFormSerializer do
     end
   end
 
+  # The meal page draws one cook row per bill, in the order the JSON
+  # lists them. Without ORDER BY, PostgreSQL returns rows in the order
+  # they sit on disk. An UPDATE writes a new copy of the row, which can
+  # land after the others, so editing the first cook's cost could move
+  # that cook to the second row on the next load. Here the row with the
+  # higher id is written first, so the disk order is wrong every time.
+  # Guests are listed the same way.
+  describe 'the order of the bills and the guests' do
+    it 'lists them by id, not in the order they sit on disk' do
+      meal = create(:meal, community: community)
+      second_bills_cook, first_bills_cook = create_list(:resident, 2, community: community, unit: unit)
+      # The lower bill id goes to the cook with the higher resident id,
+      # so the unique index on (meal_id, resident_id) gives the wrong
+      # order too.
+      create(:bill, id: 900_002, meal: meal, resident: second_bills_cook, community: community)
+      create(:bill, id: 900_001, meal: meal, resident: first_bills_cook, community: community)
+      create(:guest, id: 900_002, meal: meal, resident: second_bills_cook)
+      create(:guest, id: 900_001, meal: meal, resident: first_bills_cook)
+
+      form = described_class.new(Meal.includes(:bills, :guests).find(meal.id)).to_h
+
+      expect(form[:bills].pluck(:resident_id)).to eq([first_bills_cook.id, second_bills_cook.id])
+      expect(form[:guests].pluck(:id)).to eq([900_001, 900_002])
+    end
+  end
+
   describe 'the links to the meals before and after' do
     it 'point at the nearest meal each way, and at the meal itself at either end' do
       first = create(:meal, community: community, date: Date.new(2026, 4, 5))

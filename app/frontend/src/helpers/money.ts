@@ -14,6 +14,19 @@ export function isValidAmountString(value: string): boolean {
   return value === "" || WHOLE_CENTS.test(value);
 }
 
+// What a cost means while it is still being typed. A person types one
+// key at a time, so "7." and ".7" are on the way to "7.50" and "0.75",
+// and the cost field must keep them on screen. Returns the whole-cents
+// amount the typed text means ("7." means "7", ".7" means "0.7", "."
+// means ""), or null when no more typing could make it a cost.
+const BEING_TYPED = /^\d{0,4}(\.\d{0,2})?$/;
+
+export function amountMeantBy(typed: string): string | null {
+  if (!BEING_TYPED.test(typed)) return null;
+  const meant = typed.endsWith(".") ? typed.slice(0, -1) : typed;
+  return meant.startsWith(".") ? "0" + meant : meant;
+}
+
 // True when a decimal string means zero: blank, "0", "0.00", "0.0000000".
 // Zero means "not filled in yet" — no_cost is the one explicit way to say a
 // cook spent nothing. Both the display mapping (zero shows as blank) and the

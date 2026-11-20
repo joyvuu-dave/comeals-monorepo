@@ -183,7 +183,7 @@ describe("CooksBox", () => {
       screen.getByRole("combobox", { name: "Select meal cook" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("spinbutton", { name: "Set meal cost" }),
+      screen.getByRole("textbox", { name: "Set meal cost" }),
     ).toBeDisabled();
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
@@ -194,7 +194,7 @@ describe("CooksBox", () => {
       screen.getByRole("combobox", { name: "Select meal cook" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("spinbutton", { name: "Set meal cost" }),
+      screen.getByRole("textbox", { name: "Set meal cost" }),
     ).toBeDisabled();
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
@@ -208,7 +208,7 @@ describe("CooksBox", () => {
       screen.getByRole("combobox", { name: "Select meal cook" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("spinbutton", { name: "Set meal cost" }),
+      screen.getByRole("textbox", { name: "Set meal cost" }),
     ).toBeDisabled();
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
@@ -222,7 +222,7 @@ describe("CooksBox", () => {
     const store = makeEditStore([bill]);
     renderBox(store);
 
-    fireEvent.focus(screen.getByRole("spinbutton", { name: "Set meal cost" }));
+    fireEvent.focus(screen.getByRole("textbox", { name: "Set meal cost" }));
 
     expect(store.restartBillRowWait).toHaveBeenCalledTimes(1);
     expect(store.restartBillRowWait).toHaveBeenCalledWith(bill);
@@ -234,7 +234,7 @@ describe("CooksBox", () => {
       screen.getByRole("combobox", { name: "Select meal cook" }),
     ).toBeDisabled();
     expect(
-      screen.getByRole("spinbutton", { name: "Set meal cost" }),
+      screen.getByRole("textbox", { name: "Set meal cost" }),
     ).toBeDisabled();
     expect(screen.getByRole("checkbox")).toBeDisabled();
   });
@@ -250,7 +250,7 @@ describe("CooksBox", () => {
         makeBill({ id: "2", resident: null, resident_id: "" }),
       ]),
     );
-    const [cooksCost, blankCost] = screen.getAllByRole("spinbutton", {
+    const [cooksCost, blankCost] = screen.getAllByRole("textbox", {
       name: "Set meal cost",
     });
     expect(cooksCost).toBeEnabled();
@@ -328,23 +328,136 @@ describe("CooksBox", () => {
     });
     const store = makeEditStore([bill]);
     renderBox(store);
-    const input = screen.getByRole("spinbutton", { name: "Set meal cost" });
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
 
     fireEvent.change(input, { target: { value: "12.34" } });
     expect(bill.setAmount).toHaveBeenCalledWith("12.34");
-    expect(input).toHaveValue(12.34);
+    expect(input).toHaveValue("12.34");
 
     fireEvent.change(input, { target: { value: "12.345" } });
-    expect(input).toHaveValue(12.34);
+    expect(input).toHaveValue("12.34");
 
     fireEvent.blur(input);
     expect(bill.normalizeAmountDisplay).toHaveBeenCalledTimes(1);
     expect(store.saveBillRowNow).toHaveBeenCalledWith(bill);
   });
 
+  // A bill whose setAmount stores what it is given, like the real one
+  // when the row is not saving.
+  function billThatStores(overrides = {}) {
+    const bill = makeBill(overrides);
+    bill.setAmount = vi.fn((value) => {
+      runInAction(() => {
+        bill.amount = value;
+      });
+      return value;
+    });
+    return bill;
+  }
+
+  // #306. A number field gave VoiceOver a second control with no name,
+  // WebKit's up and down arrows. A text field has none, and inputmode
+  // still brings up the keyboard with a decimal point on a phone.
+  it("is a text field with a decimal keyboard", () => {
+    renderBox(makeEditStore([makeBill()]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+    expect(input).toHaveAttribute("type", "text");
+    expect(input).toHaveAttribute("inputmode", "decimal");
+  });
+
+  // A number field reports "." and ".7" as empty, so typing ".75" one
+  // key at a time saved $5.00 (#306). The field now shows each key as
+  // typed, and the bill holds the amount it means.
+  it("keeps a cost that is half typed, and stores what it means", () => {
+    const bill = billThatStores();
+    renderBox(makeEditStore([bill]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+
+    for (const [typed, meant] of [
+      [".", ""],
+      [".7", "0.7"],
+      [".75", "0.75"],
+    ]) {
+      fireEvent.change(input, { target: { value: typed } });
+      expect(input).toHaveValue(typed);
+      expect(bill.amount).toBe(meant);
+    }
+  });
+
+  it("keeps a dot typed after the dollars", () => {
+    const bill = billThatStores();
+    renderBox(makeEditStore([bill]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+
+    fireEvent.change(input, { target: { value: "7" } });
+    fireEvent.change(input, { target: { value: "7." } });
+    expect(input).toHaveValue("7.");
+    expect(bill.amount).toBe("7");
+    fireEvent.change(input, { target: { value: "7.5" } });
+    expect(input).toHaveValue("7.5");
+    expect(bill.amount).toBe("7.5");
+  });
+
+  it("refuses a key that no more typing could make a cost", () => {
+    const bill = billThatStores({ amount: "7" });
+    renderBox(makeEditStore([bill]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+
+    for (const typed of ["7a", "-7", "7.5.", "$7", "7,5", "12345"]) {
+      fireEvent.change(input, { target: { value: typed } });
+      expect(input).toHaveValue("7");
+    }
+    expect(bill.setAmount).not.toHaveBeenCalled();
+  });
+
+  // The store can change under the field: a save that answers, or a
+  // live update from another screen. The half-typed text is shown only
+  // while it still means what the store holds.
+  it("shows the store's amount once it no longer matches the typing", () => {
+    const bill = billThatStores();
+    renderBox(makeEditStore([bill]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+
+    fireEvent.change(input, { target: { value: "7." } });
+    act(() => {
+      runInAction(() => {
+        bill.amount = "9.00";
+      });
+    });
+    expect(input).toHaveValue("9.00");
+  });
+
+  // Leaving the field ends the typing, so normalizeAmountDisplay's
+  // "7.00" is what shows.
+  it("shows the store's amount after leaving the field", () => {
+    const bill = billThatStores();
+    bill.normalizeAmountDisplay = vi.fn(() => {
+      runInAction(() => {
+        bill.amount = "7.00";
+      });
+    });
+    renderBox(makeEditStore([bill]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+
+    fireEvent.change(input, { target: { value: "7." } });
+    fireEvent.blur(input);
+    expect(input).toHaveValue("7.00");
+  });
+
+  // setAmount refuses while the row saves. The half-typed text must not
+  // stay on screen as if it had been taken.
+  it("drops the typing when the bill refuses it", () => {
+    const bill = makeBill({ amount: "5", setAmount: vi.fn(() => "5") });
+    renderBox(makeEditStore([bill]));
+    const input = screen.getByRole("textbox", { name: "Set meal cost" });
+
+    fireEvent.change(input, { target: { value: "5.2" } });
+    expect(input).toHaveValue("5");
+  });
+
   it("marks a pending cost", () => {
     renderBox(makeEditStore([makeBill({ costPending: true })]));
-    const pending = screen.getByRole("spinbutton", { name: "Set meal cost" });
+    const pending = screen.getByRole("textbox", { name: "Set meal cost" });
     expect(pending).toHaveClass("cost-pending");
     expect(pending).toHaveAttribute("placeholder", "pending");
   });
@@ -846,7 +959,7 @@ describe("CooksBox", () => {
       renderBox(
         loadedStore([{ resident_id: 42, amount: "12", no_cost: false }]),
       );
-      const [alicesCost] = screen.getAllByRole("spinbutton", {
+      const [alicesCost] = screen.getAllByRole("textbox", {
         name: "Set meal cost",
       });
       const [alicesNoCost] = screen.getAllByRole("checkbox");
@@ -859,7 +972,7 @@ describe("CooksBox", () => {
       fireEvent.change(alicesCost, { target: { value: "8" } });
 
       expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
-      expect(alicesCost).toHaveValue(8);
+      expect(alicesCost).toHaveValue("8");
       expect(alicesNoCost).not.toBeChecked();
     });
 
@@ -895,7 +1008,7 @@ describe("CooksBox", () => {
       const [firstRow] = screen.getAllByRole("combobox", {
         name: "Select meal cook",
       });
-      const [firstCost] = screen.getAllByRole("spinbutton", {
+      const [firstCost] = screen.getAllByRole("textbox", {
         name: "Set meal cost",
       });
       expect(firstCost).toBeDisabled();
@@ -1035,9 +1148,7 @@ describe("CooksBox", () => {
         menu: screen.getAllByRole("combobox", { name: "Select meal cook" })[
           index
         ],
-        cost: screen.getAllByRole("spinbutton", { name: "Set meal cost" })[
-          index
-        ],
+        cost: screen.getAllByRole("textbox", { name: "Set meal cost" })[index],
         noCost: screen.getAllByRole("checkbox")[index],
       };
     }
@@ -1234,7 +1345,7 @@ describe("CooksBox", () => {
         screen.getAllByRole("combobox", { name: "Select meal cook" })[0],
         { target: { value: "11" } },
       );
-      const cost = screen.getAllByRole("spinbutton", {
+      const cost = screen.getAllByRole("textbox", {
         name: "Set meal cost",
       })[0];
       fireEvent.change(cost, { target: { value: "5" } });
@@ -1260,7 +1371,7 @@ describe("CooksBox", () => {
       })[0];
       fireEvent.change(menu, { target: { value: "11" } });
       await act(() => vi.advanceTimersByTimeAsync(1900));
-      const cost = screen.getAllByRole("spinbutton", {
+      const cost = screen.getAllByRole("textbox", {
         name: "Set meal cost",
       })[0];
       fireEvent.focus(cost);
@@ -1269,7 +1380,7 @@ describe("CooksBox", () => {
       fireEvent.change(cost, { target: { value: "2" } });
       fireEvent.change(cost, { target: { value: "25" } });
 
-      expect(cost).toHaveValue(25);
+      expect(cost).toHaveValue("25");
       expect(axios).not.toHaveBeenCalled();
     });
 
@@ -1280,7 +1391,7 @@ describe("CooksBox", () => {
         { target: { value: "11" } },
       );
       fireEvent.keyDown(
-        screen.getAllByRole("spinbutton", { name: "Set meal cost" })[0],
+        screen.getAllByRole("textbox", { name: "Set meal cost" })[0],
         { key: "5" },
       );
 

@@ -1151,9 +1151,7 @@ test.describe("Visual Baselines", () => {
         await route.abort("connectionfailed");
       });
       await page.goto("/meals/42/edit/");
-      const cost = page
-        .getByRole("spinbutton", { name: "Set meal cost" })
-        .first();
+      const cost = page.getByRole("textbox", { name: "Set meal cost" }).first();
       await expect(cost).toHaveValue("25.50", { timeout: 10000 });
       const sent = page.waitForRequest(
         (r) =>
@@ -1859,7 +1857,7 @@ test.describe("Visual Baselines", () => {
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
-    const costs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    const costs = page.getByRole("textbox", { name: "Set meal cost" });
     await expect(costs.first()).toHaveValue("25.50", { timeout: 10000 });
     await expect(costs.first()).toBeEnabled();
     await expect(costs.nth(1)).toBeDisabled();
@@ -1883,7 +1881,7 @@ test.describe("Visual Baselines", () => {
 
     await page.goto("/meals/42/edit/");
     await page.waitForLoadState("networkidle");
-    const costs = page.getByRole("spinbutton", { name: "Set meal cost" });
+    const costs = page.getByRole("textbox", { name: "Set meal cost" });
     await expect(costs.first()).toHaveValue("25.50", { timeout: 10000 });
     await costs.first().fill("30.00");
     await costs.first().press("Enter");

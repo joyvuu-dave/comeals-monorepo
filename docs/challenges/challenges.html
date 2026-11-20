@@ -2120,6 +2120,8 @@ UNIQUE (idempotency_key)</pre>
 <p>2026-11-19: At large text a form’s padding grew with the text and took a third of an iPhone’s width, so the fields were about half as wide as at normal text. The padding now stops at its normal-text size, and <code>bin/test-ios</code> compares each field’s width with its width at normal text.</p>
 </li><li>
 <p>2026-11-20: The owner chose automated VoiceOver tests (option 3) over a by-hand pass, so no person has to judge what VoiceOver says: <code>bin/test-voiceover</code>, its own command for now, in Safari’s engine, starting with the sign-up flow. The first runs found three faults, now fixed: a dinner link on the calendar did not say its day (“Dinner 2 attending link”); each cook row’s No cost switch was named with an internal id (“No cost button for 43849446-546a-…”) instead of the cook’s name; and an empty cook menu read the shrug’s characters out loud. They also found an unnamed “0 stepper” after each cost field, WebKit’s arrows on a number field (#306). The tests join <code>bin/check</code> once they pass 10 runs in a row.</p>
+</li><li>
+<p>2026-11-20: For #306 the owner chose to make the cost field a text field with a decimal keyboard (<code>inputmode=&quot;decimal&quot;</code>), so WebKit adds no arrows to it. The cook box test now checks that VoiceOver reads no “stepper”. The change also fixed a money bug the number field had: the browser reports “.” and “.7” as empty, so typing “.75” one key at a time saved $5.00 (<code>tests/integration/cost-typing.spec.js</code>).</p>
 </li></ul>
 </div>
 </details>

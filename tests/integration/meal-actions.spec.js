@@ -430,7 +430,7 @@ test.describe("Meal actions (real backend)", () => {
     await expect(lateSwitch).toBeDisabled();
     await expect(closeButton).toBeDisabled();
     await expect(
-      page.getByRole("spinbutton", { name: "Set meal cost" }).first(),
+      page.getByRole("textbox", { name: "Set meal cost" }).first(),
     ).toBeDisabled();
 
     await answer("Restore this dinner");
