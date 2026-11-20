@@ -594,7 +594,7 @@ under the control, and Yes stays at the far right, away from it.
 /* The cost box is read-only while its row's save is on its way, and the
    lock shows nothing for the first second. components.css gives every
    read-only box a gray background, so this box keeps its white one. */
-.cost-box input[type="number"][readonly] {
+.cost-box input[type="text"][readonly] {
   background-color: var(--white);
 }
 .cost-spinner {
