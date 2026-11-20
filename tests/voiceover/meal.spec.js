@@ -32,6 +32,26 @@ async function moveTo(voiceOver, command, words, tries = 40) {
   );
 }
 
+// Leave a control and come back, so VoiceOver reads it whole again.
+// Fails with each thing VoiceOver said on the way, so a failure shows
+// whether a key did nothing or VoiceOver's place moved.
+async function readAgain(voiceOver, expected) {
+  const { findNextControl, findPreviousControl } = voiceOver.keyboardCommands;
+  await voiceOver.perform(findPreviousControl);
+  const before = await voiceOver.lastSpokenPhrase();
+  await voiceOver.perform(findNextControl);
+  const after = await voiceOver.lastSpokenPhrase();
+  if (after !== expected) {
+    const log = (await voiceOver.spokenPhraseLog()).slice(-8);
+    throw new Error(
+      `Expected "${expected}" on coming back.\n` +
+        `Previous control said: "${before}"\n` +
+        `Next control said: "${after}"\n` +
+        `Last things VoiceOver said:\n  ${log.join("\n  ")}`,
+    );
+  }
+}
+
 test("sign someone up for today's dinner from the calendar", async ({
   page,
   context,
@@ -45,8 +65,7 @@ test("sign someone up for today's dinner from the calendar", async ({
     .first()
     .waitFor();
   await voiceOver.navigateToWebContent();
-  const { findNextLink, findNextControl, findPreviousControl } =
-    voiceOver.keyboardCommands;
+  const { findNextLink, findNextControl } = voiceOver.keyboardCommands;
 
   // Moving from link to link, a dinner says which day it is on. The
   // frozen today is Thursday, January 15 (bin/test-integration).
@@ -66,22 +85,13 @@ test("sign someone up for today's dinner from the calendar", async ({
   await voiceOver.act();
   await saved;
   expect(await voiceOver.lastSpokenPhrase()).toBe("selected");
-  // Leave the button and come back, so VoiceOver reads it whole again.
-  await voiceOver.perform(findPreviousControl);
-  await voiceOver.perform(findNextControl);
-  expect(await voiceOver.lastSpokenPhrase()).toBe(
-    "B - Bob Johnson selected toggle button",
-  );
+  await readAgain(voiceOver, "B - Bob Johnson selected toggle button");
 
   // Take him off again, so the next run finds the seed as it was.
   saved = mealWritten(page, mealId, "DELETE", "residents/");
   await voiceOver.act();
   await saved;
-  await voiceOver.perform(findPreviousControl);
-  await voiceOver.perform(findNextControl);
-  expect(await voiceOver.lastSpokenPhrase()).toBe(
-    "B - Bob Johnson toggle button",
-  );
+  await readAgain(voiceOver, "B - Bob Johnson toggle button");
 });
 
 test("the cook box says who each control is for", async ({
